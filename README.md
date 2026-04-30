@@ -23,13 +23,13 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 - `provider/fileconfig`: config source provider (file + watch).
 - `provider/merged`: multi-source merge + validate + compile.
 - `gateway`: embedded API (`New` / `Start` / `Stop`), shared by standalone and embedded use.
-- `app/standalone`: app assembly and lifecycle.
+- `cmd/velad`: `velad.go` (dix graph + configx + Cobra + run loop) and thin `main.go` (exit code).
 
 This keeps runtime dependency-light and moves provider/config concerns outside runtime.
 
 ## arcgolabs Integration
 
-- `github.com/arcgolabs/dix`: dependency injection for standalone app assembly.
+- `github.com/arcgolabs/dix`: dependency injection for `velad` daemon assembly in `cmd/velad`.
 - `github.com/arcgolabs/logx`: structured logger construction and lifecycle.
 - `github.com/arcgolabs/configx`: bootstrap config from env/defaults.
 - `github.com/arcgolabs/eventx`: provider load/reload/failure event bus.
@@ -38,6 +38,8 @@ This keeps runtime dependency-light and moves provider/config concerns outside r
 `runtime` package does not depend on DI container, matching the document's "core runtime no DI" rule.
 
 ## Run
+
+Process bootstrap is loaded inside the `velad` [dix](https://github.com/arcgolabs/dix) graph via [configx](https://github.com/arcgolabs/configx) (`WithTypedDefaults` → `VELA_*` env → explicit CLI flags on Cobra’s `pflag` set). Flags exist for `--help` and parsing; merge order is configx’s. See `velad --help`.
 
 1. Copy sample config:
 

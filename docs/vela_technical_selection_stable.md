@@ -851,7 +851,7 @@ compress middleware: gzip
 
 ```text
 Vela core 尽量 dependency-light
-Vela app/standalone 可以复用 arcgolabs
+Vela `cmd/velad`（进程入口）可以复用 arcgolabs
 Vela provider/plugin/admin 可以更多复用 arcgolabs
 ```
 
