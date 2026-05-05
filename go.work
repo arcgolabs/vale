@@ -1,3 +1,9 @@
 go 1.26.2
 
-use .
+use (
+	.
+	./cmd
+	./examples/embedded_multi_provider
+	./provider/docker
+	./provider/k8s
+)

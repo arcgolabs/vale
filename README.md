@@ -35,10 +35,23 @@ This repository includes a `go.work` file for local development and release buil
 ```bash
 go work sync
 go test ./...
+go test ./cmd/... ./provider/docker/... ./provider/k8s/... ./examples/embedded_multi_provider/...
 go run ./cmd
 ```
 
 The workspace should not rely on local `replace` directives in `go.mod`. As the repo grows into multiple modules, local module wiring should live in `go.work`, while each module keeps publishable module paths in its own `go.mod`.
+
+Current workspace modules:
+
+- `github.com/arcgolabs/vela`: library-first core module.
+- `github.com/arcgolabs/vela/cmd`: standalone `velad` binary wiring.
+- `github.com/arcgolabs/vela/provider/docker`: optional Docker config provider.
+- `github.com/arcgolabs/vela/provider/k8s`: optional K8s-like config provider.
+- `github.com/arcgolabs/vela/examples/embedded_multi_provider`: example that consumes optional provider modules.
+
+Local workspace modules are intentionally not declared as `replace` directives. `go.work`
+resolves them during repository development; published modules should use real released
+versions when consumed outside this workspace.
 
 ## arcgolabs Integration
 
@@ -204,8 +217,8 @@ For non-file embedded scenarios, you can use `provider/memoryconfig` with:
 
 ### Provider Expansion Notes
 
-- `provider/docker`: label-driven route/service projection (source pluggable).
-- `provider/k8s`: route/endpoint projection from k8s-like source model (source pluggable).
+- `provider/docker`: optional module, label-driven route/service projection (source pluggable).
+- `provider/k8s`: optional module, route/endpoint projection from k8s-like source model (source pluggable).
 - both packages include `MemorySource` for local embedding/tests and can be replaced by real API clients later.
 
 ### Raft Control-Plane (Experimental)
