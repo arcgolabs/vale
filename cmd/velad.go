@@ -11,10 +11,10 @@ import (
 	"github.com/arcgolabs/dix"
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/logx"
+	"github.com/arcgolabs/vela"
 	"github.com/spf13/pflag"
 
 	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
-	gw "github.com/arcgolabs/vela/gateway"
 	providerevents "github.com/arcgolabs/vela/provider"
 )
 
@@ -31,14 +31,13 @@ type veladConfig struct {
 	RaftBoot    bool   `koanf:"raft_bootstrap"`
 }
 
-func (c veladConfig) gatewayOptions(logger *slog.Logger) []gw.Option {
-	options := []gw.Option{
-		gw.WithConfigPath(c.ConfigPath),
-		gw.WithWatch(c.Watch),
-		gw.WithLogger(logger),
+func (c veladConfig) gatewayOptions(logger *slog.Logger) []vela.Option {
+	options := []vela.Option{
+		vela.WithWatch(c.Watch),
+		vela.WithLogger(logger),
 	}
 	if c.RaftEnabled {
-		options = append(options, gw.WithRaftCluster(raftnode.Config{
+		options = append(options, vela.WithRaftCluster(raftnode.Config{
 			Enabled:   true,
 			NodeID:    c.RaftNodeID,
 			BindAddr:  c.RaftBind,
@@ -47,8 +46,11 @@ func (c veladConfig) gatewayOptions(logger *slog.Logger) []gw.Option {
 		}))
 	}
 	files := parseCSV(c.ConfigFiles)
-	if len(files) > 0 {
-		options = append(options, gw.WithConfigFiles(files...))
+	switch {
+	case len(files) > 0:
+		options = append(options, vela.WithConfigFiles(files...))
+	case strings.TrimSpace(c.ConfigPath) != "":
+		options = append(options, vela.WithConfigPath(c.ConfigPath))
 	}
 	return options
 }
@@ -67,9 +69,9 @@ func veladStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
 				)
 			}),
 			dix.Provider0(func() eventx.BusRuntime { return eventx.New() }),
-			dix.ProviderErr3(func(cfg veladConfig, logger *slog.Logger, bus eventx.BusRuntime) (*gw.Gateway, error) {
-				opts := append(cfg.gatewayOptions(logger), gw.WithEventBus(bus))
-				return gw.New(opts...)
+			dix.ProviderErr3(func(cfg veladConfig, logger *slog.Logger, bus eventx.BusRuntime) (*vela.Gateway, error) {
+				opts := append(cfg.gatewayOptions(logger), vela.WithEventBus(bus))
+				return vela.New(opts...)
 			}),
 		),
 		dix.Invokes(dix.Invoke2(func(bus eventx.BusRuntime, logger *slog.Logger) {
@@ -100,7 +102,7 @@ func provideVeladConfig(fs *pflag.FlagSet) (veladConfig, error) {
 
 func defaultVeladConfig() veladConfig {
 	return veladConfig{
-		ConfigPath:  "./vela.hcl",
+		ConfigPath:  "",
 		ConfigFiles: "",
 		Watch:       true,
 		LogLevel:    "info",

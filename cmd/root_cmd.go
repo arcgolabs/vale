@@ -12,7 +12,7 @@ import (
 	"github.com/arcgolabs/dix"
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/logx"
-	gw "github.com/arcgolabs/vela/gateway"
+	"github.com/arcgolabs/vela"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +45,7 @@ func runVelad(cmd *cobra.Command, _ []string) error {
 	}
 	c := rt.Container()
 
-	gateway, err := dix.ResolveAs[*gw.Gateway](c)
+	gateway, err := dix.ResolveAs[*vela.Gateway](c)
 	if err != nil {
 		return fmt.Errorf("resolve gateway: %w", err)
 	}

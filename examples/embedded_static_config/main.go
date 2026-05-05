@@ -1,4 +1,4 @@
-// Static in-process config: validated *config.Config, shared eventx bus, and gateway.WithStaticConfig.
+// Static in-process config: validated *config.Config, shared eventx bus, and vela.WithStaticConfig.
 package main
 
 import (
@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/arcgolabs/eventx"
+	"github.com/arcgolabs/vela"
 	"github.com/arcgolabs/vela/config"
-	"github.com/arcgolabs/vela/gateway"
 	providerevents "github.com/arcgolabs/vela/provider"
 )
 
@@ -69,10 +69,10 @@ func main() {
 		},
 	}
 
-	embeddedGateway, err := gateway.New(
-		gateway.WithLogger(logger),
-		gateway.WithEventBus(bus),
-		gateway.WithStaticConfig(cfg),
+	embeddedGateway, err := vela.New(
+		vela.WithLogger(logger),
+		vela.WithEventBus(bus),
+		vela.WithStaticConfig(cfg),
 	)
 	if err != nil {
 		logger.Error("create embedded gateway failed", "error", err)

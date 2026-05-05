@@ -22,14 +22,27 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 - `compiler`: control-plane compile step from config to runtime snapshot.
 - `provider/fileconfig`: config source provider (file + watch).
 - `provider/merged`: multi-source merge + validate + compile.
-- `gateway`: embedded API (`New` / `Start` / `Stop`), shared by standalone and embedded use.
-- `cmd/velad`: `velad.go` (dix graph + configx + Cobra + run loop) and thin `main.go` (exit code).
+- root `vela`: library-first public API (`New` / `Start` / `Stop`).
+- `gateway`: lower-level embedded gateway implementation.
+- `cmd`: `velad` executable (`dix` graph + `configx` + Cobra + run loop).
 
 This keeps runtime dependency-light and moves provider/config concerns outside runtime.
 
+## Workspace
+
+This repository includes a `go.work` file for local development and release builds:
+
+```bash
+go work sync
+go test ./...
+go run ./cmd
+```
+
+The workspace should not rely on local `replace` directives in `go.mod`. As the repo grows into multiple modules, local module wiring should live in `go.work`, while each module keeps publishable module paths in its own `go.mod`.
+
 ## arcgolabs Integration
 
-- `github.com/arcgolabs/dix`: dependency injection for `velad` daemon assembly in `cmd/velad`.
+- `github.com/arcgolabs/dix`: dependency injection for `velad` daemon assembly in `cmd`.
 - `github.com/arcgolabs/logx`: structured logger construction and lifecycle.
 - `github.com/arcgolabs/configx`: bootstrap config from env/defaults.
 - `github.com/arcgolabs/eventx`: provider load/reload/failure event bus.
@@ -41,28 +54,42 @@ This keeps runtime dependency-light and moves provider/config concerns outside r
 
 Process bootstrap is loaded inside the `velad` [dix](https://github.com/arcgolabs/dix) graph via [configx](https://github.com/arcgolabs/configx) (`WithTypedDefaults` → `VELA_*` env → explicit CLI flags on Cobra’s `pflag` set). Flags exist for `--help` and parsing; merge order is configx’s. See `velad --help`.
 
-1. Copy sample config:
+`velad` can start without a config file. In that case it uses the built-in default config:
+
+- entrypoint `web` on `:8080`
+- admin on `:19090`
+- one `echo` service pointing at `http://127.0.0.1:8081`
+- route `/` to `echo`
+- access log and metrics enabled
+
+Start with defaults:
+
+```bash
+go run ./cmd
+```
+
+To run with an HCL file, copy sample config:
 
 ```bash
 cp vela.example.hcl vela.hcl
 ```
 
-2. Start an upstream service (example):
+Start an upstream service (example):
 
 ```bash
 python -m http.server 8081
 ```
 
-3. Start gateway:
+Start gateway with an explicit config:
 
 ```bash
-go run ./cmd/velad -config ./vela.hcl
+go run ./cmd -config ./vela.hcl
 ```
 
 Or merge multiple files (later files override same-name objects):
 
 ```bash
-go run ./cmd/velad -config-files "./base.hcl,./service.hcl,./override.hcl"
+go run ./cmd -config-files "./base.hcl,./service.hcl,./override.hcl"
 ```
 
 You can switch proxy engine in HCL:
@@ -71,7 +98,7 @@ You can switch proxy engine in HCL:
 proxy_engine = "stdlib" # or "oxy"
 ```
 
-4. Verify:
+Verify:
 
 - `http://127.0.0.1:8080/`
 - `http://127.0.0.1:19090/metrics`
@@ -83,21 +110,23 @@ proxy_engine = "stdlib" # or "oxy"
 
 ## Embedded API
 
-Use `github.com/arcgolabs/gateway/gateway` as the library import path (there is no `pkg/gateway` shim).
+Use `github.com/arcgolabs/vela` as the primary library import path.
+`vela.New()` uses the built-in default config when no config path, config provider,
+snapshot provider, or static config is supplied.
 
 ```go
 import (
   "context"
   "log/slog"
 
-  "github.com/arcgolabs/gateway/gateway"
+  "github.com/arcgolabs/vela"
 )
 
 func runEmbedded() error {
-  g, err := gateway.New(
-    gateway.WithConfigPath("./vela.hcl"),
-    gateway.WithWatch(true),
-    gateway.WithLogger(slog.Default()),
+  g, err := vela.New(
+    vela.WithConfigPath("./vela.hcl"),
+    vela.WithWatch(true),
+    vela.WithLogger(slog.Default()),
   )
   if err != nil {
     return err
@@ -111,14 +140,14 @@ func runEmbedded() error {
 }
 ```
 
-`gateway.NewFromConfig(gateway.Config{...})` is also available for struct-based construction.
+`vela.NewFromConfig(vela.Config{...})` is also available for struct-based construction.
 
 ### Embedded Static Config Example
 
 See `examples/embedded_static_config/main.go` for a full example that uses:
 
-- `gateway.WithStaticConfig(...)`
-- `gateway.WithEventBus(...)`
+- `vela.WithStaticConfig(...)`
+- `vela.WithEventBus(...)`
 - `eventx.Subscribe(...)` to consume provider lifecycle events
 
 Run:
@@ -143,21 +172,19 @@ go run ./examples/embedded_multi_provider
 
 Constructor options currently include:
 
-- `gateway.WithConfigPath(path)`
-- `gateway.WithConfigFiles(path1, path2, ...)` (merge order: left -> right, later wins)
-- `gateway.WithWatch(enabled)`
-- `gateway.WithRaftCluster(config)` (optional raft control-plane node)
-- `gateway.WithLogger(logger)`
-- `gateway.WithEventBus(bus)` (subscribe provider lifecycle events)
-- `gateway.WithSnapshotProvider(provider)` (advanced/custom provider)
-- `gateway.WithConfigSourceProviders(...)` (advanced merge pipeline input)
-- `gateway.WithDockerProvider(provider)` (docker config source helper)
+- `vela.WithConfigPath(path)`
+- `vela.WithConfigFiles(path1, path2, ...)` (merge order: left -> right, later wins)
+- `vela.WithWatch(enabled)`
+- `vela.WithRaftCluster(config)` (optional raft control-plane node)
+- `vela.WithLogger(logger)`
+- `vela.WithEventBus(bus)` (subscribe provider lifecycle events)
+- `vela.WithSnapshotProvider(provider)` (advanced/custom provider)
+- `vela.WithConfigSourceProviders(...)` (advanced merge pipeline input)
 - `docker.NewFromEnv(name, options)` for Docker daemon-backed source
-- `gateway.WithK8sProvider(provider)` (k8s config source helper)
-- `gateway.WithStaticConfig(config)` (inject in-memory config as source, watch off)
-- `gateway.WithFallbackProviders(p1, p2, ...)` (provider failover chain)
-- `gateway.WithStaticSnapshot(snapshot)` (in-memory embedded mode)
-- `gateway.WithWatchErrorHandler(handler)`
+- `vela.WithStaticConfig(config)` (inject in-memory config as source, watch off)
+- `vela.WithFallbackProviders(p1, p2, ...)` (provider failover chain)
+- `vela.WithStaticSnapshot(snapshot)` (in-memory embedded mode)
+- `vela.WithWatchErrorHandler(handler)`
 
 Provider events currently emitted on the event bus:
 

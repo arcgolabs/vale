@@ -3,10 +3,10 @@
 // compiled snapshot, then Stop for graceful shutdown.
 //
 // Typical wiring combines file-backed HCL paths (defaults to ./vela.hcl with watch on),
-// merged config providers from WithConfigSourceProviders or WithDockerProvider, or a fixed
+// merged config providers from WithConfigSourceProviders, or a fixed
 // snapshot via WithStaticSnapshot. Enable optional Raft control-plane metadata with WithRaftCluster.
 // Pass WithEventBus to share lifecycle events across your app or use Events(); if no bus was
 // passed, Gateway creates one and closes it on Stop only when Gateway owned it internally.
 //
-// Stable import path: github.com/arcgolabs/gateway/gateway
+// Stable low-level import path: github.com/arcgolabs/vela/gateway
 package gateway

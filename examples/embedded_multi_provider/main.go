@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/arcgolabs/eventx"
-	"github.com/arcgolabs/vela/gateway"
+	"github.com/arcgolabs/vela"
 	providerevents "github.com/arcgolabs/vela/provider"
 	providerdocker "github.com/arcgolabs/vela/provider/docker"
 	providerk8s "github.com/arcgolabs/vela/provider/k8s"
@@ -60,12 +60,11 @@ func main() {
 	dockerProvider := providerdocker.New("docker-mem", dockerSource, providerdocker.DefaultOptions())
 	k8sProvider := providerk8s.New("k8s-mem", k8sSource, providerk8s.DefaultOptions())
 
-	embeddedGateway, err := gateway.New(
-		gateway.WithLogger(logger),
-		gateway.WithEventBus(bus),
-		gateway.WithDockerProvider(dockerProvider),
-		gateway.WithK8sProvider(k8sProvider),
-		gateway.WithWatch(true),
+	embeddedGateway, err := vela.New(
+		vela.WithLogger(logger),
+		vela.WithEventBus(bus),
+		vela.WithConfigSourceProviders(dockerProvider, k8sProvider),
+		vela.WithWatch(true),
 	)
 	if err != nil {
 		logger.Error("create embedded gateway failed", "error", err)

@@ -8,8 +8,6 @@ import (
 	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
-	dockerprovider "github.com/arcgolabs/vela/provider/docker"
-	k8sprovider "github.com/arcgolabs/vela/provider/k8s"
 	staticprovider "github.com/arcgolabs/vela/provider/static"
 	staticconfigprovider "github.com/arcgolabs/vela/provider/staticconfig"
 	"github.com/arcgolabs/vela/runtime"
@@ -102,28 +100,6 @@ func WithConfigSourceProviders(configProviders ...provider.ConfigProvider) Optio
 			return fmt.Errorf("config source providers cannot be empty")
 		}
 		cfg.ConfigSource = nonNil
-		cfg.Provider = nil
-		return nil
-	}
-}
-
-func WithDockerProvider(dockerProvider *dockerprovider.Provider) Option {
-	return func(cfg *Config) error {
-		if dockerProvider == nil {
-			return fmt.Errorf("docker provider cannot be nil")
-		}
-		cfg.ConfigSource = append(cfg.ConfigSource, dockerProvider)
-		cfg.Provider = nil
-		return nil
-	}
-}
-
-func WithK8sProvider(k8sProvider *k8sprovider.Provider) Option {
-	return func(cfg *Config) error {
-		if k8sProvider == nil {
-			return fmt.Errorf("k8s provider cannot be nil")
-		}
-		cfg.ConfigSource = append(cfg.ConfigSource, k8sProvider)
 		cfg.Provider = nil
 		return nil
 	}
