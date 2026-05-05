@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/arcgolabs/gateway/runtime"
+	"github.com/arcgolabs/vela/runtime"
 )
 
 type Provider struct {

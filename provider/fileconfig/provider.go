@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/arcgolabs/gateway/config"
+	"github.com/arcgolabs/vela/config"
 	"github.com/fsnotify/fsnotify"
 )
 

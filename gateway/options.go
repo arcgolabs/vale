@@ -5,14 +5,14 @@ import (
 	"log/slog"
 
 	"github.com/arcgolabs/eventx"
-	raftnode "github.com/arcgolabs/gateway/cluster/raftnode"
-	"github.com/arcgolabs/gateway/config"
-	"github.com/arcgolabs/gateway/provider"
-	dockerprovider "github.com/arcgolabs/gateway/provider/docker"
-	k8sprovider "github.com/arcgolabs/gateway/provider/k8s"
-	staticprovider "github.com/arcgolabs/gateway/provider/static"
-	staticconfigprovider "github.com/arcgolabs/gateway/provider/staticconfig"
-	"github.com/arcgolabs/gateway/runtime"
+	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
+	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vela/provider"
+	dockerprovider "github.com/arcgolabs/vela/provider/docker"
+	k8sprovider "github.com/arcgolabs/vela/provider/k8s"
+	staticprovider "github.com/arcgolabs/vela/provider/static"
+	staticconfigprovider "github.com/arcgolabs/vela/provider/staticconfig"
+	"github.com/arcgolabs/vela/runtime"
 )
 
 // Option configures [Config] when passed to [New]. Return a non-nil error from a custom

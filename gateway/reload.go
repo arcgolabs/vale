@@ -4,7 +4,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/arcgolabs/gateway/runtime"
+	"github.com/arcgolabs/vela/runtime"
 )
 
 func staticRuntimeChanges(current *runtime.CompiledSnapshot, next *runtime.CompiledSnapshot) []string {

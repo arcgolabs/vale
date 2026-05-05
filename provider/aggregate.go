@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/arcgolabs/gateway/runtime"
+	"github.com/arcgolabs/vela/runtime"
 )
 
 type fallbackProvider struct {

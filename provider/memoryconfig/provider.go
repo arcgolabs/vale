@@ -6,7 +6,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/arcgolabs/gateway/config"
+	"github.com/arcgolabs/vela/config"
 )
 
 type Provider struct {

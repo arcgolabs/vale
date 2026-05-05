@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arcgolabs/gateway/config"
-	"github.com/arcgolabs/gateway/proxy"
-	"github.com/arcgolabs/gateway/runtime"
+	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vela/proxy"
+	"github.com/arcgolabs/vela/runtime"
 )
 
 func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {

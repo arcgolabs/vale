@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/arcgolabs/gateway/config"
-	"github.com/arcgolabs/gateway/runtime"
+	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vela/runtime"
 )
 
 type SnapshotProvider interface {

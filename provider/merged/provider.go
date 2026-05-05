@@ -9,10 +9,10 @@ import (
 
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/eventx"
-	"github.com/arcgolabs/gateway/compiler"
-	"github.com/arcgolabs/gateway/config"
-	"github.com/arcgolabs/gateway/provider"
-	"github.com/arcgolabs/gateway/runtime"
+	"github.com/arcgolabs/vela/compiler"
+	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vela/provider"
+	"github.com/arcgolabs/vela/runtime"
 )
 
 type Source struct {

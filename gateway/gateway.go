@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/arcgolabs/eventx"
-	raftnode "github.com/arcgolabs/gateway/cluster/raftnode"
-	"github.com/arcgolabs/gateway/provider"
-	fileconfigprovider "github.com/arcgolabs/gateway/provider/fileconfig"
-	mergedprovider "github.com/arcgolabs/gateway/provider/merged"
-	"github.com/arcgolabs/gateway/runtime"
+	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
+	"github.com/arcgolabs/vela/provider"
+	fileconfigprovider "github.com/arcgolabs/vela/provider/fileconfig"
+	mergedprovider "github.com/arcgolabs/vela/provider/merged"
+	"github.com/arcgolabs/vela/runtime"
 )
 
 // Config holds construction-time settings for Gateway. Exactly one snapshot source

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/arcgolabs/gateway/config"
+	"github.com/arcgolabs/vela/config"
 )
 
 type HTTPRoute struct {

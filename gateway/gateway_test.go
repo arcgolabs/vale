@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arcgolabs/gateway/runtime"
+	"github.com/arcgolabs/vela/runtime"
 )
 
 func TestStartReturnsEntrypointListenError(t *testing.T) {

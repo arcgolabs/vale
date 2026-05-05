@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/arcgolabs/eventx"
-	"github.com/arcgolabs/gateway/gateway"
-	providerevents "github.com/arcgolabs/gateway/provider"
-	providerdocker "github.com/arcgolabs/gateway/provider/docker"
-	providerk8s "github.com/arcgolabs/gateway/provider/k8s"
+	"github.com/arcgolabs/vela/gateway"
+	providerevents "github.com/arcgolabs/vela/provider"
+	providerdocker "github.com/arcgolabs/vela/provider/docker"
+	providerk8s "github.com/arcgolabs/vela/provider/k8s"
 )
 
 func main() {

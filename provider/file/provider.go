@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/arcgolabs/gateway/compiler"
-	"github.com/arcgolabs/gateway/config"
-	"github.com/arcgolabs/gateway/runtime"
+	"github.com/arcgolabs/vela/compiler"
+	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vela/runtime"
 	"github.com/fsnotify/fsnotify"
 )
 
