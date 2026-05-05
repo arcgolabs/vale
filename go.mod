@@ -3,11 +3,11 @@ module github.com/arcgolabs/gateway
 go 1.26.2
 
 require (
-	github.com/arcgolabs/collectionx/mapping v0.6.0
-	github.com/arcgolabs/configx v0.3.1
-	github.com/arcgolabs/dix v0.7.1
-	github.com/arcgolabs/eventx v0.1.1
-	github.com/arcgolabs/logx v0.1.1
+	github.com/arcgolabs/collectionx/mapping v0.7.0
+	github.com/arcgolabs/configx v0.3.2
+	github.com/arcgolabs/dix v0.7.2
+	github.com/arcgolabs/eventx v0.1.2
+	github.com/arcgolabs/logx v0.1.2
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/fsnotify/fsnotify v1.10.0
 	github.com/hashicorp/go-hclog v1.6.2
@@ -15,6 +15,8 @@ require (
 	github.com/hashicorp/raft v1.7.3
 	github.com/hashicorp/raft-boltdb/v2 v2.3.1
 	github.com/prometheus/client_golang v1.23.2
+	github.com/spf13/cobra v1.9.1
+	github.com/spf13/pflag v1.0.10
 	github.com/vulcand/oxy/v2 v2.1.0
 )
 
@@ -22,10 +24,9 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/agext/levenshtein v1.2.1 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
-	github.com/arcgolabs/collectionx/internal v0.6.0 // indirect
-	github.com/arcgolabs/collectionx/list v0.6.0 // indirect
-	github.com/arcgolabs/collectionx/set v0.6.0 // indirect
-	github.com/arcgolabs/observabilityx v0.3.0 // indirect
+	github.com/arcgolabs/collectionx/list v0.7.0 // indirect
+	github.com/arcgolabs/collectionx/set v0.7.0 // indirect
+	github.com/arcgolabs/observabilityx v0.4.0 // indirect
 	github.com/arcgolabs/pkg/option v0.0.3 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -91,8 +92,6 @@ require (
 	github.com/samber/oops/loggers/zerolog v0.0.0-20260412154111-1460827f264f // indirect
 	github.com/samber/slog-common v0.22.0 // indirect
 	github.com/samber/slog-zerolog/v2 v2.9.2 // indirect
-	github.com/spf13/cobra v1.9.1 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/zclconf/go-cty v1.16.3 // indirect
 	go.etcd.io/bbolt v1.3.5 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
