@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/arcgolabs/eventx"
-	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
 	"github.com/arcgolabs/vela/provider"
 	fileconfigprovider "github.com/arcgolabs/vela/provider/fileconfig"
 	mergedprovider "github.com/arcgolabs/vela/provider/merged"
@@ -27,7 +26,7 @@ type Config struct {
 	ConfigPath   string
 	ConfigFiles  []string
 	Watch        bool
-	Cluster      *raftnode.Config
+	Cluster      ClusterFactory
 	Logger       *slog.Logger
 	EventBus     eventx.BusRuntime
 	Provider     provider.SnapshotProvider
@@ -53,7 +52,7 @@ type Gateway struct {
 	logger   *slog.Logger
 	events   eventx.BusRuntime
 	ownsBus  bool
-	cluster  *raftnode.Node
+	cluster  Cluster
 
 	mu      sync.Mutex
 	started bool
@@ -161,8 +160,8 @@ func (g *Gateway) Start(ctx context.Context) error {
 		return errors.New("gateway already started")
 	}
 
-	if g.config.Cluster != nil && g.config.Cluster.Enabled {
-		cluster, err := raftnode.New(*g.config.Cluster, g.logger)
+	if g.config.Cluster != nil {
+		cluster, err := g.config.Cluster(g.logger)
 		if err != nil {
 			return err
 		}
@@ -241,7 +240,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop shuts down watchers, health checks, all HTTP servers, Raft if enabled; closes
+// Stop shuts down watchers, health checks, all HTTP servers, cluster if enabled; closes
 // the event bus only when Gateway created it.
 func (g *Gateway) Stop(ctx context.Context) error {
 	g.mu.Lock()
@@ -280,7 +279,7 @@ func (g *Gateway) Events() eventx.BusRuntime {
 	return g.events
 }
 
-// Status returns a coarse snapshot-only map (started flag, counts, Raft cluster.State when enabled).
+// Status returns a coarse snapshot-only map (started flag, counts, and cluster status when enabled).
 func (g *Gateway) Status() map[string]any {
 	g.mu.Lock()
 	defer g.mu.Unlock()

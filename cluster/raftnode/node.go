@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arcgolabs/vela/gateway"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
@@ -31,6 +32,12 @@ func DefaultConfig() Config {
 		DataDir:   "./data/raft",
 		Bootstrap: true,
 	}
+}
+
+func WithCluster(config Config) gateway.Option {
+	return gateway.WithClusterFactory(func(logger *slog.Logger) (gateway.Cluster, error) {
+		return New(config, logger)
+	})
 }
 
 type Node struct {
@@ -150,7 +157,7 @@ type Peer struct {
 	Suffrage string `json:"suffrage"`
 }
 
-func (n *Node) Peers() ([]Peer, error) {
+func (n *Node) Peers() ([]gateway.ClusterPeer, error) {
 	if !n.IsEnabled() {
 		return nil, nil
 	}
@@ -158,9 +165,9 @@ func (n *Node) Peers() ([]Peer, error) {
 	if err := future.Error(); err != nil {
 		return nil, err
 	}
-	peers := make([]Peer, 0, len(future.Configuration().Servers))
+	peers := make([]gateway.ClusterPeer, 0, len(future.Configuration().Servers))
 	for _, server := range future.Configuration().Servers {
-		peers = append(peers, Peer{
+		peers = append(peers, gateway.ClusterPeer{
 			ID:       string(server.ID),
 			Address:  string(server.Address),
 			Suffrage: server.Suffrage.String(),

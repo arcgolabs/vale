@@ -37,7 +37,7 @@ func (c veladConfig) gatewayOptions(logger *slog.Logger) []vela.Option {
 		vela.WithLogger(logger),
 	}
 	if c.RaftEnabled {
-		options = append(options, vela.WithRaftCluster(raftnode.Config{
+		options = append(options, raftnode.WithCluster(raftnode.Config{
 			Enabled:   true,
 			NodeID:    c.RaftNodeID,
 			BindAddr:  c.RaftBind,

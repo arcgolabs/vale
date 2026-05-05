@@ -4,7 +4,7 @@
 //
 // Typical wiring combines file-backed HCL paths (defaults to ./vela.hcl with watch on),
 // merged config providers from WithConfigSourceProviders, or a fixed
-// snapshot via WithStaticSnapshot. Enable optional Raft control-plane metadata with WithRaftCluster.
+// snapshot via WithStaticSnapshot. Enable optional control-plane clustering with WithClusterFactory.
 // Pass WithEventBus to share lifecycle events across your app or use Events(); if no bus was
 // passed, Gateway creates one and closes it on Stop only when Gateway owned it internally.
 //

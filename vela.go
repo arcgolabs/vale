@@ -9,7 +9,6 @@ import (
 	"log/slog"
 
 	"github.com/arcgolabs/eventx"
-	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/gateway"
 	"github.com/arcgolabs/vela/provider"
@@ -21,6 +20,7 @@ type (
 	Gateway = gateway.Gateway
 	Config  = gateway.Config
 	Option  = gateway.Option
+	Cluster = gateway.Cluster
 )
 
 func New(options ...Option) (*Gateway, error) {
@@ -72,8 +72,8 @@ func WithWatch(enabled bool) Option {
 	return gateway.WithWatch(enabled)
 }
 
-func WithRaftCluster(cluster raftnode.Config) Option {
-	return gateway.WithRaftCluster(cluster)
+func WithClusterFactory(factory gateway.ClusterFactory) Option {
+	return gateway.WithClusterFactory(factory)
 }
 
 func WithLogger(logger *slog.Logger) Option {

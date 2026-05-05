@@ -35,7 +35,7 @@ This repository includes a `go.work` file for local development and release buil
 ```bash
 go work sync
 go test ./...
-go test ./cmd/... ./provider/docker/... ./provider/k8s/... ./examples/embedded_multi_provider/...
+go test ./cluster/raftnode/... ./cmd/... ./provider/docker/... ./provider/k8s/... ./examples/embedded_multi_provider/...
 go run ./cmd
 ```
 
@@ -45,6 +45,7 @@ Current workspace modules:
 
 - `github.com/arcgolabs/vela`: library-first core module.
 - `github.com/arcgolabs/vela/cmd`: standalone `velad` binary wiring.
+- `github.com/arcgolabs/vela/cluster/raftnode`: optional HashiCorp Raft cluster adapter.
 - `github.com/arcgolabs/vela/provider/docker`: optional Docker config provider.
 - `github.com/arcgolabs/vela/provider/k8s`: optional K8s-like config provider.
 - `github.com/arcgolabs/vela/examples/embedded_multi_provider`: example that consumes optional provider modules.
@@ -188,7 +189,7 @@ Constructor options currently include:
 - `vela.WithConfigPath(path)`
 - `vela.WithConfigFiles(path1, path2, ...)` (merge order: left -> right, later wins)
 - `vela.WithWatch(enabled)`
-- `vela.WithRaftCluster(config)` (optional raft control-plane node)
+- `vela.WithClusterFactory(factory)` (optional control-plane cluster adapter)
 - `vela.WithLogger(logger)`
 - `vela.WithEventBus(bus)` (subscribe provider lifecycle events)
 - `vela.WithSnapshotProvider(provider)` (advanced/custom provider)
@@ -231,7 +232,8 @@ Standalone flags:
 - `--raft-data-dir`
 - `--raft-bootstrap`
 
-When enabled, gateway starts an embedded HashiCorp Raft node and exposes status at:
+When enabled, `cmd` wires the optional `cluster/raftnode` module into the gateway via
+`raftnode.WithCluster(...)`, starts an embedded HashiCorp Raft node, and exposes status at:
 
 - `/admin/cluster/status`
 - `/admin/cluster/peers`

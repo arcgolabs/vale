@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/arcgolabs/eventx"
-	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
 	staticprovider "github.com/arcgolabs/vela/provider/static"
@@ -52,10 +51,12 @@ func WithWatch(enabled bool) Option {
 	}
 }
 
-func WithRaftCluster(cluster raftnode.Config) Option {
+func WithClusterFactory(factory ClusterFactory) Option {
 	return func(cfg *Config) error {
-		clusterConfig := cluster
-		cfg.Cluster = &clusterConfig
+		if factory == nil {
+			return fmt.Errorf("cluster factory cannot be nil")
+		}
+		cfg.Cluster = factory
 		return nil
 	}
 }
