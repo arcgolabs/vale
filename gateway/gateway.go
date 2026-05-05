@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -180,36 +181,23 @@ func (g *Gateway) Start(ctx context.Context) error {
 	g.runtime = runtime.NewGateway(snapshot, g.logger, snapshot.AccessLogEnabled, snapshot.MetricsEnabled)
 	g.publishClusterUpdate(snapshot)
 
-	interval := parseDurationDefault(snapshot.HealthInterval, 5*time.Second)
-	timeout := parseDurationDefault(snapshot.HealthTimeout, 2*time.Second)
-	g.health = runtime.NewHealthChecker(interval, timeout)
-	g.health.Start(g.runtime)
-
-	if g.config.Watch {
-		watcher, watchErr := g.provider.Watch(context.Background(), func(snapshot *runtime.CompiledSnapshot) {
-			g.runtime.Swap(snapshot)
-			g.publishClusterUpdate(snapshot)
-		}, func(watchErr error) {
-			g.config.OnWatchError(watchErr)
-		})
-		if watchErr != nil {
-			if g.cluster != nil {
-				_ = g.cluster.Shutdown()
-				g.cluster = nil
-			}
-			return watchErr
-		}
-		g.watcher = watcher
-	}
-
+	servers := make([]*http.Server, 0, len(snapshot.Entrypoints)+1)
+	listeners := make([]net.Listener, 0, len(snapshot.Entrypoints)+1)
+	entrypointNames := make([]string, 0, len(snapshot.Entrypoints))
 	for entrypoint, address := range snapshot.Entrypoints {
 		server := &http.Server{
 			Addr:              address,
 			Handler:           g.runtime.Handler(entrypoint),
 			ReadHeaderTimeout: 5 * time.Second,
 		}
-		g.servers = append(g.servers, server)
-		go g.listenEntrypoint(entrypoint, server)
+		listener, listenErr := net.Listen("tcp", address)
+		if listenErr != nil {
+			g.cleanupStartFailure(listeners)
+			return fmt.Errorf("listen entrypoint %q on %s: %w", entrypoint, address, listenErr)
+		}
+		servers = append(servers, server)
+		listeners = append(listeners, listener)
+		entrypointNames = append(entrypointNames, entrypoint)
 	}
 
 	adminServer := &http.Server{
@@ -217,8 +205,37 @@ func (g *Gateway) Start(ctx context.Context) error {
 		Handler:           g.buildAdminMux(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	g.servers = append(g.servers, adminServer)
-	go g.listenAdmin(adminServer)
+	adminListener, listenErr := net.Listen("tcp", snapshot.AdminAddress)
+	if listenErr != nil {
+		g.cleanupStartFailure(listeners)
+		return fmt.Errorf("listen admin on %s: %w", snapshot.AdminAddress, listenErr)
+	}
+	servers = append(servers, adminServer)
+	listeners = append(listeners, adminListener)
+
+	if g.config.Watch {
+		watcher, watchErr := g.provider.Watch(context.Background(), func(snapshot *runtime.CompiledSnapshot) {
+			g.applyReloadSnapshot(snapshot)
+		}, func(watchErr error) {
+			g.config.OnWatchError(watchErr)
+		})
+		if watchErr != nil {
+			g.cleanupStartFailure(listeners)
+			return watchErr
+		}
+		g.watcher = watcher
+	}
+
+	interval := parseDurationDefault(snapshot.HealthInterval, 5*time.Second)
+	timeout := parseDurationDefault(snapshot.HealthTimeout, 2*time.Second)
+	g.health = runtime.NewHealthChecker(interval, timeout)
+	g.health.Start(g.runtime)
+
+	g.servers = servers
+	for i, entrypoint := range entrypointNames {
+		go g.listenEntrypoint(entrypoint, servers[i], listeners[i])
+	}
+	go g.listenAdmin(adminServer, listeners[len(listeners)-1])
 
 	g.started = true
 	return nil
@@ -285,18 +302,59 @@ func (g *Gateway) Status() map[string]any {
 	return status
 }
 
-func (g *Gateway) listenEntrypoint(entrypoint string, server *http.Server) {
+func (g *Gateway) listenEntrypoint(entrypoint string, server *http.Server, listener net.Listener) {
 	g.logger.Info("entrypoint started", "entrypoint", entrypoint, "addr", server.Addr)
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		g.logger.Error("entrypoint crashed", "entrypoint", entrypoint, "error", err)
 	}
 }
 
-func (g *Gateway) listenAdmin(server *http.Server) {
+func (g *Gateway) listenAdmin(server *http.Server, listener net.Listener) {
 	g.logger.Info("admin started", "addr", server.Addr)
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		g.logger.Error("admin crashed", "error", err)
 	}
+}
+
+func (g *Gateway) cleanupStartFailure(listeners []net.Listener) {
+	for _, listener := range listeners {
+		if listener != nil {
+			_ = listener.Close()
+		}
+	}
+	if g.watcher != nil {
+		_ = g.watcher.Close()
+		g.watcher = nil
+	}
+	if g.health != nil {
+		g.health.Stop()
+		g.health = nil
+	}
+	if g.cluster != nil {
+		_ = g.cluster.Shutdown()
+		g.cluster = nil
+	}
+	g.runtime = nil
+	g.servers = nil
+}
+
+func (g *Gateway) applyReloadSnapshot(snapshot *runtime.CompiledSnapshot) {
+	if snapshot == nil {
+		return
+	}
+	current := g.runtime.Snapshot()
+	if changed := staticRuntimeChanges(current, snapshot); len(changed) > 0 {
+		g.logger.Warn("snapshot contains static runtime changes; restart required to apply them",
+			"fields", changed,
+		)
+		if g.events != nil {
+			_ = g.events.Publish(context.Background(), StaticRuntimeConfigChangedEvent{
+				Fields: changed,
+			})
+		}
+	}
+	g.runtime.Swap(snapshot)
+	g.publishClusterUpdate(snapshot)
 }
 
 func (g *Gateway) buildAdminMux() http.Handler {

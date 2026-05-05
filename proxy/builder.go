@@ -46,13 +46,49 @@ func buildOxy(target *url.URL) http.Handler {
 	fwd := oxyforward.New(true)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		proxyReq := r.Clone(r.Context())
-		proxyReq.URL = cloneURL(target)
+		proxyReq.URL = rewriteTargetURL(target, r.URL)
 		proxyReq.Host = target.Host
 		fwd.ServeHTTP(w, proxyReq)
 	})
 }
 
-func cloneURL(source *url.URL) *url.URL {
-	cloned := *source
-	return &cloned
+func rewriteTargetURL(target *url.URL, requestURL *url.URL) *url.URL {
+	rewritten := *target
+	rewritten.Path = joinURLPath(target.Path, requestURL.Path)
+	rewritten.RawQuery = joinRawQuery(target.RawQuery, requestURL.RawQuery)
+	return &rewritten
+}
+
+func joinURLPath(base string, requestPath string) string {
+	if base == "" {
+		if requestPath == "" {
+			return "/"
+		}
+		return requestPath
+	}
+	if requestPath == "" {
+		return base
+	}
+
+	baseSlash := strings.HasSuffix(base, "/")
+	requestSlash := strings.HasPrefix(requestPath, "/")
+	switch {
+	case baseSlash && requestSlash:
+		return base + strings.TrimPrefix(requestPath, "/")
+	case !baseSlash && !requestSlash:
+		return base + "/" + requestPath
+	default:
+		return base + requestPath
+	}
+}
+
+func joinRawQuery(base string, requestQuery string) string {
+	switch {
+	case base == "":
+		return requestQuery
+	case requestQuery == "":
+		return base
+	default:
+		return base + "&" + requestQuery
+	}
 }

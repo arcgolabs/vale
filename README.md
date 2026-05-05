@@ -166,6 +166,7 @@ Provider events currently emitted on the event bus:
 - `provider.config_source.changed`
 - `provider.snapshot.recompiled`
 - `provider.watch.setup_failed`
+- `gateway.static_runtime_config.changed` (hot-reloaded snapshot changed fields that require process restart)
 
 ### Mutable In-Memory Provider (for embedded dynamic updates)
 
