@@ -14,6 +14,7 @@ func Default() *Config {
 				},
 			},
 		},
+		Middlewares: []Middleware{},
 		Routes: []Route{
 			{
 				Name:       "echo-route",
@@ -30,6 +31,14 @@ func Default() *Config {
 		Health: &Health{
 			Interval: "5s",
 			Timeout:  "2s",
+		},
+		Security: &Security{
+			ReadHeaderTimeout: "5s",
+			ReadTimeout:       "30s",
+			WriteTimeout:      "30s",
+			IdleTimeout:       "120s",
+			MaxHeaderBytes:    1 << 20,
+			MaxBodyBytes:      32 << 20,
 		},
 	}
 }

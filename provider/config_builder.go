@@ -13,8 +13,9 @@ func NewEntrypointConfig(name string, address string) *config.Config {
 				Address: address,
 			},
 		},
-		Services: make([]config.Service, 0),
-		Routes:   make([]config.Route, 0),
+		Middlewares: make([]config.Middleware, 0),
+		Services:    make([]config.Service, 0),
+		Routes:      make([]config.Route, 0),
 	}
 }
 

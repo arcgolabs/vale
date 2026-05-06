@@ -17,6 +17,7 @@ import (
 
 type CompiledSnapshot struct {
 	Entrypoints        map[string]string
+	EntrypointConfigs  map[string]EntrypointRuntime
 	RoutesByEntrypoint map[string][]*CompiledRoute
 	EntrypointMatchers map[string]*EntrypointMatcher
 	Services           map[string]*ServiceRuntime
@@ -25,19 +26,59 @@ type CompiledSnapshot struct {
 	MetricsEnabled     bool
 	HealthInterval     string
 	HealthTimeout      string
+	Security           SecurityRuntime
 	ProxyEngine        string
 	BuiltAt            time.Time
 }
 
 type CompiledRoute struct {
-	Name       string
-	Entrypoint string
-	Host       string
-	PathPrefix string
-	Method     string
-	Headers    map[string]string
-	Service    *ServiceRuntime
-	Predicates *bitset.BitSet
+	Name        string
+	Entrypoint  string
+	Host        string
+	PathPrefix  string
+	Method      string
+	Headers     map[string]string
+	Service     *ServiceRuntime
+	Predicates  *bitset.BitSet
+	Middlewares []MiddlewareRuntime
+}
+
+type EntrypointRuntime struct {
+	Name    string
+	Address string
+	TLS     TLSRuntime
+}
+
+type TLSRuntime struct {
+	Enabled  bool
+	CertFile string
+	KeyFile  string
+	ACME     ACMERuntime
+}
+
+type ACMERuntime struct {
+	Enabled  bool
+	Email    string
+	CacheDir string
+	Domains  []string
+}
+
+type SecurityRuntime struct {
+	ReadHeaderTimeout string
+	ReadTimeout       string
+	WriteTimeout      string
+	IdleTimeout       string
+	MaxHeaderBytes    int
+	MaxBodyBytes      int64
+}
+
+type MiddlewareRuntime struct {
+	Name            string
+	StripPrefix     string
+	AddPrefix       string
+	RequestHeaders  map[string]string
+	ResponseHeaders map[string]string
+	MaxBodyBytes    int64
 }
 
 type ServiceRuntime struct {
@@ -150,7 +191,11 @@ func (g *Gateway) Handler(entrypoint string) http.Handler {
 
 		start := time.Now()
 		recorder := newStatusRecorder(w)
-		endpoint.Proxy.ServeHTTP(recorder, r)
+		handler := WrapMiddlewares(endpoint.Proxy, route.Middlewares)
+		if snapshot.Security.MaxBodyBytes > 0 {
+			r.Body = http.MaxBytesReader(recorder, r.Body, snapshot.Security.MaxBodyBytes)
+		}
+		handler.ServeHTTP(recorder, r)
 		duration := time.Since(start)
 
 		g.metrics.Observe(route, endpoint, recorder.status, duration)

@@ -99,6 +99,7 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 
 	serviceMap := mapping.NewMap[string, *config.Service]()
 	routeMap := mapping.NewMap[string, config.Route]()
+	middlewareMap := mapping.NewMap[string, config.Middleware]()
 	disabledCount := 0
 	invalidEndpointCount := 0
 
@@ -121,6 +122,12 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 		method := strings.TrimSpace(labels["vela.rule.method"])
 		scheme := valueOr(labels["vela.scheme"], "http")
 		weight := parseInt(labels["vela.weight"], 1)
+		applyEntrypointTLSLabels(cfg, labels)
+		routeMiddlewares := provider.SplitCSV(labels["vela.middlewares"])
+		if middleware, ok := middlewareFromLabels(routeName+"-middleware", labels); ok {
+			middlewareMap.Set(middleware.Name, middleware)
+			routeMiddlewares = append(routeMiddlewares, middleware.Name)
+		}
 
 		service, _ := serviceMap.GetOrCompute(serviceName, func() *config.Service {
 			return &config.Service{
@@ -136,18 +143,23 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 
 		if _, exists := routeMap.Get(routeName); !exists {
 			routeMap.Set(routeName, config.Route{
-				Name:       routeName,
-				Entrypoint: entrypoint,
-				Service:    serviceName,
-				Host:       host,
-				PathPrefix: pathPrefix,
-				Method:     method,
-				Headers:    map[string]string{},
+				Name:        routeName,
+				Entrypoint:  entrypoint,
+				Service:     serviceName,
+				Host:        host,
+				PathPrefix:  pathPrefix,
+				Method:      method,
+				Headers:     map[string]string{},
+				Middlewares: routeMiddlewares,
 			})
 		}
 	}
 
 	provider.AppendSortedServices(cfg, serviceMap)
+	for _, middlewareName := range provider.SortedStrings(middlewareMap.Keys()) {
+		middleware, _ := middlewareMap.Get(middlewareName)
+		cfg.Middlewares = append(cfg.Middlewares, middleware)
+	}
 	provider.AppendSortedRoutes(cfg, routeMap)
 
 	if err := config.Validate(cfg); err != nil {
@@ -162,6 +174,7 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 			"containers", len(containers),
 			"disabled", disabledCount,
 			"invalid_endpoints", invalidEndpointCount,
+			"middlewares", len(cfg.Middlewares),
 			"services", len(cfg.Services),
 			"routes", len(cfg.Routes),
 		)
@@ -254,4 +267,39 @@ func sanitizeName(input string, fallback string) string {
 	}
 	replacer := strings.NewReplacer("/", "-", "_", "-", " ", "-")
 	return replacer.Replace(input)
+}
+
+func middlewareFromLabels(name string, labels map[string]string) (config.Middleware, bool) {
+	middleware := config.Middleware{
+		Name:         name,
+		StripPrefix:  strings.TrimSpace(labels["vela.middleware.strip_prefix"]),
+		AddPrefix:    strings.TrimSpace(labels["vela.middleware.add_prefix"]),
+		MaxBodyBytes: int64(parseInt(labels["vela.middleware.max_body_bytes"], 0)),
+	}
+	return middleware, middleware.StripPrefix != "" || middleware.AddPrefix != "" || middleware.MaxBodyBytes > 0
+}
+
+func applyEntrypointTLSLabels(cfg *config.Config, labels map[string]string) {
+	if cfg == nil || len(cfg.Entrypoints) == 0 {
+		return
+	}
+	tlsEnabled := parseBool(labels["vela.entrypoint.tls.enabled"], false)
+	certFile := strings.TrimSpace(labels["vela.entrypoint.tls.cert_file"])
+	keyFile := strings.TrimSpace(labels["vela.entrypoint.tls.key_file"])
+	acmeEnabled := parseBool(labels["vela.entrypoint.acme.enabled"], false)
+	if tlsEnabled || certFile != "" || keyFile != "" {
+		cfg.Entrypoints[0].TLS = &config.EntrypointTLS{
+			Enabled:  tlsEnabled,
+			CertFile: certFile,
+			KeyFile:  keyFile,
+		}
+	}
+	if acmeEnabled {
+		cfg.Entrypoints[0].ACME = &config.EntrypointACME{
+			Enabled:  true,
+			Email:    strings.TrimSpace(labels["vela.entrypoint.acme.email"]),
+			CacheDir: strings.TrimSpace(labels["vela.entrypoint.acme.cache_dir"]),
+			Domains:  provider.SplitCSV(labels["vela.entrypoint.acme.domains"]),
+		}
+	}
 }

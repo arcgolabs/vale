@@ -15,13 +15,15 @@ import (
 )
 
 type HTTPRoute struct {
-	Name       string
-	Entrypoint string
-	Host       string
-	PathPrefix string
-	Method     string
-	Headers    map[string]string
-	Service    string
+	Name              string
+	Entrypoint        string
+	Host              string
+	PathPrefix        string
+	Method            string
+	Headers           map[string]string
+	Middlewares       []string
+	MiddlewareConfigs []config.Middleware
+	Service           string
 }
 
 type ServiceEndpoint struct {
@@ -132,6 +134,7 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 	}
 
 	invalidRouteCount := 0
+	middlewareMap := mapping.NewMap[string, config.Middleware]()
 	for _, route := range routes {
 		entrypoint := route.Entrypoint
 		if strings.TrimSpace(entrypoint) == "" {
@@ -142,18 +145,28 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 			invalidRouteCount++
 			continue
 		}
+		for _, middleware := range route.MiddlewareConfigs {
+			if strings.TrimSpace(middleware.Name) != "" {
+				middlewareMap.Set(middleware.Name, middleware)
+			}
+		}
 		cfg.Routes = append(cfg.Routes, config.Route{
-			Name:       route.Name,
-			Entrypoint: entrypoint,
-			Service:    route.Service,
-			Host:       route.Host,
-			PathPrefix: route.PathPrefix,
-			Method:     method,
-			Headers:    route.Headers,
+			Name:        route.Name,
+			Entrypoint:  entrypoint,
+			Service:     route.Service,
+			Host:        route.Host,
+			PathPrefix:  route.PathPrefix,
+			Method:      method,
+			Headers:     route.Headers,
+			Middlewares: route.Middlewares,
 		})
 	}
 
 	provider.AppendSortedServices(cfg, serviceMap)
+	for _, middlewareName := range provider.SortedStrings(middlewareMap.Keys()) {
+		middleware, _ := middlewareMap.Get(middlewareName)
+		cfg.Middlewares = append(cfg.Middlewares, middleware)
+	}
 	slices.SortStableFunc(cfg.Routes, func(i, j config.Route) int {
 		return strings.Compare(i.Name, j.Name)
 	})
@@ -171,6 +184,7 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 			"endpoints_seen", len(endpoints),
 			"invalid_routes", invalidRouteCount,
 			"invalid_endpoints", invalidEndpointCount,
+			"middlewares", len(cfg.Middlewares),
 			"services", len(cfg.Services),
 			"routes", len(cfg.Routes),
 		)

@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"maps"
+	"reflect"
 	"slices"
 
 	"github.com/arcgolabs/vela/runtime"
@@ -15,6 +16,9 @@ func staticRuntimeChanges(current *runtime.CompiledSnapshot, next *runtime.Compi
 	changes := make([]string, 0, 6)
 	if !maps.Equal(current.Entrypoints, next.Entrypoints) {
 		changes = append(changes, "entrypoints")
+	}
+	if !reflect.DeepEqual(current.EntrypointConfigs, next.EntrypointConfigs) {
+		changes = append(changes, "entrypoint_configs")
 	}
 	if current.AdminAddress != next.AdminAddress {
 		changes = append(changes, "admin_address")
@@ -30,6 +34,9 @@ func staticRuntimeChanges(current *runtime.CompiledSnapshot, next *runtime.Compi
 	}
 	if current.HealthTimeout != next.HealthTimeout {
 		changes = append(changes, "health_timeout")
+	}
+	if current.Security != next.Security {
+		changes = append(changes, "security")
 	}
 	slices.Sort(changes)
 	return changes

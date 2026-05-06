@@ -13,6 +13,7 @@ require (
 	github.com/arcgolabs/observabilityx v0.4.0
 	github.com/samber/mo v1.16.0
 	github.com/vulcand/oxy/v2 v2.1.0
+	golang.org/x/crypto v0.50.0
 )
 
 require (
@@ -24,6 +25,7 @@ require (
 	github.com/samber/oops v1.21.0 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
+	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 )
