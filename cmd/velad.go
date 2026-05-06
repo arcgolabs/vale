@@ -16,6 +16,7 @@ import (
 
 	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
 	providerevents "github.com/arcgolabs/vela/provider"
+	fileconfig "github.com/arcgolabs/vela/provider/fileconfig"
 )
 
 // veladConfig is the standalone process bootstrap shape (env VELA_*, defaults, changed CLI flags).
@@ -48,9 +49,9 @@ func (c veladConfig) gatewayOptions(logger *slog.Logger) []vela.Option {
 	files := parseCSV(c.ConfigFiles)
 	switch {
 	case len(files) > 0:
-		options = append(options, vela.WithConfigFiles(files...))
+		options = append(options, fileconfig.WithConfigFiles(files...))
 	case strings.TrimSpace(c.ConfigPath) != "":
-		options = append(options, vela.WithConfigPath(c.ConfigPath))
+		options = append(options, fileconfig.WithConfigPath(c.ConfigPath))
 	}
 	return options
 }

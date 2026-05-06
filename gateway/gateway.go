@@ -13,18 +13,15 @@ import (
 	"time"
 
 	"github.com/arcgolabs/eventx"
+	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
-	fileconfigprovider "github.com/arcgolabs/vela/provider/fileconfig"
 	mergedprovider "github.com/arcgolabs/vela/provider/merged"
+	staticconfigprovider "github.com/arcgolabs/vela/provider/staticconfig"
 	"github.com/arcgolabs/vela/runtime"
 )
 
-// Config holds construction-time settings for Gateway. Exactly one snapshot source
-// should be implicit or explicit (merged file/config providers vs WithSnapshotProvider
-// vs WithStaticSnapshot)—see NewFromConfig validation.
+// Config holds construction-time settings for Gateway.
 type Config struct {
-	ConfigPath   string
-	ConfigFiles  []string
 	Watch        bool
 	Cluster      ClusterFactory
 	Logger       *slog.Logger
@@ -37,9 +34,7 @@ type Config struct {
 // DefaultConfig returns defaults used by New/NewFromConfig when paths or watch are unspecified.
 func DefaultConfig() Config {
 	return Config{
-		ConfigPath:  "./vela.hcl",
-		ConfigFiles: nil,
-		Watch:       true,
+		Watch: false,
 	}
 }
 
@@ -94,14 +89,6 @@ func MustNew(options ...Option) *Gateway {
 // NewFromConfig validates and fills defaults on cfg then constructs the Gateway. Use New
 // to apply functional options first.
 func NewFromConfig(cfg Config) (*Gateway, error) {
-	defaults := DefaultConfig()
-	zeroLikeInput := cfg.ConfigPath == "" && len(cfg.ConfigFiles) == 0 && cfg.Cluster == nil && cfg.Logger == nil && cfg.EventBus == nil && cfg.Provider == nil && len(cfg.ConfigSource) == 0 && cfg.OnWatchError == nil && !cfg.Watch
-	if cfg.ConfigPath == "" {
-		cfg.ConfigPath = defaults.ConfigPath
-	}
-	if zeroLikeInput {
-		cfg.Watch = defaults.Watch
-	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
@@ -118,14 +105,8 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 	if cfg.Provider == nil {
 		configProviders := cfg.ConfigSource
 		if len(configProviders) == 0 {
-			files := cfg.ConfigFiles
-			if len(files) == 0 {
-				files = []string{cfg.ConfigPath}
-			}
-			configProviders = make([]provider.ConfigProvider, 0, len(files))
-			for _, file := range files {
-				configProviders = append(configProviders, fileconfigprovider.New(file))
-			}
+			configProviders = []provider.ConfigProvider{staticconfigprovider.New(config.Default())}
+			cfg.Watch = false
 		}
 		sources := make([]mergedprovider.Source, 0, len(configProviders))
 		for index, configProvider := range configProviders {

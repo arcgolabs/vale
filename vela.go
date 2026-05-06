@@ -55,17 +55,7 @@ func MustNew(options ...Option) *Gateway {
 }
 
 func DefaultConfig() Config {
-	cfg := gateway.DefaultConfig()
-	cfg.ConfigPath = ""
-	return cfg
-}
-
-func WithConfigPath(path string) Option {
-	return gateway.WithConfigPath(path)
-}
-
-func WithConfigFiles(paths ...string) Option {
-	return gateway.WithConfigFiles(paths...)
+	return gateway.DefaultConfig()
 }
 
 func WithWatch(enabled bool) Option {
@@ -112,7 +102,7 @@ func applyDefaultConfigSource(cfg *Config) {
 	if cfg == nil {
 		return
 	}
-	if cfg.Provider != nil || len(cfg.ConfigSource) > 0 || cfg.ConfigPath != "" || len(cfg.ConfigFiles) > 0 {
+	if cfg.Provider != nil || len(cfg.ConfigSource) > 0 {
 		return
 	}
 	cfg.ConfigSource = []provider.ConfigProvider{staticconfigprovider.New(config.Default())}

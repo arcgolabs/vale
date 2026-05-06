@@ -6,5 +6,7 @@ use (
 	./cmd
 	./examples/embedded_multi_provider
 	./provider/docker
+	./provider/file
+	./provider/fileconfig
 	./provider/k8s
 )

@@ -3,20 +3,7 @@ package config
 import (
 	"fmt"
 	"strings"
-
-	"github.com/hashicorp/hcl/v2/hclsimple"
 )
-
-func Load(path string) (*Config, error) {
-	var cfg Config
-	if err := hclsimple.DecodeFile(path, nil, &cfg); err != nil {
-		return nil, err
-	}
-	if err := Validate(&cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
-}
 
 func Validate(cfg *Config) error {
 	if len(cfg.Entrypoints) == 0 {

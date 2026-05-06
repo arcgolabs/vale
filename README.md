@@ -20,7 +20,7 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 
 - `runtime`: data plane runtime, consumes only compiled snapshot.
 - `compiler`: control-plane compile step from config to runtime snapshot.
-- `provider/fileconfig`: config source provider (file + watch).
+- `provider/fileconfig`: optional HCL file config source provider (file + watch).
 - `provider/merged`: multi-source merge + validate + compile.
 - root `vela`: library-first public API (`New` / `Start` / `Stop`).
 - `gateway`: lower-level embedded gateway implementation.
@@ -35,7 +35,7 @@ This repository includes a `go.work` file for local development and release buil
 ```bash
 go work sync
 go test ./...
-go test ./cluster/raftnode/... ./cmd/... ./provider/docker/... ./provider/k8s/... ./examples/embedded_multi_provider/...
+go test ./cluster/raftnode/... ./cmd/... ./provider/docker/... ./provider/file/... ./provider/fileconfig/... ./provider/k8s/... ./examples/embedded_multi_provider/...
 go run ./cmd
 ```
 
@@ -47,6 +47,8 @@ Current workspace modules:
 - `github.com/arcgolabs/vela/cmd`: standalone `velad` binary wiring.
 - `github.com/arcgolabs/vela/cluster/raftnode`: optional HashiCorp Raft cluster adapter.
 - `github.com/arcgolabs/vela/provider/docker`: optional Docker config provider.
+- `github.com/arcgolabs/vela/provider/file`: optional HCL snapshot provider.
+- `github.com/arcgolabs/vela/provider/fileconfig`: optional HCL config source provider.
 - `github.com/arcgolabs/vela/provider/k8s`: optional K8s-like config provider.
 - `github.com/arcgolabs/vela/examples/embedded_multi_provider`: example that consumes optional provider modules.
 
@@ -134,11 +136,12 @@ import (
   "log/slog"
 
   "github.com/arcgolabs/vela"
+  fileconfig "github.com/arcgolabs/vela/provider/fileconfig"
 )
 
 func runEmbedded() error {
   g, err := vela.New(
-    vela.WithConfigPath("./vela.hcl"),
+    fileconfig.WithConfigPath("./vela.hcl"),
     vela.WithWatch(true),
     vela.WithLogger(slog.Default()),
   )
@@ -186,8 +189,8 @@ go run ./examples/embedded_multi_provider
 
 Constructor options currently include:
 
-- `vela.WithConfigPath(path)`
-- `vela.WithConfigFiles(path1, path2, ...)` (merge order: left -> right, later wins)
+- `fileconfig.WithConfigPath(path)`
+- `fileconfig.WithConfigFiles(path1, path2, ...)` (merge order: left -> right, later wins)
 - `vela.WithWatch(enabled)`
 - `vela.WithClusterFactory(factory)` (optional control-plane cluster adapter)
 - `vela.WithLogger(logger)`

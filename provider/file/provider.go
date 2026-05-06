@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/arcgolabs/vela/compiler"
-	"github.com/arcgolabs/vela/config"
+	fileconfig "github.com/arcgolabs/vela/provider/fileconfig"
 	"github.com/arcgolabs/vela/runtime"
 	"github.com/fsnotify/fsnotify"
 )
@@ -29,7 +29,7 @@ func New(configPath string, logger *slog.Logger) *Provider {
 }
 
 func (p *Provider) Load(_ context.Context) (*runtime.CompiledSnapshot, error) {
-	cfg, err := config.Load(p.configPath)
+	cfg, err := fileconfig.Load(p.configPath)
 	if err != nil {
 		return nil, err
 	}

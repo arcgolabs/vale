@@ -16,34 +16,6 @@ import (
 // Option to fail construction.
 type Option func(*Config) error
 
-func WithConfigPath(path string) Option {
-	return func(cfg *Config) error {
-		if path == "" {
-			return fmt.Errorf("config path cannot be empty")
-		}
-		cfg.ConfigPath = path
-		cfg.ConfigFiles = nil
-		return nil
-	}
-}
-
-func WithConfigFiles(paths ...string) Option {
-	return func(cfg *Config) error {
-		if len(paths) == 0 {
-			return fmt.Errorf("config files cannot be empty")
-		}
-		nonEmpty := make([]string, 0, len(paths))
-		for _, path := range paths {
-			if path == "" {
-				return fmt.Errorf("config file path cannot be empty")
-			}
-			nonEmpty = append(nonEmpty, path)
-		}
-		cfg.ConfigFiles = nonEmpty
-		return nil
-	}
-}
-
 func WithWatch(enabled bool) Option {
 	return func(cfg *Config) error {
 		cfg.Watch = enabled

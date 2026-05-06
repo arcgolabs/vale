@@ -2,12 +2,16 @@ package fileconfig
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"path/filepath"
 	"time"
 
 	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vela/gateway"
+	"github.com/arcgolabs/vela/provider"
 	"github.com/fsnotify/fsnotify"
+	"github.com/hashicorp/hcl/v2/hclsimple"
 )
 
 type Provider struct {
@@ -23,7 +27,7 @@ func (p *Provider) Name() string {
 }
 
 func (p *Provider) Load(_ context.Context) (*config.Config, error) {
-	return config.Load(p.path)
+	return Load(p.path)
 }
 
 func (p *Provider) Watch(_ context.Context, onReload func(), onError func(error)) (io.Closer, error) {
@@ -67,4 +71,44 @@ func (p *Provider) Watch(_ context.Context, onReload func(), onError func(error)
 		}
 	}()
 	return watcher, nil
+}
+
+func Load(path string) (*config.Config, error) {
+	var cfg config.Config
+	if err := hclsimple.DecodeFile(path, nil, &cfg); err != nil {
+		return nil, err
+	}
+	if err := config.Validate(&cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func WithConfigPath(path string) gateway.Option {
+	return func(cfg *gateway.Config) error {
+		if path == "" {
+			return fmt.Errorf("config path cannot be empty")
+		}
+		cfg.ConfigSource = []provider.ConfigProvider{New(path)}
+		cfg.Provider = nil
+		return nil
+	}
+}
+
+func WithConfigFiles(paths ...string) gateway.Option {
+	return func(cfg *gateway.Config) error {
+		if len(paths) == 0 {
+			return fmt.Errorf("config files cannot be empty")
+		}
+		providers := make([]provider.ConfigProvider, 0, len(paths))
+		for _, path := range paths {
+			if path == "" {
+				return fmt.Errorf("config file path cannot be empty")
+			}
+			providers = append(providers, New(path))
+		}
+		cfg.ConfigSource = providers
+		cfg.Provider = nil
+		return nil
+	}
 }
