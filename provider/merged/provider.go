@@ -98,7 +98,7 @@ func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSna
 	if setupFailed || len(closers) == 0 {
 		return nil, fmt.Errorf("merged provider failed to setup any watcher")
 	}
-	return multiCloser(closers), nil
+	return provider.MultiCloser(closers), nil
 }
 
 func (p *Provider) loadMergedConfig(ctx context.Context) (*config.Config, error) {
@@ -145,19 +145,4 @@ func (p *Provider) publish(ctx context.Context, event provider.Event) {
 		return
 	}
 	_ = p.bus.Publish(ctx, event)
-}
-
-type multiCloser []io.Closer
-
-func (m multiCloser) Close() error {
-	var firstErr error
-	for _, closer := range m {
-		if closer == nil {
-			continue
-		}
-		if err := closer.Close(); err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	return firstErr
 }

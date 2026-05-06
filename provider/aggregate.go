@@ -57,20 +57,5 @@ func (p *fallbackProvider) Watch(ctx context.Context, onReload func(*runtime.Com
 		}
 		closers = append(closers, closer)
 	}
-	return multiCloser(closers), nil
-}
-
-type multiCloser []io.Closer
-
-func (m multiCloser) Close() error {
-	var firstErr error
-	for _, closer := range m {
-		if closer == nil {
-			continue
-		}
-		if err := closer.Close(); err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	return firstErr
+	return MultiCloser(closers), nil
 }
