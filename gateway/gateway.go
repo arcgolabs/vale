@@ -18,6 +18,7 @@ import (
 	mergedprovider "github.com/arcgolabs/vela/provider/merged"
 	staticconfigprovider "github.com/arcgolabs/vela/provider/staticconfig"
 	"github.com/arcgolabs/vela/runtime"
+	"github.com/samber/lo"
 	"github.com/samber/mo"
 )
 
@@ -110,13 +111,12 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 			configProviders = []provider.ConfigProvider{staticconfigprovider.New(config.Default())}
 			cfg.Watch = false
 		}
-		sources := make([]mergedprovider.Source, 0, len(configProviders))
-		for index, configProvider := range configProviders {
-			sources = append(sources, mergedprovider.Source{
+		sources := lo.Map(configProviders, func(configProvider provider.ConfigProvider, index int) mergedprovider.Source {
+			return mergedprovider.Source{
 				Name:     provider.ConfigProviderName(configProvider, fmt.Sprintf("source-%d", index)),
 				Provider: configProvider,
-			})
-		}
+			}
+		})
 		cfg.Provider = mergedprovider.New(cfg.EventBus, sources...)
 	}
 	if cfg.OnWatchError == nil {
@@ -368,12 +368,9 @@ func (g *Gateway) buildAdminMux() http.Handler {
 			return
 		}
 
-		endpoints := make([]runtime.EndpointView, 0)
-		for _, service := range snapshot.ServicesView() {
-			for _, endpoint := range service.Endpoints {
-				endpoints = append(endpoints, endpoint)
-			}
-		}
+		endpoints := lo.FlatMap(snapshot.ServicesView(), func(service runtime.ServiceView, _ int) []runtime.EndpointView {
+			return service.Endpoints
+		})
 		writeJSON(w, http.StatusOK, endpoints)
 	})
 	mux.HandleFunc("/admin/cluster/status", func(w http.ResponseWriter, _ *http.Request) {

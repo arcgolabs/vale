@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/arcgolabs/vela/runtime"
+	"github.com/samber/lo"
 )
 
 type fallbackProvider struct {
@@ -14,13 +15,9 @@ type fallbackProvider struct {
 }
 
 func Fallback(providers ...SnapshotProvider) SnapshotProvider {
-	nonNilProviders := make([]SnapshotProvider, 0, len(providers))
-	for _, p := range providers {
-		if p == nil {
-			continue
-		}
-		nonNilProviders = append(nonNilProviders, p)
-	}
+	nonNilProviders := lo.Filter(providers, func(p SnapshotProvider, _ int) bool {
+		return p != nil
+	})
 	return &fallbackProvider{providers: nonNilProviders}
 }
 

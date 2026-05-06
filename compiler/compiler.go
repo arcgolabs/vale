@@ -6,13 +6,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/proxy"
 	"github.com/arcgolabs/vela/runtime"
+	"github.com/samber/lo"
 )
 
 func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
-	services := make(map[string]*runtime.ServiceRuntime, len(cfg.Services))
+	serviceMap := mapping.NewMapWithCapacity[string, *runtime.ServiceRuntime](len(cfg.Services))
 	for _, service := range cfg.Services {
 		strategy := strings.TrimSpace(service.Strategy)
 		if strategy == "" {
@@ -48,22 +50,21 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 		}
 
 		rtService.BuildSlots()
-		services[rtService.Name] = rtService
+		serviceMap.Set(rtService.Name, rtService)
 	}
+	services := serviceMap.All()
 
-	entrypoints := make(map[string]string, len(cfg.Entrypoints))
-	for _, entrypoint := range cfg.Entrypoints {
-		entrypoints[entrypoint.Name] = entrypoint.Address
-	}
+	entrypoints := lo.Associate(cfg.Entrypoints, func(entrypoint config.Entrypoint) (string, string) {
+		return entrypoint.Name, entrypoint.Address
+	})
 
-	routes := make(map[string][]*runtime.CompiledRoute)
+	routesByEntrypoint := mapping.NewMultiMap[string, *runtime.CompiledRoute]()
 	for _, route := range cfg.Routes {
 		service := services[route.Service]
-		headers := make(map[string]string, len(route.Headers))
-		for key, value := range route.Headers {
-			headers[strings.ToLower(key)] = value
-		}
-		routes[route.Entrypoint] = append(routes[route.Entrypoint], &runtime.CompiledRoute{
+		headers := lo.MapEntries(route.Headers, func(key string, value string) (string, string) {
+			return strings.ToLower(key), value
+		})
+		routesByEntrypoint.Put(route.Entrypoint, &runtime.CompiledRoute{
 			Name:       route.Name,
 			Entrypoint: route.Entrypoint,
 			Host:       strings.ToLower(strings.TrimSpace(route.Host)),
@@ -73,10 +74,10 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 			Service:    service,
 		})
 	}
-	matchers := make(map[string]*runtime.EntrypointMatcher, len(routes))
-	for entrypoint, entrypointRoutes := range routes {
-		matchers[entrypoint] = runtime.BuildEntrypointMatcher(entrypointRoutes)
-	}
+	routes := routesByEntrypoint.All()
+	matchers := lo.MapEntries(routes, func(entrypoint string, entrypointRoutes []*runtime.CompiledRoute) (string, *runtime.EntrypointMatcher) {
+		return entrypoint, runtime.BuildEntrypointMatcher(entrypointRoutes)
+	})
 
 	return &runtime.CompiledSnapshot{
 		Entrypoints:        entrypoints,
