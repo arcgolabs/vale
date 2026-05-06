@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vela/provider"
 )
 
 type Provider struct {
@@ -38,11 +39,5 @@ func (p *Provider) Load(_ context.Context) (*config.Config, error) {
 }
 
 func (p *Provider) Watch(_ context.Context, _ func(), _ func(error)) (io.Closer, error) {
-	return nopCloser{}, nil
-}
-
-type nopCloser struct{}
-
-func (nopCloser) Close() error {
-	return nil
+	return provider.NopCloser{}, nil
 }

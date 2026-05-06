@@ -12,6 +12,7 @@ import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vela/provider"
 	"github.com/samber/mo"
 )
 
@@ -191,13 +192,11 @@ func (s *MemorySource) Watch(_ context.Context, onReload func(), _ func(error)) 
 	id := s.nextID
 	s.nextID++
 	s.listeners.Set(id, onReload)
-	return &memoryWatchCloser{
-		closeFn: func() {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			s.listeners.Delete(id)
-		},
-	}, nil
+	return provider.NewOnceCloser(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.listeners.Delete(id)
+	}), nil
 }
 
 func (s *MemorySource) Update(containers ...Container) {
@@ -211,20 +210,6 @@ func (s *MemorySource) Update(containers ...Container) {
 			listener()
 		}
 	}
-}
-
-type memoryWatchCloser struct {
-	once    sync.Once
-	closeFn func()
-}
-
-func (c *memoryWatchCloser) Close() error {
-	c.once.Do(func() {
-		if c.closeFn != nil {
-			c.closeFn()
-		}
-	})
-	return nil
 }
 
 func valueOr(value string, fallback string) string {

@@ -11,6 +11,7 @@ import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vela/provider"
 )
 
 type HTTPRoute struct {
@@ -202,13 +203,11 @@ func (s *MemorySource) Watch(_ context.Context, onReload func(), _ func(error)) 
 	id := s.nextID
 	s.nextID++
 	s.listeners.Set(id, onReload)
-	return &watchCloser{
-		closeFn: func() {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			s.listeners.Delete(id)
-		},
-	}, nil
+	return provider.NewOnceCloser(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.listeners.Delete(id)
+	}), nil
 }
 
 func (s *MemorySource) Update(routes []HTTPRoute, endpoints []ServiceEndpoint) {
@@ -223,20 +222,6 @@ func (s *MemorySource) Update(routes []HTTPRoute, endpoints []ServiceEndpoint) {
 			listener()
 		}
 	}
-}
-
-type watchCloser struct {
-	once    sync.Once
-	closeFn func()
-}
-
-func (c *watchCloser) Close() error {
-	c.once.Do(func() {
-		if c.closeFn != nil {
-			c.closeFn()
-		}
-	})
-	return nil
 }
 
 func sortedKeys(keys []string) []string {

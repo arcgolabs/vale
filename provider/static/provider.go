@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/arcgolabs/vela/provider"
 	"github.com/arcgolabs/vela/runtime"
 )
 
@@ -20,11 +21,5 @@ func (p *Provider) Load(context.Context) (*runtime.CompiledSnapshot, error) {
 }
 
 func (p *Provider) Watch(context.Context, func(*runtime.CompiledSnapshot), func(error)) (io.Closer, error) {
-	return nopCloser{}, nil
-}
-
-type nopCloser struct{}
-
-func (nopCloser) Close() error {
-	return nil
+	return provider.NopCloser{}, nil
 }

@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vela/provider"
 )
 
 type Provider struct {
@@ -51,13 +52,11 @@ func (p *Provider) Watch(_ context.Context, onReload func(), _ func(error)) (io.
 	id := p.nextID
 	p.nextID++
 	p.listeners[id] = onReload
-	return &watchCloser{
-		closeFn: func() {
-			p.mu.Lock()
-			defer p.mu.Unlock()
-			delete(p.listeners, id)
-		},
-	}, nil
+	return provider.NewOnceCloser(func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		delete(p.listeners, id)
+	}), nil
 }
 
 func (p *Provider) Update(cfg *config.Config) error {
@@ -81,19 +80,5 @@ func (p *Provider) Update(cfg *config.Config) error {
 			listener()
 		}
 	}
-	return nil
-}
-
-type watchCloser struct {
-	once    sync.Once
-	closeFn func()
-}
-
-func (c *watchCloser) Close() error {
-	c.once.Do(func() {
-		if c.closeFn != nil {
-			c.closeFn()
-		}
-	})
 	return nil
 }

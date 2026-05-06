@@ -34,3 +34,26 @@ func TestMultiCloserClose(t *testing.T) {
 		t.Fatalf("expected 3 closed resources, got %d", closed)
 	}
 }
+
+func TestNewOnceCloser(t *testing.T) {
+	closed := 0
+	closer := NewOnceCloser(func() {
+		closed++
+	})
+
+	if err := closer.Close(); err != nil {
+		t.Fatalf("first close failed: %v", err)
+	}
+	if err := closer.Close(); err != nil {
+		t.Fatalf("second close failed: %v", err)
+	}
+	if closed != 1 {
+		t.Fatalf("expected close function to run once, got %d", closed)
+	}
+}
+
+func TestNopCloser(t *testing.T) {
+	if err := (NopCloser{}).Close(); err != nil {
+		t.Fatalf("nop closer failed: %v", err)
+	}
+}
