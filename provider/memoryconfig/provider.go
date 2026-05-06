@@ -6,6 +6,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
 )
@@ -15,7 +16,7 @@ type Provider struct {
 
 	mu        sync.RWMutex
 	cfg       *config.Config
-	listeners map[int]func()
+	listeners *mapping.Map[int, func()]
 	nextID    int
 }
 
@@ -32,7 +33,7 @@ func New(name string, cfg *config.Config) (*Provider, error) {
 	return &Provider{
 		name:      name,
 		cfg:       cfg,
-		listeners: make(map[int]func()),
+		listeners: mapping.NewMap[int, func()](),
 	}, nil
 }
 
@@ -51,11 +52,11 @@ func (p *Provider) Watch(_ context.Context, onReload func(), _ func(error)) (io.
 	defer p.mu.Unlock()
 	id := p.nextID
 	p.nextID++
-	p.listeners[id] = onReload
+	p.listeners.Set(id, onReload)
 	return provider.NewOnceCloser(func() {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		delete(p.listeners, id)
+		p.listeners.Delete(id)
 	}), nil
 }
 
@@ -69,10 +70,7 @@ func (p *Provider) Update(cfg *config.Config) error {
 
 	p.mu.Lock()
 	p.cfg = cfg
-	listeners := make([]func(), 0, len(p.listeners))
-	for _, listener := range p.listeners {
-		listeners = append(listeners, listener)
-	}
+	listeners := p.listeners.Values()
 	p.mu.Unlock()
 
 	for _, listener := range listeners {
