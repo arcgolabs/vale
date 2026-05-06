@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"path/filepath"
 	"time"
 
@@ -15,11 +16,23 @@ import (
 )
 
 type Provider struct {
-	path string
+	path   string
+	logger *slog.Logger
 }
 
 func New(path string) *Provider {
 	return &Provider{path: path}
+}
+
+func NewWithLogger(path string, logger *slog.Logger) *Provider {
+	return &Provider{
+		path:   path,
+		logger: logger,
+	}
+}
+
+func (p *Provider) SetLogger(logger *slog.Logger) {
+	p.logger = logger
 }
 
 func (p *Provider) Name() string {
@@ -27,14 +40,36 @@ func (p *Provider) Name() string {
 }
 
 func (p *Provider) Load(_ context.Context) (*config.Config, error) {
-	return Load(p.path)
+	if p.logger != nil {
+		p.logger.Info("loading config file", "path", p.path)
+	}
+	cfg, err := Load(p.path)
+	if err != nil {
+		if p.logger != nil {
+			p.logger.Error("config file load failed", "path", p.path, "error", err)
+		}
+		return nil, err
+	}
+	if p.logger != nil {
+		p.logger.Info("config file loaded",
+			"path", p.path,
+			"entrypoints", len(cfg.Entrypoints),
+			"services", len(cfg.Services),
+			"routes", len(cfg.Routes),
+		)
+	}
+	return cfg, nil
 }
 
 func (p *Provider) Watch(_ context.Context, onReload func(), onError func(error)) (io.Closer, error) {
-	return WatchPath(p.path, onReload, onError)
+	return WatchPathWithLogger(p.path, p.logger, onReload, onError)
 }
 
 func WatchPath(path string, onChange func(), onError func(error)) (io.Closer, error) {
+	return WatchPathWithLogger(path, nil, onChange, onError)
+}
+
+func WatchPathWithLogger(path string, logger *slog.Logger, onChange func(), onError func(error)) (io.Closer, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -45,6 +80,9 @@ func WatchPath(path string, onChange func(), onError func(error)) (io.Closer, er
 	if err := watcher.Add(dir); err != nil {
 		_ = watcher.Close()
 		return nil, err
+	}
+	if logger != nil {
+		logger.Info("watching config file", "path", path, "dir", dir)
 	}
 
 	go func() {
@@ -65,10 +103,16 @@ func WatchPath(path string, onChange func(), onError func(error)) (io.Closer, er
 					continue
 				}
 				lastReload = time.Now()
+				if logger != nil {
+					logger.Info("config file changed", "path", path, "op", event.Op.String())
+				}
 				onChange()
 			case watchErr, ok := <-watcher.Errors:
 				if !ok {
 					return
+				}
+				if logger != nil {
+					logger.Error("config file watch error", "path", path, "error", watchErr)
 				}
 				onError(watchErr)
 			}

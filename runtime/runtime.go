@@ -215,9 +215,6 @@ type AccessLogger struct {
 }
 
 func NewAccessLogger(logger *slog.Logger, enabled bool) *AccessLogger {
-	if logger == nil {
-		logger = slog.Default()
-	}
 	return &AccessLogger{
 		enabled: enabled,
 		logger:  logger,
@@ -225,7 +222,7 @@ func NewAccessLogger(logger *slog.Logger, enabled bool) *AccessLogger {
 }
 
 func (l *AccessLogger) Log(event AccessEvent) {
-	if !l.enabled {
+	if !l.enabled || l.logger == nil {
 		return
 	}
 	l.logger.Info("access",

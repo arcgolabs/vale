@@ -104,12 +104,18 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 	if cfg.Provider != nil && len(cfg.ConfigSource) > 0 {
 		return nil, errors.New("cannot set both snapshot provider and config source providers")
 	}
+	if cfg.Provider != nil {
+		provider.ApplyLogger(cfg.Provider, cfg.Logger)
+	}
 
 	if cfg.Provider == nil {
 		configProviders := cfg.ConfigSource
 		if len(configProviders) == 0 {
 			configProviders = []provider.ConfigProvider{staticconfigprovider.New(config.Default())}
 			cfg.Watch = false
+		}
+		for _, configProvider := range configProviders {
+			provider.ApplyLogger(configProvider, cfg.Logger)
 		}
 		sourceList := collectionlist.NewListWithCapacity[mergedprovider.Source](len(configProviders))
 		for index, configProvider := range configProviders {
@@ -119,7 +125,7 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 			})
 		}
 		sources := sourceList.Values()
-		cfg.Provider = mergedprovider.New(cfg.EventBus, sources...)
+		cfg.Provider = mergedprovider.NewWithLogger(cfg.EventBus, cfg.Logger, sources...)
 	}
 	if cfg.OnWatchError == nil {
 		cfg.OnWatchError = func(err error) {
@@ -144,6 +150,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 	if g.started {
 		return errors.New("gateway already started")
 	}
+	g.logger.Info("gateway starting", "watch", g.config.Watch)
 
 	if g.config.Cluster != nil {
 		cluster, err := g.config.Cluster(g.logger)
@@ -151,6 +158,9 @@ func (g *Gateway) Start(ctx context.Context) error {
 			return err
 		}
 		g.cluster = cluster
+		if g.cluster != nil {
+			g.logger.Info("cluster initialized", "status", g.cluster.Status())
+		}
 	}
 
 	snapshot, err := g.provider.Load(ctx)
@@ -159,8 +169,17 @@ func (g *Gateway) Start(ctx context.Context) error {
 			_ = g.cluster.Shutdown()
 			g.cluster = nil
 		}
+		g.logger.Error("initial snapshot load failed", "error", err)
 		return err
 	}
+	g.logger.Info("initial snapshot loaded",
+		"built_at", snapshot.BuiltAt,
+		"entrypoints", len(snapshot.Entrypoints),
+		"services", len(snapshot.Services),
+		"routes", len(snapshot.Routes()),
+		"admin_addr", snapshot.AdminAddress,
+		"proxy_engine", snapshot.ProxyEngine,
+	)
 
 	g.runtime = runtime.NewGateway(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled))
 	g.publishClusterUpdate(snapshot)
@@ -177,6 +196,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 		listener, listenErr := net.Listen("tcp", address)
 		if listenErr != nil {
 			g.cleanupStartFailure(listeners)
+			g.logger.Error("entrypoint listen failed", "entrypoint", entrypoint, "addr", address, "error", listenErr)
 			return fmt.Errorf("listen entrypoint %q on %s: %w", entrypoint, address, listenErr)
 		}
 		servers = append(servers, server)
@@ -192,6 +212,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 	adminListener, listenErr := net.Listen("tcp", snapshot.AdminAddress)
 	if listenErr != nil {
 		g.cleanupStartFailure(listeners)
+		g.logger.Error("admin listen failed", "addr", snapshot.AdminAddress, "error", listenErr)
 		return fmt.Errorf("listen admin on %s: %w", snapshot.AdminAddress, listenErr)
 	}
 	servers = append(servers, adminServer)
@@ -205,15 +226,18 @@ func (g *Gateway) Start(ctx context.Context) error {
 		})
 		if watchErr != nil {
 			g.cleanupStartFailure(listeners)
+			g.logger.Error("watch setup failed", "error", watchErr)
 			return watchErr
 		}
 		g.watcher = watcher
+		g.logger.Info("watcher started")
 	}
 
 	interval := parseDurationDefault(snapshot.HealthInterval, 5*time.Second)
 	timeout := parseDurationDefault(snapshot.HealthTimeout, 2*time.Second)
-	g.health = runtime.NewHealthChecker(interval, timeout)
+	g.health = runtime.NewHealthCheckerWithLogger(interval, timeout, g.logger)
 	g.health.Start(g.runtime)
+	g.logger.Info("health checker started", "interval", interval, "timeout", timeout)
 
 	g.servers = servers
 	for i, entrypoint := range entrypointNames {
@@ -222,6 +246,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 	go g.listenAdmin(adminServer, listeners[len(listeners)-1])
 
 	g.started = true
+	g.logger.Info("gateway started", "entrypoints", len(snapshot.Entrypoints), "admin_addr", snapshot.AdminAddress)
 	return nil
 }
 
@@ -233,17 +258,21 @@ func (g *Gateway) Stop(ctx context.Context) error {
 	if !g.started {
 		return nil
 	}
+	g.logger.Info("gateway stopping")
 
 	if g.watcher != nil {
 		_ = g.watcher.Close()
 		g.watcher = nil
+		g.logger.Info("watcher stopped")
 	}
 	if g.health != nil {
 		g.health.Stop()
 		g.health = nil
+		g.logger.Info("health checker stopped")
 	}
 	for _, server := range g.servers {
 		_ = server.Shutdown(ctx)
+		g.logger.Info("server stopped", "addr", server.Addr)
 	}
 
 	g.servers = nil
@@ -252,10 +281,13 @@ func (g *Gateway) Stop(ctx context.Context) error {
 	if g.cluster != nil {
 		_ = g.cluster.Shutdown()
 		g.cluster = nil
+		g.logger.Info("cluster stopped")
 	}
 	if g.ownsBus && g.events != nil {
 		_ = g.events.Close()
+		g.logger.Info("event bus closed")
 	}
+	g.logger.Info("gateway stopped")
 	return nil
 }
 
@@ -339,6 +371,12 @@ func (g *Gateway) applyReloadSnapshot(snapshot *runtime.CompiledSnapshot) {
 	}
 	g.runtime.Swap(snapshot)
 	g.publishClusterUpdate(snapshot)
+	g.logger.Info("runtime snapshot swapped",
+		"built_at", snapshot.BuiltAt,
+		"entrypoints", len(snapshot.Entrypoints),
+		"services", len(snapshot.Services),
+		"routes", len(snapshot.Routes()),
+	)
 }
 
 func (g *Gateway) buildAdminMux() http.Handler {

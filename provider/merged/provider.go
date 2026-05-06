@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -22,9 +23,14 @@ type Source struct {
 type Provider struct {
 	sources *mapping.OrderedMap[string, provider.ConfigProvider]
 	bus     provider.EventBus
+	logger  *slog.Logger
 }
 
 func New(bus provider.EventBus, sources ...Source) *Provider {
+	return NewWithLogger(bus, nil, sources...)
+}
+
+func NewWithLogger(bus provider.EventBus, logger *slog.Logger, sources ...Source) *Provider {
 	orderedSources := mapping.NewOrderedMap[string, provider.ConfigProvider]()
 	for index, source := range sources {
 		if source.Provider == nil {
@@ -39,20 +45,40 @@ func New(bus provider.EventBus, sources ...Source) *Provider {
 	return &Provider{
 		sources: orderedSources,
 		bus:     bus,
+		logger:  logger,
 	}
 }
 
+func (p *Provider) SetLogger(logger *slog.Logger) {
+	p.logger = logger
+}
+
 func (p *Provider) Load(ctx context.Context) (*runtime.CompiledSnapshot, error) {
+	sourceCount := p.sourceCount()
+	if p.logger != nil {
+		p.logger.Info("loading merged config", "sources", sourceCount)
+	}
 	cfg, err := p.loadMergedConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
 	snapshot, compileErr := compiler.Compile(cfg)
 	if compileErr != nil {
+		if p.logger != nil {
+			p.logger.Error("compile merged config failed", "error", compileErr)
+		}
 		return nil, compileErr
 	}
+	if p.logger != nil {
+		p.logger.Info("merged snapshot compiled",
+			"built_at", snapshot.BuiltAt,
+			"entrypoints", len(snapshot.Entrypoints),
+			"services", len(snapshot.Services),
+			"routes", len(snapshot.Routes()),
+		)
+	}
 	p.publish(ctx, provider.SnapshotRecompiledEvent{
-		SourceCount:  p.sources.Len(),
+		SourceCount:  sourceCount,
 		RouteCount:   len(snapshot.Routes()),
 		ServiceCount: len(snapshot.ServicesView()),
 	})
@@ -67,16 +93,28 @@ func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSna
 	closers := make([]io.Closer, 0, p.sources.Len())
 	setupFailed := false
 	reload := func(sourceName string) {
+		if p.logger != nil {
+			p.logger.Info("config source changed", "source", sourceName)
+		}
 		p.publish(ctx, provider.ConfigSourceChangedEvent{Source: sourceName})
 		snapshot, err := p.Load(ctx)
 		if err != nil {
+			if p.logger != nil {
+				p.logger.Error("reload merged snapshot failed", "source", sourceName, "error", err)
+			}
 			onError(err)
 			return
+		}
+		if p.logger != nil {
+			p.logger.Info("merged snapshot reloaded", "source", sourceName, "built_at", snapshot.BuiltAt)
 		}
 		onReload(snapshot)
 	}
 
 	p.sources.Range(func(sourceName string, configProvider provider.ConfigProvider) bool {
+		if p.logger != nil {
+			p.logger.Info("watching config source", "source", sourceName)
+		}
 		closer, err := configProvider.Watch(ctx, func() { reload(sourceName) }, func(err error) {
 			onError(fmt.Errorf("config provider[%s] watch error: %w", sourceName, err))
 		})
@@ -91,6 +129,9 @@ func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSna
 			onError(fmt.Errorf("config provider[%s] watch setup failed: %w", sourceName, err))
 			setupFailed = true
 			return false
+		}
+		if p.logger != nil {
+			p.logger.Info("config source watcher ready", "source", sourceName)
 		}
 		closers = append(closers, closer)
 		return true
@@ -114,6 +155,9 @@ func (p *Provider) loadMergedConfig(ctx context.Context) (*config.Config, error)
 		cfg, err := configProvider.Load(ctx)
 		if err != nil {
 			messages = append(messages, fmt.Sprintf("config provider[%s] load failed: %v", sourceName, err))
+			if p.logger != nil {
+				p.logger.Error("config source load failed", "source", sourceName, "error", err)
+			}
 			p.publish(ctx, provider.ConfigSourceFailedEvent{
 				Source: sourceName,
 				Error:  err.Error(),
@@ -125,6 +169,15 @@ func (p *Provider) loadMergedConfig(ctx context.Context) (*config.Config, error)
 			Duration:   time.Since(start),
 			ConfigSize: len(cfg.Entrypoints) + len(cfg.Services) + len(cfg.Routes),
 		})
+		if p.logger != nil {
+			p.logger.Info("config source loaded",
+				"source", sourceName,
+				"duration", time.Since(start),
+				"entrypoints", len(cfg.Entrypoints),
+				"services", len(cfg.Services),
+				"routes", len(cfg.Routes),
+			)
+		}
 		loadedConfigs = append(loadedConfigs, cfg)
 		return true
 	})
@@ -145,4 +198,11 @@ func (p *Provider) publish(ctx context.Context, event provider.Event) {
 		return
 	}
 	_ = p.bus.Publish(ctx, event)
+}
+
+func (p *Provider) sourceCount() int {
+	if p == nil || p.sources == nil {
+		return 0
+	}
+	return p.sources.Len()
 }

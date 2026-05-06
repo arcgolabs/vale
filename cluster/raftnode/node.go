@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,8 +42,9 @@ func WithCluster(config Config) gateway.Option {
 }
 
 type Node struct {
-	raft *raft.Raft
-	fsm  *fsm
+	raft   *raft.Raft
+	fsm    *fsm
+	logger *slog.Logger
 }
 
 func New(config Config, logger *slog.Logger) (*Node, error) {
@@ -58,10 +60,11 @@ func New(config Config, logger *slog.Logger) (*Node, error) {
 
 	raftConfig := raft.DefaultConfig()
 	raftConfig.LocalID = raft.ServerID(config.NodeID)
+	logWriter := newRaftLogWriter(logger)
 	raftConfig.Logger = hclog.New(&hclog.LoggerOptions{
 		Name:   "vela-raft",
 		Level:  hclog.Info,
-		Output: os.Stdout,
+		Output: logWriter,
 	})
 
 	fsmStore := newFSM()
@@ -77,11 +80,11 @@ func New(config Config, logger *slog.Logger) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	snapshotStore, err := raft.NewFileSnapshotStore(config.DataDir, 2, os.Stdout)
+	snapshotStore, err := raft.NewFileSnapshotStore(config.DataDir, 2, logWriter)
 	if err != nil {
 		return nil, err
 	}
-	transport, err := raft.NewTCPTransport(config.BindAddr, nil, 3, 10*time.Second, os.Stdout)
+	transport, err := raft.NewTCPTransport(config.BindAddr, nil, 3, 10*time.Second, logWriter)
 	if err != nil {
 		return nil, err
 	}
@@ -113,8 +116,9 @@ func New(config Config, logger *slog.Logger) (*Node, error) {
 	}
 
 	return &Node{
-		raft: r,
-		fsm:  fsmStore,
+		raft:   r,
+		fsm:    fsmStore,
+		logger: logger,
 	}, nil
 }
 
@@ -133,7 +137,14 @@ func (n *Node) Apply(data []byte, timeout time.Duration) error {
 	if !n.IsEnabled() {
 		return nil
 	}
-	return n.raft.Apply(data, timeout).Error()
+	if n.logger != nil {
+		n.logger.Info("raft apply started", "bytes", len(data), "timeout", timeout)
+	}
+	err := n.raft.Apply(data, timeout).Error()
+	if err != nil && n.logger != nil {
+		n.logger.Error("raft apply failed", "error", err)
+	}
+	return err
 }
 
 func (n *Node) Status() map[string]any {
@@ -183,7 +194,14 @@ func (n *Node) AddVoter(id string, address string, timeout time.Duration) error 
 	if id == "" || address == "" {
 		return fmt.Errorf("id and address are required")
 	}
-	return n.raft.AddVoter(raft.ServerID(id), raft.ServerAddress(address), 0, timeout).Error()
+	if n.logger != nil {
+		n.logger.Info("raft add voter started", "id", id, "address", address, "timeout", timeout)
+	}
+	err := n.raft.AddVoter(raft.ServerID(id), raft.ServerAddress(address), 0, timeout).Error()
+	if err != nil && n.logger != nil {
+		n.logger.Error("raft add voter failed", "id", id, "address", address, "error", err)
+	}
+	return err
 }
 
 func (n *Node) RemoveServer(id string, timeout time.Duration) error {
@@ -193,14 +211,47 @@ func (n *Node) RemoveServer(id string, timeout time.Duration) error {
 	if id == "" {
 		return fmt.Errorf("id is required")
 	}
-	return n.raft.RemoveServer(raft.ServerID(id), 0, timeout).Error()
+	if n.logger != nil {
+		n.logger.Info("raft remove server started", "id", id, "timeout", timeout)
+	}
+	err := n.raft.RemoveServer(raft.ServerID(id), 0, timeout).Error()
+	if err != nil && n.logger != nil {
+		n.logger.Error("raft remove server failed", "id", id, "error", err)
+	}
+	return err
 }
 
 func (n *Node) Shutdown() error {
 	if !n.IsEnabled() {
 		return nil
 	}
-	return n.raft.Shutdown().Error()
+	if n.logger != nil {
+		n.logger.Info("raft shutdown started")
+	}
+	err := n.raft.Shutdown().Error()
+	if err != nil && n.logger != nil {
+		n.logger.Error("raft shutdown failed", "error", err)
+	}
+	return err
+}
+
+type raftLogWriter struct {
+	logger *slog.Logger
+}
+
+func newRaftLogWriter(logger *slog.Logger) io.Writer {
+	if logger == nil {
+		return io.Discard
+	}
+	return &raftLogWriter{logger: logger.With("component", "raft")}
+}
+
+func (w *raftLogWriter) Write(data []byte) (int, error) {
+	line := strings.TrimSpace(string(data))
+	if line != "" {
+		w.logger.Info("raft log", "line", line)
+	}
+	return len(data), nil
 }
 
 type fsm struct {

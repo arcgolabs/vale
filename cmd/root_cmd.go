@@ -61,17 +61,26 @@ func runVelad(cmd *cobra.Command, _ []string) error {
 	if err := gateway.Start(context.Background()); err != nil {
 		return fmt.Errorf("start velad: %w", err)
 	}
+	logger.Info("velad started")
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+	sig := <-stop
+	logger.Info("shutdown signal received", "signal", sig.String())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_ = gateway.Stop(ctx)
-	if bus != nil {
-		_ = bus.Close()
+	if err := gateway.Stop(ctx); err != nil {
+		logger.Error("gateway stop failed", "error", err)
 	}
-	_ = logx.Close(logger)
+	if bus != nil {
+		if err := bus.Close(); err != nil {
+			logger.Error("event bus close failed", "error", err)
+		}
+	}
+	logger.Info("velad stopped")
+	if err := logx.Close(logger); err != nil {
+		return err
+	}
 	return nil
 }

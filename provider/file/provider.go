@@ -16,25 +16,48 @@ type Provider struct {
 }
 
 func New(configPath string, logger *slog.Logger) *Provider {
-	if logger == nil {
-		logger = slog.Default()
-	}
 	return &Provider{
 		configPath: configPath,
 		logger:     logger,
 	}
 }
 
+func (p *Provider) SetLogger(logger *slog.Logger) {
+	p.logger = logger
+}
+
 func (p *Provider) Load(_ context.Context) (*runtime.CompiledSnapshot, error) {
+	if p.logger != nil {
+		p.logger.Info("loading snapshot from config file", "path", p.configPath)
+	}
 	cfg, err := fileconfig.Load(p.configPath)
 	if err != nil {
+		if p.logger != nil {
+			p.logger.Error("snapshot config load failed", "path", p.configPath, "error", err)
+		}
 		return nil, err
 	}
-	return compiler.Compile(cfg)
+	snapshot, err := compiler.Compile(cfg)
+	if err != nil {
+		if p.logger != nil {
+			p.logger.Error("snapshot compile failed", "path", p.configPath, "error", err)
+		}
+		return nil, err
+	}
+	if p.logger != nil {
+		p.logger.Info("snapshot loaded",
+			"path", p.configPath,
+			"built_at", snapshot.BuiltAt,
+			"entrypoints", len(snapshot.Entrypoints),
+			"services", len(snapshot.Services),
+			"routes", len(snapshot.Routes()),
+		)
+	}
+	return snapshot, nil
 }
 
 func (p *Provider) Watch(_ context.Context, onReload func(*runtime.CompiledSnapshot), onError func(error)) (io.Closer, error) {
-	return fileconfig.WatchPath(p.configPath, func() {
+	return fileconfig.WatchPathWithLogger(p.configPath, p.logger, func() {
 		snapshot, loadErr := p.Load(context.Background())
 		if loadErr != nil {
 			onError(loadErr)
