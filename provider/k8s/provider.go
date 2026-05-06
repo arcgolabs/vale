@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
@@ -144,7 +143,7 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 		})
 	}
 
-	for _, serviceName := range sortedKeys(serviceMap.Keys()) {
+	for _, serviceName := range provider.SortedStrings(serviceMap.Keys()) {
 		service, _ := serviceMap.Get(serviceName)
 		cfg.Services = append(cfg.Services, *service)
 	}
@@ -222,10 +221,4 @@ func (s *MemorySource) Update(routes []HTTPRoute, endpoints []ServiceEndpoint) {
 			listener()
 		}
 	}
-}
-
-func sortedKeys(keys []string) []string {
-	keys = collectionlist.NewList[string](keys...).Values()
-	slices.Sort(keys)
-	return keys
 }
