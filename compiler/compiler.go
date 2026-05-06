@@ -10,7 +10,6 @@ import (
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/proxy"
 	"github.com/arcgolabs/vela/runtime"
-	"github.com/samber/lo"
 )
 
 func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
@@ -54,30 +53,35 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 	}
 	services := serviceMap.All()
 
-	entrypoints := lo.Associate(cfg.Entrypoints, func(entrypoint config.Entrypoint) (string, string) {
-		return entrypoint.Name, entrypoint.Address
-	})
+	entrypointMap := mapping.NewMapWithCapacity[string, string](len(cfg.Entrypoints))
+	for _, entrypoint := range cfg.Entrypoints {
+		entrypointMap.Set(entrypoint.Name, entrypoint.Address)
+	}
+	entrypoints := entrypointMap.All()
 
 	routesByEntrypoint := mapping.NewMultiMap[string, *runtime.CompiledRoute]()
 	for _, route := range cfg.Routes {
 		service := services[route.Service]
-		headers := lo.MapEntries(route.Headers, func(key string, value string) (string, string) {
-			return strings.ToLower(key), value
-		})
+		headerMap := mapping.NewMapWithCapacity[string, string](len(route.Headers))
+		for key, value := range route.Headers {
+			headerMap.Set(strings.ToLower(key), value)
+		}
 		routesByEntrypoint.Put(route.Entrypoint, &runtime.CompiledRoute{
 			Name:       route.Name,
 			Entrypoint: route.Entrypoint,
 			Host:       strings.ToLower(strings.TrimSpace(route.Host)),
 			PathPrefix: strings.TrimSpace(route.PathPrefix),
 			Method:     strings.ToUpper(strings.TrimSpace(route.Method)),
-			Headers:    headers,
+			Headers:    headerMap.All(),
 			Service:    service,
 		})
 	}
 	routes := routesByEntrypoint.All()
-	matchers := lo.MapEntries(routes, func(entrypoint string, entrypointRoutes []*runtime.CompiledRoute) (string, *runtime.EntrypointMatcher) {
-		return entrypoint, runtime.BuildEntrypointMatcher(entrypointRoutes)
-	})
+	matcherMap := mapping.NewMapWithCapacity[string, *runtime.EntrypointMatcher](len(routes))
+	for entrypoint, entrypointRoutes := range routes {
+		matcherMap.Set(entrypoint, runtime.BuildEntrypointMatcher(entrypointRoutes))
+	}
+	matchers := matcherMap.All()
 
 	return &runtime.CompiledSnapshot{
 		Entrypoints:        entrypoints,

@@ -12,14 +12,13 @@ import (
 	"sync"
 	"time"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
 	mergedprovider "github.com/arcgolabs/vela/provider/merged"
 	staticconfigprovider "github.com/arcgolabs/vela/provider/staticconfig"
 	"github.com/arcgolabs/vela/runtime"
-	"github.com/samber/lo"
-	"github.com/samber/mo"
 )
 
 // Config holds construction-time settings for Gateway.
@@ -111,12 +110,14 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 			configProviders = []provider.ConfigProvider{staticconfigprovider.New(config.Default())}
 			cfg.Watch = false
 		}
-		sources := lo.Map(configProviders, func(configProvider provider.ConfigProvider, index int) mergedprovider.Source {
-			return mergedprovider.Source{
+		sourceList := collectionlist.NewListWithCapacity[mergedprovider.Source](len(configProviders))
+		for index, configProvider := range configProviders {
+			sourceList.Add(mergedprovider.Source{
 				Name:     provider.ConfigProviderName(configProvider, fmt.Sprintf("source-%d", index)),
 				Provider: configProvider,
-			}
-		})
+			})
+		}
+		sources := sourceList.Values()
 		cfg.Provider = mergedprovider.New(cfg.EventBus, sources...)
 	}
 	if cfg.OnWatchError == nil {
@@ -368,9 +369,11 @@ func (g *Gateway) buildAdminMux() http.Handler {
 			return
 		}
 
-		endpoints := lo.FlatMap(snapshot.ServicesView(), func(service runtime.ServiceView, _ int) []runtime.EndpointView {
-			return service.Endpoints
-		})
+		endpointList := collectionlist.NewList[runtime.EndpointView]()
+		for _, service := range snapshot.ServicesView() {
+			endpointList.MergeSlice(service.Endpoints)
+		}
+		endpoints := endpointList.Values()
 		writeJSON(w, http.StatusOK, endpoints)
 	})
 	mux.HandleFunc("/admin/cluster/status", func(w http.ResponseWriter, _ *http.Request) {
@@ -463,7 +466,10 @@ func parseDurationDefault(value string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	duration, err := time.ParseDuration(value)
-	return mo.TupleToOption(duration, err == nil).OrElse(fallback)
+	if err != nil {
+		return fallback
+	}
+	return duration
 }
 
 func (g *Gateway) publishClusterUpdate(snapshot *runtime.CompiledSnapshot) {

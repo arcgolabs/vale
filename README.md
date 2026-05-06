@@ -64,8 +64,7 @@ versions when consumed outside this workspace.
 - `github.com/arcgolabs/logx`: structured logger construction and lifecycle.
 - `github.com/arcgolabs/configx`: bootstrap config from env/defaults.
 - `github.com/arcgolabs/eventx`: core provider load/reload/failure event bus.
-- `github.com/arcgolabs/collectionx`: ordered config/source maps, matcher grouping, and validation sets.
-- `github.com/samber/lo` / `github.com/samber/mo`: focused collection/option helpers for repetitive glue code.
+- `github.com/arcgolabs/collectionx`: list/set/map abstractions for config assembly, matcher grouping, and validation.
 
 `runtime` package does not depend on DI container, matching the document's "core runtime no DI" rule.
 

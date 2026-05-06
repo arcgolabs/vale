@@ -6,8 +6,8 @@ import (
 	"io"
 	"strings"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/vela/runtime"
-	"github.com/samber/lo"
 )
 
 type fallbackProvider struct {
@@ -15,10 +15,13 @@ type fallbackProvider struct {
 }
 
 func Fallback(providers ...SnapshotProvider) SnapshotProvider {
-	nonNilProviders := lo.Filter(providers, func(p SnapshotProvider, _ int) bool {
-		return p != nil
-	})
-	return &fallbackProvider{providers: nonNilProviders}
+	nonNilProviders := collectionlist.NewListWithCapacity[SnapshotProvider](len(providers))
+	for _, p := range providers {
+		if p != nil {
+			nonNilProviders.Add(p)
+		}
+	}
+	return &fallbackProvider{providers: nonNilProviders.Values()}
 }
 
 func (p *fallbackProvider) Load(ctx context.Context) (*runtime.CompiledSnapshot, error) {

@@ -1,6 +1,6 @@
 package runtime
 
-import "github.com/samber/lo"
+import collectionlist "github.com/arcgolabs/collectionx/list"
 
 type RouteView struct {
 	Name       string `json:"name"`
@@ -25,37 +25,40 @@ type ServiceView struct {
 }
 
 func (s *CompiledSnapshot) Routes() []RouteView {
-	return lo.Flatten(lo.MapToSlice(s.RoutesByEntrypoint, func(entrypoint string, routes []*CompiledRoute) []RouteView {
-		return lo.Map(routes, func(route *CompiledRoute, _ int) RouteView {
-			return RouteView{
+	routeList := collectionlist.NewList[RouteView]()
+	for entrypoint, routes := range s.RoutesByEntrypoint {
+		for _, route := range routes {
+			routeList.Add(RouteView{
 				Name:       route.Name,
 				Entrypoint: entrypoint,
 				Host:       route.Host,
 				PathPrefix: route.PathPrefix,
 				Method:     route.Method,
 				Service:    route.Service.Name,
-			}
-		})
-	}))
+			})
+		}
+	}
+	return routeList.Values()
 }
 
 func (s *CompiledSnapshot) ServicesView() []ServiceView {
-	result := make([]ServiceView, 0, len(s.Services))
+	serviceList := collectionlist.NewListWithCapacity[ServiceView](len(s.Services))
 	for _, service := range s.Services {
-		serviceView := ServiceView{
-			Name:      service.Name,
-			Strategy:  service.Strategy,
-			Endpoints: make([]EndpointView, 0, len(service.Endpoints)),
-		}
+		endpointList := collectionlist.NewListWithCapacity[EndpointView](len(service.Endpoints))
 		for _, endpoint := range service.Endpoints {
-			serviceView.Endpoints = append(serviceView.Endpoints, EndpointView{
+			endpointList.Add(EndpointView{
 				URL:         endpoint.URL.String(),
 				Weight:      endpoint.Weight,
 				Healthy:     endpoint.Healthy.Load(),
 				LastChecked: endpoint.LastChecked.Load(),
 			})
 		}
-		result = append(result, serviceView)
+		serviceView := ServiceView{
+			Name:      service.Name,
+			Strategy:  service.Strategy,
+			Endpoints: endpointList.Values(),
+		}
+		serviceList.Add(serviceView)
 	}
-	return result
+	return serviceList.Values()
 }
