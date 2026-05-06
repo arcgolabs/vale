@@ -2,16 +2,12 @@ package runtime
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
 	"sync/atomic"
 	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type CompiledSnapshot struct {
@@ -98,14 +94,17 @@ func (s *ServiceRuntime) Pick() (*EndpointRuntime, error) {
 type Gateway struct {
 	current atomic.Pointer[CompiledSnapshot]
 	access  *AccessLogger
-	metrics *Metrics
+	metrics MetricsRecorder
 }
 
-func NewGateway(snapshot *CompiledSnapshot, logger *slog.Logger, accessEnabled bool, metricsEnabled bool) *Gateway {
+func NewGateway(snapshot *CompiledSnapshot, logger *slog.Logger, accessEnabled bool, metrics MetricsRecorder) *Gateway {
 	accessLogger := NewAccessLogger(logger, accessEnabled)
+	if metrics == nil {
+		metrics = NewNoopMetrics()
+	}
 	gateway := &Gateway{
 		access:  accessLogger,
-		metrics: NewMetrics(metricsEnabled),
+		metrics: metrics,
 	}
 	gateway.current.Store(snapshot)
 	return gateway
@@ -240,59 +239,21 @@ func (l *AccessLogger) Log(event AccessEvent) {
 	)
 }
 
-type Metrics struct {
-	enabled  bool
-	registry *prometheus.Registry
-	requests *prometheus.CounterVec
-	latency  *prometheus.HistogramVec
+type MetricsRecorder interface {
+	Observe(route *CompiledRoute, endpoint *EndpointRuntime, status int, duration time.Duration)
+	Handler() http.Handler
 }
 
-func NewMetrics(enabled bool) *Metrics {
-	metrics := &Metrics{
-		enabled: enabled,
-	}
-	if !enabled {
-		return metrics
-	}
+type noopMetrics struct{}
 
-	metrics.registry = prometheus.NewRegistry()
-	metrics.requests = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "vela_http_requests_total",
-			Help: "Total HTTP requests handled by vela.",
-		},
-		[]string{"route", "service", "endpoint", "status"},
-	)
-	metrics.latency = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "vela_http_request_duration_seconds",
-			Help:    "HTTP request duration in seconds.",
-			Buckets: prometheus.DefBuckets,
-		},
-		[]string{"route", "service"},
-	)
-	if err := metrics.registry.Register(metrics.requests); err != nil {
-		panic(err)
-	}
-	if err := metrics.registry.Register(metrics.latency); err != nil {
-		panic(err)
-	}
-	return metrics
+func NewNoopMetrics() MetricsRecorder {
+	return noopMetrics{}
 }
 
-func (m *Metrics) Observe(route *CompiledRoute, endpoint *EndpointRuntime, status int, duration time.Duration) {
-	if !m.enabled {
-		return
-	}
-	m.requests.WithLabelValues(route.Name, route.Service.Name, endpoint.URL.String(), fmt.Sprintf("%d", status)).Inc()
-	m.latency.WithLabelValues(route.Name, route.Service.Name).Observe(duration.Seconds())
-}
+func (noopMetrics) Observe(_ *CompiledRoute, _ *EndpointRuntime, _ int, _ time.Duration) {}
 
-func (m *Metrics) Handler() http.Handler {
-	if !m.enabled {
-		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "metrics disabled", http.StatusNotFound)
-		})
-	}
-	return promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{})
+func (noopMetrics) Handler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "metrics unavailable", http.StatusNotFound)
+	})
 }

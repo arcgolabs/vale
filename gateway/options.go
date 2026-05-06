@@ -33,6 +33,16 @@ func WithClusterFactory(factory ClusterFactory) Option {
 	}
 }
 
+func WithMetricsFactory(factory MetricsFactory) Option {
+	return func(cfg *Config) error {
+		if factory == nil {
+			return fmt.Errorf("metrics factory cannot be nil")
+		}
+		cfg.Metrics = factory
+		return nil
+	}
+}
+
 func WithLogger(logger *slog.Logger) Option {
 	return func(cfg *Config) error {
 		cfg.Logger = logger

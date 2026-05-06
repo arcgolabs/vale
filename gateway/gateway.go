@@ -28,6 +28,7 @@ type Config struct {
 	EventBus     eventx.BusRuntime
 	Provider     provider.SnapshotProvider
 	ConfigSource []provider.ConfigProvider
+	Metrics      MetricsFactory
 	OnWatchError func(error)
 }
 
@@ -158,7 +159,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 		return err
 	}
 
-	g.runtime = runtime.NewGateway(snapshot, g.logger, snapshot.AccessLogEnabled, snapshot.MetricsEnabled)
+	g.runtime = runtime.NewGateway(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled))
 	g.publishClusterUpdate(snapshot)
 
 	servers := make([]*http.Server, 0, len(snapshot.Entrypoints)+1)

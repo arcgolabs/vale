@@ -66,6 +66,10 @@ func WithClusterFactory(factory gateway.ClusterFactory) Option {
 	return gateway.WithClusterFactory(factory)
 }
 
+func WithMetricsFactory(factory gateway.MetricsFactory) Option {
+	return gateway.WithMetricsFactory(factory)
+}
+
 func WithLogger(logger *slog.Logger) Option {
 	return gateway.WithLogger(logger)
 }

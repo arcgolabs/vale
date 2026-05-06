@@ -46,6 +46,7 @@ Current workspace modules:
 - `github.com/arcgolabs/vela`: library-first core module.
 - `github.com/arcgolabs/vela/cmd`: standalone `velad` binary wiring.
 - `github.com/arcgolabs/vela/cluster/raftnode`: optional HashiCorp Raft cluster adapter.
+- `github.com/arcgolabs/vela/observability/prometheus`: optional Prometheus metrics adapter.
 - `github.com/arcgolabs/vela/provider/docker`: optional Docker config provider.
 - `github.com/arcgolabs/vela/provider/file`: optional HCL snapshot provider.
 - `github.com/arcgolabs/vela/provider/fileconfig`: optional HCL config source provider.
@@ -195,6 +196,7 @@ Constructor options currently include:
 - `vela.WithClusterFactory(factory)` (optional control-plane cluster adapter)
 - `vela.WithLogger(logger)`
 - `vela.WithEventBus(bus)` (subscribe provider lifecycle events)
+- `vela.WithMetricsFactory(factory)` (optional metrics recorder adapter)
 - `vela.WithSnapshotProvider(provider)` (advanced/custom provider)
 - `vela.WithConfigSourceProviders(...)` (advanced merge pipeline input)
 - `docker.NewFromEnv(name, options)` for Docker daemon-backed source

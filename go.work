@@ -5,6 +5,7 @@ use (
 	./cluster/raftnode
 	./cmd
 	./examples/embedded_multi_provider
+	./observability/prometheus
 	./provider/docker
 	./provider/file
 	./provider/fileconfig

@@ -12,6 +12,7 @@ import (
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/logx"
 	"github.com/arcgolabs/vela"
+	prometheusmetrics "github.com/arcgolabs/vela/observability/prometheus"
 	"github.com/spf13/pflag"
 
 	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
@@ -36,6 +37,7 @@ func (c veladConfig) gatewayOptions(logger *slog.Logger) []vela.Option {
 	options := []vela.Option{
 		vela.WithWatch(c.Watch),
 		vela.WithLogger(logger),
+		prometheusmetrics.WithMetrics(),
 	}
 	if c.RaftEnabled {
 		options = append(options, raftnode.WithCluster(raftnode.Config{
