@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 	"strings"
-	"sync"
 
+	"github.com/arcgolabs/vela/provider"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
@@ -64,7 +64,6 @@ func (s *DockerSource) Watch(ctx context.Context, onReload func(), onError func(
 
 	eventsCh, errCh := s.client.Events(watchCtx, events.ListOptions{Filters: filter})
 	done := make(chan struct{})
-	var once sync.Once
 
 	go func() {
 		defer close(done)
@@ -89,14 +88,10 @@ func (s *DockerSource) Watch(ctx context.Context, onReload func(), onError func(
 		}
 	}()
 
-	return &watchCloser{
-		closeFn: func() {
-			once.Do(func() {
-				cancelWatch()
-				<-done
-			})
-		},
-	}, nil
+	return provider.NewOnceCloser(func() {
+		cancelWatch()
+		<-done
+	}), nil
 }
 
 func dockerAddressPort(item container.Summary) (string, int) {
@@ -122,18 +117,4 @@ func sanitizeContainerName(names []string) string {
 		return "container"
 	}
 	return name
-}
-
-type watchCloser struct {
-	once    sync.Once
-	closeFn func()
-}
-
-func (c *watchCloser) Close() error {
-	c.once.Do(func() {
-		if c.closeFn != nil {
-			c.closeFn()
-		}
-	})
-	return nil
 }
