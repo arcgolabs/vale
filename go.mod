@@ -10,6 +10,7 @@ require (
 	github.com/arcgolabs/collectionx/prefix v0.7.0
 	github.com/arcgolabs/collectionx/set v0.7.0
 	github.com/arcgolabs/eventx v0.1.2
+	github.com/samber/mo v1.16.0
 	github.com/vulcand/oxy/v2 v2.1.0
 )
 
@@ -20,7 +21,6 @@ require (
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/panjf2000/ants/v2 v2.12.0 // indirect
 	github.com/samber/lo v1.53.0 // indirect
-	github.com/samber/mo v1.16.0 // indirect
 	github.com/samber/oops v1.21.0 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect

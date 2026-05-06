@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
+	"github.com/samber/mo"
 )
 
 type Container struct {
@@ -92,8 +95,8 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 		Routes:   make([]config.Route, 0),
 	}
 
-	serviceMap := make(map[string]*config.Service)
-	routeMap := make(map[string]config.Route)
+	serviceMap := mapping.NewMap[string, *config.Service]()
+	routeMap := mapping.NewMap[string, config.Route]()
 
 	for _, container := range containers {
 		labels := container.Labels
@@ -113,22 +116,20 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 		scheme := valueOr(labels["vela.scheme"], "http")
 		weight := parseInt(labels["vela.weight"], 1)
 
-		service, exists := serviceMap[serviceName]
-		if !exists {
-			service = &config.Service{
+		service, _ := serviceMap.GetOrCompute(serviceName, func() *config.Service {
+			return &config.Service{
 				Name:      serviceName,
 				Strategy:  "round_robin",
-				Endpoints: make([]config.Endpoint, 0),
+				Endpoints: nil,
 			}
-			serviceMap[serviceName] = service
-		}
+		})
 		service.Endpoints = append(service.Endpoints, config.Endpoint{
 			URL:    fmt.Sprintf("%s://%s:%d", scheme, container.Address, container.Port),
 			Weight: weight,
 		})
 
-		if _, exists := routeMap[routeName]; !exists {
-			routeMap[routeName] = config.Route{
+		if _, exists := routeMap.Get(routeName); !exists {
+			routeMap.Set(routeName, config.Route{
 				Name:       routeName,
 				Entrypoint: entrypoint,
 				Service:    serviceName,
@@ -136,15 +137,17 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 				PathPrefix: pathPrefix,
 				Method:     method,
 				Headers:    map[string]string{},
-			}
+			})
 		}
 	}
 
-	for _, serviceName := range sortedKeys(serviceMap) {
-		cfg.Services = append(cfg.Services, *serviceMap[serviceName])
+	for _, serviceName := range sortedKeys(serviceMap.Keys()) {
+		service, _ := serviceMap.Get(serviceName)
+		cfg.Services = append(cfg.Services, *service)
 	}
-	for _, routeName := range sortedRouteKeys(routeMap) {
-		cfg.Routes = append(cfg.Routes, routeMap[routeName])
+	for _, routeName := range sortedKeys(routeMap.Keys()) {
+		route, _ := routeMap.Get(routeName)
+		cfg.Routes = append(cfg.Routes, route)
 	}
 
 	if err := config.Validate(cfg); err != nil {
@@ -163,14 +166,14 @@ func (p *Provider) Watch(ctx context.Context, onReload func(), onError func(erro
 type MemorySource struct {
 	mu         sync.RWMutex
 	containers []Container
-	listeners  map[int]func()
+	listeners  *mapping.Map[int, func()]
 	nextID     int
 }
 
 func NewMemorySource(containers ...Container) *MemorySource {
 	return &MemorySource{
 		containers: containers,
-		listeners:  make(map[int]func()),
+		listeners:  mapping.NewMap[int, func()](),
 	}
 }
 
@@ -187,12 +190,12 @@ func (s *MemorySource) Watch(_ context.Context, onReload func(), _ func(error)) 
 	defer s.mu.Unlock()
 	id := s.nextID
 	s.nextID++
-	s.listeners[id] = onReload
+	s.listeners.Set(id, onReload)
 	return &memoryWatchCloser{
 		closeFn: func() {
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			delete(s.listeners, id)
+			s.listeners.Delete(id)
 		},
 	}, nil
 }
@@ -200,10 +203,7 @@ func (s *MemorySource) Watch(_ context.Context, onReload func(), _ func(error)) 
 func (s *MemorySource) Update(containers ...Container) {
 	s.mu.Lock()
 	s.containers = containers
-	listeners := make([]func(), 0, len(s.listeners))
-	for _, listener := range s.listeners {
-		listeners = append(listeners, listener)
-	}
+	listeners := s.listeners.Values()
 	s.mu.Unlock()
 
 	for _, listener := range listeners {
@@ -239,10 +239,7 @@ func parseBool(value string, fallback bool) bool {
 		return fallback
 	}
 	parsed, err := strconv.ParseBool(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
+	return mo.TupleToOption(parsed, err == nil).OrElse(fallback)
 }
 
 func parseInt(value string, fallback int) int {
@@ -250,10 +247,7 @@ func parseInt(value string, fallback int) int {
 		return fallback
 	}
 	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
+	return mo.TupleToOption(parsed, err == nil).OrElse(fallback)
 }
 
 func sanitizeName(input string, fallback string) string {
@@ -265,20 +259,8 @@ func sanitizeName(input string, fallback string) string {
 	return replacer.Replace(input)
 }
 
-func sortedKeys(source map[string]*config.Service) []string {
-	keys := make([]string, 0, len(source))
-	for key := range source {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-func sortedRouteKeys(source map[string]config.Route) []string {
-	keys := make([]string, 0, len(source))
-	for key := range source {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
+func sortedKeys(keys []string) []string {
+	keys = collectionlist.NewList[string](keys...).Values()
+	slices.Sort(keys)
 	return keys
 }

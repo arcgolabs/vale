@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
 )
 
@@ -98,21 +100,19 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 		Routes:   make([]config.Route, 0),
 	}
 
-	serviceMap := make(map[string]*config.Service)
+	serviceMap := mapping.NewMap[string, *config.Service]()
 	for _, endpoint := range endpoints {
 		serviceName := strings.TrimSpace(endpoint.Service)
 		if serviceName == "" || endpoint.URL == "" {
 			continue
 		}
-		service, exists := serviceMap[serviceName]
-		if !exists {
-			service = &config.Service{
+		service, _ := serviceMap.GetOrCompute(serviceName, func() *config.Service {
+			return &config.Service{
 				Name:      serviceName,
 				Strategy:  "round_robin",
-				Endpoints: make([]config.Endpoint, 0),
+				Endpoints: nil,
 			}
-			serviceMap[serviceName] = service
-		}
+		})
 		weight := endpoint.Weight
 		if weight <= 0 {
 			weight = 1
@@ -143,11 +143,12 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 		})
 	}
 
-	for _, serviceName := range sortedServiceKeys(serviceMap) {
-		cfg.Services = append(cfg.Services, *serviceMap[serviceName])
+	for _, serviceName := range sortedKeys(serviceMap.Keys()) {
+		service, _ := serviceMap.Get(serviceName)
+		cfg.Services = append(cfg.Services, *service)
 	}
-	sort.SliceStable(cfg.Routes, func(i, j int) bool {
-		return cfg.Routes[i].Name < cfg.Routes[j].Name
+	slices.SortStableFunc(cfg.Routes, func(i, j config.Route) int {
+		return strings.Compare(i.Name, j.Name)
 	})
 
 	if err := config.Validate(cfg); err != nil {
@@ -167,7 +168,7 @@ type MemorySource struct {
 	mu        sync.RWMutex
 	routes    []HTTPRoute
 	endpoints []ServiceEndpoint
-	listeners map[int]func()
+	listeners *mapping.Map[int, func()]
 	nextID    int
 }
 
@@ -175,7 +176,7 @@ func NewMemorySource(routes []HTTPRoute, endpoints []ServiceEndpoint) *MemorySou
 	return &MemorySource{
 		routes:    routes,
 		endpoints: endpoints,
-		listeners: make(map[int]func()),
+		listeners: mapping.NewMap[int, func()](),
 	}
 }
 
@@ -200,12 +201,12 @@ func (s *MemorySource) Watch(_ context.Context, onReload func(), _ func(error)) 
 	defer s.mu.Unlock()
 	id := s.nextID
 	s.nextID++
-	s.listeners[id] = onReload
+	s.listeners.Set(id, onReload)
 	return &watchCloser{
 		closeFn: func() {
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			delete(s.listeners, id)
+			s.listeners.Delete(id)
 		},
 	}, nil
 }
@@ -214,10 +215,7 @@ func (s *MemorySource) Update(routes []HTTPRoute, endpoints []ServiceEndpoint) {
 	s.mu.Lock()
 	s.routes = routes
 	s.endpoints = endpoints
-	listeners := make([]func(), 0, len(s.listeners))
-	for _, listener := range s.listeners {
-		listeners = append(listeners, listener)
-	}
+	listeners := s.listeners.Values()
 	s.mu.Unlock()
 
 	for _, listener := range listeners {
@@ -241,11 +239,8 @@ func (c *watchCloser) Close() error {
 	return nil
 }
 
-func sortedServiceKeys(source map[string]*config.Service) []string {
-	keys := make([]string, 0, len(source))
-	for key := range source {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
+func sortedKeys(keys []string) []string {
+	keys = collectionlist.NewList[string](keys...).Values()
+	slices.Sort(keys)
 	return keys
 }

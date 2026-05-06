@@ -13,6 +13,7 @@ import (
 	"github.com/arcgolabs/logx"
 	"github.com/arcgolabs/vela"
 	prometheusmetrics "github.com/arcgolabs/vela/observability/prometheus"
+	"github.com/samber/lo"
 	"github.com/spf13/pflag"
 
 	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
@@ -125,16 +126,10 @@ func parseCSV(input string) []string {
 	if strings.TrimSpace(input) == "" {
 		return nil
 	}
-	parts := strings.Split(input, ",")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
+	return lo.FilterMap(strings.Split(input, ","), func(part string, _ int) (string, bool) {
 		trimmed := strings.TrimSpace(part)
-		if trimmed == "" {
-			continue
-		}
-		result = append(result, trimmed)
-	}
-	return result
+		return trimmed, trimmed != ""
+	})
 }
 
 func execute() error {

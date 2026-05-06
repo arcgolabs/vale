@@ -7,6 +7,7 @@ require (
 	github.com/arcgolabs/dix v0.7.2
 	github.com/arcgolabs/eventx v0.1.2
 	github.com/arcgolabs/logx v0.1.2
+	github.com/samber/lo v1.53.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 )
@@ -45,7 +46,6 @@ require (
 	github.com/rs/zerolog v1.35.1 // indirect
 	github.com/samber/do/v2 v2.0.0 // indirect
 	github.com/samber/go-type-to-string v1.8.0 // indirect
-	github.com/samber/lo v1.53.0 // indirect
 	github.com/samber/mo v1.16.0 // indirect
 	github.com/samber/oops v1.21.0 // indirect
 	github.com/samber/oops/loggers/zerolog v0.0.0-20260412154111-1460827f264f // indirect

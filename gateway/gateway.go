@@ -19,6 +19,7 @@ import (
 	mergedprovider "github.com/arcgolabs/vela/provider/merged"
 	staticconfigprovider "github.com/arcgolabs/vela/provider/staticconfig"
 	"github.com/arcgolabs/vela/runtime"
+	"github.com/samber/mo"
 )
 
 // Config holds construction-time settings for Gateway.
@@ -466,10 +467,7 @@ func parseDurationDefault(value string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	duration, err := time.ParseDuration(value)
-	if err != nil {
-		return fallback
-	}
-	return duration
+	return mo.TupleToOption(duration, err == nil).OrElse(fallback)
 }
 
 func (g *Gateway) publishClusterUpdate(snapshot *runtime.CompiledSnapshot) {
