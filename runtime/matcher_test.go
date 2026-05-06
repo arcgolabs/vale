@@ -115,7 +115,7 @@ func routeWithPredicates(route *CompiledRoute) *CompiledRoute {
 	if route.Method != "" {
 		route.Predicates.Set(PredicateMethod)
 	}
-	if len(route.Headers) > 0 {
+	if route.Headers.Len() > 0 {
 		route.Predicates.Set(PredicateHeaders)
 	}
 	return route

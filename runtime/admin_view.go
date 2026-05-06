@@ -19,14 +19,17 @@ type EndpointView struct {
 }
 
 type ServiceView struct {
-	Name      string         `json:"name"`
-	Strategy  string         `json:"strategy"`
-	Endpoints []EndpointView `json:"endpoints"`
+	Name      string                             `json:"name"`
+	Strategy  string                             `json:"strategy"`
+	Endpoints *collectionlist.List[EndpointView] `json:"endpoints"`
 }
 
-func (s *CompiledSnapshot) Routes() []RouteView {
+func (s *CompiledSnapshot) Routes() *collectionlist.List[RouteView] {
 	routeList := collectionlist.NewList[RouteView]()
-	for entrypoint, routes := range s.RoutesByEntrypoint {
+	if s == nil || s.RoutesByEntrypoint == nil {
+		return routeList
+	}
+	s.RoutesByEntrypoint.Range(func(entrypoint string, routes []*CompiledRoute) bool {
 		for _, route := range routes {
 			routeList.Add(RouteView{
 				Name:       route.Name,
@@ -37,28 +40,34 @@ func (s *CompiledSnapshot) Routes() []RouteView {
 				Service:    route.Service.Name,
 			})
 		}
-	}
-	return routeList.Values()
+		return true
+	})
+	return routeList
 }
 
-func (s *CompiledSnapshot) ServicesView() []ServiceView {
-	serviceList := collectionlist.NewListWithCapacity[ServiceView](len(s.Services))
-	for _, service := range s.Services {
-		endpointList := collectionlist.NewListWithCapacity[EndpointView](len(service.Endpoints))
-		for _, endpoint := range service.Endpoints {
+func (s *CompiledSnapshot) ServicesView() *collectionlist.List[ServiceView] {
+	if s == nil || s.Services == nil {
+		return collectionlist.NewList[ServiceView]()
+	}
+	serviceList := collectionlist.NewListWithCapacity[ServiceView](s.Services.Len())
+	s.Services.Range(func(_ string, service *ServiceRuntime) bool {
+		endpointList := collectionlist.NewListWithCapacity[EndpointView](service.Endpoints.Len())
+		service.Endpoints.Range(func(_ int, endpoint *EndpointRuntime) bool {
 			endpointList.Add(EndpointView{
 				URL:         endpoint.URL.String(),
 				Weight:      endpoint.Weight,
 				Healthy:     endpoint.Healthy.Load(),
 				LastChecked: endpoint.LastChecked.Load(),
 			})
-		}
+			return true
+		})
 		serviceView := ServiceView{
 			Name:      service.Name,
 			Strategy:  service.Strategy,
-			Endpoints: endpointList.Values(),
+			Endpoints: endpointList,
 		}
 		serviceList.Add(serviceView)
-	}
-	return serviceList.Values()
+		return true
+	})
+	return serviceList
 }

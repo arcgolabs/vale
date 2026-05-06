@@ -3,11 +3,14 @@ package runtime
 import (
 	"net/http"
 	"strings"
+
+	collectionlist "github.com/arcgolabs/collectionx/list"
 )
 
-func WrapMiddlewares(handler http.Handler, middlewares []MiddlewareRuntime) http.Handler {
-	for index := len(middlewares) - 1; index >= 0; index-- {
-		handler = wrapMiddleware(handler, middlewares[index])
+func WrapMiddlewares(handler http.Handler, middlewares *collectionlist.List[MiddlewareRuntime]) http.Handler {
+	for index := middlewares.Len() - 1; index >= 0; index-- {
+		middleware, _ := middlewares.Get(index)
+		handler = wrapMiddleware(handler, middleware)
 	}
 	return handler
 }
@@ -17,9 +20,10 @@ func wrapMiddleware(next http.Handler, middleware MiddlewareRuntime) http.Handle
 		if middleware.MaxBodyBytes > 0 {
 			r.Body = http.MaxBytesReader(w, r.Body, middleware.MaxBodyBytes)
 		}
-		for key, value := range middleware.RequestHeaders {
+		middleware.RequestHeaders.Range(func(key string, value string) bool {
 			r.Header.Set(key, value)
-		}
+			return true
+		})
 		if middleware.StripPrefix != "" && strings.HasPrefix(r.URL.Path, middleware.StripPrefix) {
 			r.URL.Path = strings.TrimPrefix(r.URL.Path, middleware.StripPrefix)
 			if r.URL.Path == "" {
@@ -29,9 +33,10 @@ func wrapMiddleware(next http.Handler, middleware MiddlewareRuntime) http.Handle
 		if middleware.AddPrefix != "" {
 			r.URL.Path = joinPathPrefix(middleware.AddPrefix, r.URL.Path)
 		}
-		for key, value := range middleware.ResponseHeaders {
+		middleware.ResponseHeaders.Range(func(key string, value string) bool {
 			w.Header().Set(key, value)
-		}
+			return true
+		})
 		next.ServeHTTP(w, r)
 	})
 }

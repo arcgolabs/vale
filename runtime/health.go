@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	collectionlist "github.com/arcgolabs/collectionx/list"
 )
 
 type HealthChecker struct {
@@ -58,27 +60,29 @@ func (h *HealthChecker) check(snapshot *CompiledSnapshot) {
 	if snapshot == nil {
 		return
 	}
-	for _, service := range snapshot.Services {
-		for _, endpoint := range service.Endpoints {
+	snapshot.Services.Range(func(_ string, service *ServiceRuntime) bool {
+		service.Endpoints.Range(func(_ int, endpoint *EndpointRuntime) bool {
 			ctx, cancel := context.WithTimeout(context.Background(), h.client.Timeout)
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.URL.String(), nil)
 			if err != nil {
 				h.setEndpointHealth(endpoint, false, "request_build_failed", err)
 				cancel()
-				continue
+				return true
 			}
 			resp, err := h.client.Do(req)
 			if err != nil {
 				h.setEndpointHealth(endpoint, false, "request_failed", err)
 				cancel()
-				continue
+				return true
 			}
 			_ = resp.Body.Close()
 			h.setEndpointHealth(endpoint, resp.StatusCode < http.StatusInternalServerError, "status_checked", nil)
 			endpoint.LastChecked.Store(time.Now().Unix())
 			cancel()
-		}
-	}
+			return true
+		})
+		return true
+	})
 }
 
 func (h *HealthChecker) setEndpointHealth(endpoint *EndpointRuntime, healthy bool, reason string, err error) {
@@ -86,13 +90,13 @@ func (h *HealthChecker) setEndpointHealth(endpoint *EndpointRuntime, healthy boo
 	if h.logger == nil || previous == healthy {
 		return
 	}
-	args := []any{
+	args := collectionlist.NewList[any](
 		"endpoint", endpoint.URL.String(),
 		"healthy", healthy,
 		"reason", reason,
-	}
+	)
 	if err != nil {
-		args = append(args, "error", err)
+		args.Add("error", err)
 	}
-	h.logger.Info("endpoint health changed", args...)
+	h.logger.Info("endpoint health changed", args.Values()...)
 }

@@ -78,7 +78,7 @@ func WithSnapshotProvider(snapshotProvider provider.SnapshotProvider) Option {
 			return fmt.Errorf("snapshot provider cannot be nil")
 		}
 		cfg.Provider = snapshotProvider
-		cfg.ConfigSource = nil
+		cfg.ConfigSource = collectionlist.NewList[provider.ConfigProvider]()
 		return nil
 	}
 }
@@ -94,7 +94,7 @@ func WithConfigSourceProviders(configProviders ...provider.ConfigProvider) Optio
 		if nonNil.IsEmpty() {
 			return fmt.Errorf("config source providers cannot be empty")
 		}
-		cfg.ConfigSource = nonNil.Values()
+		cfg.ConfigSource = nonNil
 		cfg.Provider = nil
 		return nil
 	}
@@ -108,7 +108,7 @@ func WithStaticConfig(cfgData *config.Config) Option {
 		if err := config.Validate(cfgData); err != nil {
 			return err
 		}
-		cfg.ConfigSource = []provider.ConfigProvider{staticconfigprovider.New(cfgData)}
+		cfg.ConfigSource = collectionlist.NewList[provider.ConfigProvider](staticconfigprovider.New(cfgData))
 		cfg.Provider = nil
 		cfg.Watch = false
 		return nil
@@ -127,7 +127,7 @@ func WithFallbackProviders(providers ...provider.SnapshotProvider) Option {
 			return fmt.Errorf("fallback providers cannot be empty")
 		}
 		cfg.Provider = provider.Fallback(nonNil.Values()...)
-		cfg.ConfigSource = nil
+		cfg.ConfigSource = collectionlist.NewList[provider.ConfigProvider]()
 		return nil
 	}
 }
@@ -138,7 +138,7 @@ func WithStaticSnapshot(snapshot *runtime.CompiledSnapshot) Option {
 			return fmt.Errorf("static snapshot cannot be nil")
 		}
 		cfg.Provider = staticprovider.New(snapshot)
-		cfg.ConfigSource = nil
+		cfg.ConfigSource = collectionlist.NewList[provider.ConfigProvider]()
 		cfg.Watch = false
 		return nil
 	}

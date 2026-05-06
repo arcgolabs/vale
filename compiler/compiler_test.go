@@ -54,16 +54,17 @@ func TestCompileTLSMiddlewareAndSecurity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entrypoint := snapshot.EntrypointConfigs["websecure"]
+	entrypoint, _ := snapshot.EntrypointConfigs.Get("websecure")
 	if !entrypoint.TLS.Enabled || entrypoint.TLS.CertFile != "cert.pem" || !entrypoint.TLS.ACME.Enabled {
 		t.Fatalf("unexpected tls runtime: %#v", entrypoint.TLS)
 	}
-	routes := snapshot.RoutesByEntrypoint["websecure"]
-	if len(routes) != 1 || len(routes[0].Middlewares) != 1 {
+	routes := snapshot.RoutesByEntrypoint.Get("websecure")
+	if len(routes) != 1 || routes[0].Middlewares.Len() != 1 {
 		t.Fatalf("compiled middlewares = %#v", routes)
 	}
-	if routes[0].Middlewares[0].StripPrefix != "/api" {
-		t.Fatalf("middleware = %#v", routes[0].Middlewares[0])
+	middleware, _ := routes[0].Middlewares.Get(0)
+	if middleware.StripPrefix != "/api" {
+		t.Fatalf("middleware = %#v", middleware)
 	}
 	if snapshot.Security.ReadHeaderTimeout != "3s" || snapshot.Security.MaxHeaderBytes != 2048 || snapshot.Security.MaxBodyBytes != 4096 {
 		t.Fatalf("security = %#v", snapshot.Security)

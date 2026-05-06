@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/arcgolabs/collectionx/bitset"
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/proxy"
@@ -39,7 +40,7 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 		rtService := &runtime.ServiceRuntime{
 			Name:      service.Name,
 			Strategy:  strategy,
-			Endpoints: make([]*runtime.EndpointRuntime, 0, len(service.Endpoints)),
+			Endpoints: collectionlist.NewListWithCapacity[*runtime.EndpointRuntime](len(service.Endpoints)),
 		}
 		for _, endpoint := range service.Endpoints {
 			parsedURL, err := url.Parse(endpoint.URL)
@@ -58,13 +59,12 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 				Proxy:  proxy.Build(parsedURL),
 			}
 			rtEndpoint.Healthy.Store(true)
-			rtService.Endpoints = append(rtService.Endpoints, rtEndpoint)
+			rtService.Endpoints.Add(rtEndpoint)
 		}
 
 		rtService.BuildSlots()
 		serviceMap.Set(rtService.Name, rtService)
 	}
-	services := serviceMap.All()
 
 	entrypointMap := mapping.NewMapWithCapacity[string, string](len(cfg.Entrypoints))
 	entrypointConfigMap := mapping.NewMapWithCapacity[string, runtime.EntrypointRuntime](len(cfg.Entrypoints))
@@ -72,12 +72,10 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 		entrypointMap.Set(entrypoint.Name, entrypoint.Address)
 		entrypointConfigMap.Set(entrypoint.Name, compileEntrypoint(entrypoint))
 	}
-	entrypoints := entrypointMap.All()
-	entrypointConfigs := entrypointConfigMap.All()
 
 	routesByEntrypoint := mapping.NewMultiMap[string, *runtime.CompiledRoute]()
 	for _, route := range cfg.Routes {
-		service := services[route.Service]
+		service, _ := serviceMap.Get(route.Service)
 		headerMap := normalizeHeaders(route.Headers)
 		routesByEntrypoint.Put(route.Entrypoint, &runtime.CompiledRoute{
 			Name:        route.Name,
@@ -91,19 +89,18 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 			Middlewares: compileRouteMiddlewares(route.Middlewares, middlewareMap),
 		})
 	}
-	routes := routesByEntrypoint.All()
-	matcherMap := mapping.NewMapWithCapacity[string, *runtime.EntrypointMatcher](len(routes))
-	for entrypoint, entrypointRoutes := range routes {
+	matcherMap := mapping.NewMapWithCapacity[string, *runtime.EntrypointMatcher](routesByEntrypoint.Len())
+	routesByEntrypoint.Range(func(entrypoint string, entrypointRoutes []*runtime.CompiledRoute) bool {
 		matcherMap.Set(entrypoint, runtime.BuildEntrypointMatcher(entrypointRoutes))
-	}
-	matchers := matcherMap.All()
+		return true
+	})
 
 	return &runtime.CompiledSnapshot{
-		Entrypoints:        entrypoints,
-		EntrypointConfigs:  entrypointConfigs,
-		RoutesByEntrypoint: routes,
-		EntrypointMatchers: matchers,
-		Services:           services,
+		Entrypoints:        entrypointMap,
+		EntrypointConfigs:  entrypointConfigMap,
+		RoutesByEntrypoint: routesByEntrypoint,
+		EntrypointMatchers: matcherMap,
+		Services:           serviceMap,
 		AdminAddress:       pickAdminAddress(cfg),
 		AccessLogEnabled:   pickAccessLogEnabled(cfg),
 		MetricsEnabled:     pickMetricsEnabled(cfg),
@@ -115,23 +112,23 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 	}, nil
 }
 
-func normalizeHeaders(headers map[string]string) map[string]string {
+func normalizeHeaders(headers map[string]string) *mapping.Map[string, string] {
 	headerMap := mapping.NewMapWithCapacity[string, string](len(headers))
 	for key, value := range headers {
 		headerMap.Set(strings.ToLower(strings.TrimSpace(key)), strings.TrimSpace(value))
 	}
-	return headerMap.All()
+	return headerMap
 }
 
-func compileRouteMiddlewares(names []string, middlewares *mapping.Map[string, runtime.MiddlewareRuntime]) []runtime.MiddlewareRuntime {
+func compileRouteMiddlewares(names []string, middlewares *mapping.Map[string, runtime.MiddlewareRuntime]) *collectionlist.List[runtime.MiddlewareRuntime] {
+	compiled := collectionlist.NewListWithCapacity[runtime.MiddlewareRuntime](len(names))
 	if len(names) == 0 || middlewares == nil {
-		return nil
+		return compiled
 	}
-	compiled := make([]runtime.MiddlewareRuntime, 0, len(names))
 	for _, name := range names {
 		middleware, ok := middlewares.Get(name)
 		if ok {
-			compiled = append(compiled, middleware)
+			compiled.Add(middleware)
 		}
 	}
 	return compiled
@@ -158,7 +155,7 @@ func compileTLS(entrypoint config.Entrypoint) runtime.TLSRuntime {
 			Enabled:  entrypoint.ACME.Enabled,
 			Email:    strings.TrimSpace(entrypoint.ACME.Email),
 			CacheDir: strings.TrimSpace(entrypoint.ACME.CacheDir),
-			Domains:  entrypoint.ACME.Domains,
+			Domains:  collectionlist.NewList(entrypoint.ACME.Domains...),
 		}
 	}
 	return tlsRuntime

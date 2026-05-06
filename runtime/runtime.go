@@ -12,15 +12,17 @@ import (
 	"time"
 
 	"github.com/arcgolabs/collectionx/bitset"
+	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/observabilityx"
 )
 
 type CompiledSnapshot struct {
-	Entrypoints        map[string]string
-	EntrypointConfigs  map[string]EntrypointRuntime
-	RoutesByEntrypoint map[string][]*CompiledRoute
-	EntrypointMatchers map[string]*EntrypointMatcher
-	Services           map[string]*ServiceRuntime
+	Entrypoints        *mapping.Map[string, string]
+	EntrypointConfigs  *mapping.Map[string, EntrypointRuntime]
+	RoutesByEntrypoint *mapping.MultiMap[string, *CompiledRoute]
+	EntrypointMatchers *mapping.Map[string, *EntrypointMatcher]
+	Services           *mapping.Map[string, *ServiceRuntime]
 	AdminAddress       string
 	AccessLogEnabled   bool
 	MetricsEnabled     bool
@@ -37,10 +39,10 @@ type CompiledRoute struct {
 	Host        string
 	PathPrefix  string
 	Method      string
-	Headers     map[string]string
+	Headers     *mapping.Map[string, string]
 	Service     *ServiceRuntime
 	Predicates  *bitset.BitSet
-	Middlewares []MiddlewareRuntime
+	Middlewares *collectionlist.List[MiddlewareRuntime]
 }
 
 type EntrypointRuntime struct {
@@ -60,7 +62,7 @@ type ACMERuntime struct {
 	Enabled  bool
 	Email    string
 	CacheDir string
-	Domains  []string
+	Domains  *collectionlist.List[string]
 }
 
 type SecurityRuntime struct {
@@ -76,33 +78,37 @@ type MiddlewareRuntime struct {
 	Name            string
 	StripPrefix     string
 	AddPrefix       string
-	RequestHeaders  map[string]string
-	ResponseHeaders map[string]string
+	RequestHeaders  *mapping.Map[string, string]
+	ResponseHeaders *mapping.Map[string, string]
 	MaxBodyBytes    int64
 }
 
 type ServiceRuntime struct {
 	Name          string
 	Strategy      string
-	Endpoints     []*EndpointRuntime
-	weightedSlots []int
+	Endpoints     *collectionlist.List[*EndpointRuntime]
+	weightedSlots *collectionlist.List[int]
 	rrCounter     atomic.Uint64
 }
 
 func (s *ServiceRuntime) BuildSlots() {
-	s.weightedSlots = s.weightedSlots[:0]
+	s.weightedSlots = collectionlist.NewList[int]()
 	if s.Strategy != "weighted_round_robin" {
 		return
 	}
-	for idx, endpoint := range s.Endpoints {
+	if s.Endpoints == nil {
+		return
+	}
+	s.Endpoints.Range(func(idx int, endpoint *EndpointRuntime) bool {
 		weight := endpoint.Weight
 		if weight <= 0 {
 			weight = 1
 		}
 		for i := 0; i < weight; i++ {
-			s.weightedSlots = append(s.weightedSlots, idx)
+			s.weightedSlots.Add(idx)
 		}
-	}
+		return true
+	})
 }
 
 type EndpointRuntime struct {
@@ -114,22 +120,24 @@ type EndpointRuntime struct {
 }
 
 func (s *ServiceRuntime) Pick() (*EndpointRuntime, error) {
-	if len(s.Endpoints) == 0 {
+	endpointCount := s.Endpoints.Len()
+	if endpointCount == 0 {
 		return nil, errors.New("service has no endpoints")
 	}
-	if s.Strategy == "weighted_round_robin" && len(s.weightedSlots) > 0 {
+	if s.Strategy == "weighted_round_robin" && !s.weightedSlots.IsEmpty() {
 		start := s.rrCounter.Add(1)
-		for offset := range len(s.weightedSlots) {
-			slot := s.weightedSlots[(int(start)+offset)%len(s.weightedSlots)]
-			ep := s.Endpoints[slot]
+		slotCount := s.weightedSlots.Len()
+		for offset := range slotCount {
+			slot, _ := s.weightedSlots.Get((int(start) + offset) % slotCount)
+			ep, _ := s.Endpoints.Get(slot)
 			if ep.Healthy.Load() {
 				return ep, nil
 			}
 		}
 	} else {
 		start := s.rrCounter.Add(1)
-		for offset := range len(s.Endpoints) {
-			ep := s.Endpoints[(int(start)+offset)%len(s.Endpoints)]
+		for offset := range endpointCount {
+			ep, _ := s.Endpoints.Get((int(start) + offset) % endpointCount)
 			if ep.Healthy.Load() {
 				return ep, nil
 			}
@@ -177,7 +185,9 @@ func (g *Gateway) Handler(entrypoint string) http.Handler {
 			return
 		}
 
-		route := MatchRoute(snapshot.EntrypointMatchers[entrypoint], snapshot.RoutesByEntrypoint[entrypoint], r)
+		matcher, _ := snapshot.EntrypointMatchers.Get(entrypoint)
+		routes := snapshot.RoutesByEntrypoint.Get(entrypoint)
+		route := MatchRoute(matcher, routes, r)
 		if route == nil {
 			http.NotFound(w, r)
 			return
@@ -214,17 +224,24 @@ func (g *Gateway) Handler(entrypoint string) http.Handler {
 	})
 }
 
-func matchHeaders(expected map[string]string, actual http.Header) bool {
-	for key, expectedValue := range expected {
+func matchHeaders(expected *mapping.Map[string, string], actual http.Header) bool {
+	if expected == nil {
+		return true
+	}
+	matched := true
+	expected.Range(func(key string, expectedValue string) bool {
 		values := actual.Values(key)
 		if len(values) == 0 {
+			matched = false
 			return false
 		}
 		if !slices.Contains(values, expectedValue) {
+			matched = false
 			return false
 		}
-	}
-	return true
+		return true
+	})
+	return matched
 }
 
 type statusRecorder struct {

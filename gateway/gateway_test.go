@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/runtime"
 )
 
@@ -20,7 +21,7 @@ func TestStartReturnsEntrypointListenError(t *testing.T) {
 
 	g, err := New(
 		WithStaticSnapshot(&runtime.CompiledSnapshot{
-			Entrypoints:  map[string]string{"web": occupied.Addr().String()},
+			Entrypoints:  mapping.NewMapFrom(map[string]string{"web": occupied.Addr().String()}),
 			AdminAddress: "127.0.0.1:0",
 		}),
 		WithWatch(false),
@@ -47,7 +48,7 @@ func TestStartReturnsAdminListenError(t *testing.T) {
 
 	g, err := New(
 		WithStaticSnapshot(&runtime.CompiledSnapshot{
-			Entrypoints:  map[string]string{"web": "127.0.0.1:0"},
+			Entrypoints:  mapping.NewMapFrom(map[string]string{"web": "127.0.0.1:0"}),
 			AdminAddress: occupied.Addr().String(),
 		}),
 		WithWatch(false),
@@ -70,20 +71,22 @@ func TestStaticRuntimeChanges(t *testing.T) {
 	t.Parallel()
 
 	current := &runtime.CompiledSnapshot{
-		Entrypoints:      map[string]string{"web": "127.0.0.1:8080"},
-		AdminAddress:     "127.0.0.1:19090",
-		AccessLogEnabled: true,
-		MetricsEnabled:   true,
-		HealthInterval:   "5s",
-		HealthTimeout:    "2s",
+		Entrypoints:       mapping.NewMapFrom(map[string]string{"web": "127.0.0.1:8080"}),
+		EntrypointConfigs: mapping.NewMap[string, runtime.EntrypointRuntime](),
+		AdminAddress:      "127.0.0.1:19090",
+		AccessLogEnabled:  true,
+		MetricsEnabled:    true,
+		HealthInterval:    "5s",
+		HealthTimeout:     "2s",
 	}
 	next := &runtime.CompiledSnapshot{
-		Entrypoints:      map[string]string{"web": "127.0.0.1:8081"},
-		AdminAddress:     "127.0.0.1:19091",
-		AccessLogEnabled: false,
-		MetricsEnabled:   false,
-		HealthInterval:   "10s",
-		HealthTimeout:    "3s",
+		Entrypoints:       mapping.NewMapFrom(map[string]string{"web": "127.0.0.1:8081"}),
+		EntrypointConfigs: mapping.NewMap[string, runtime.EntrypointRuntime](),
+		AdminAddress:      "127.0.0.1:19091",
+		AccessLogEnabled:  false,
+		MetricsEnabled:    false,
+		HealthInterval:    "10s",
+		HealthTimeout:     "3s",
 	}
 
 	got := staticRuntimeChanges(current, next)
@@ -95,7 +98,7 @@ func TestStaticRuntimeChanges(t *testing.T) {
 		"health_timeout",
 		"metrics_enabled",
 	}
-	if !slices.Equal(got, want) {
+	if !slices.Equal(got.Values(), want) {
 		t.Fatalf("changes = %v, want %v", got, want)
 	}
 }
@@ -104,26 +107,28 @@ func TestStaticRuntimeChangesIgnoresDynamicSnapshotFields(t *testing.T) {
 	t.Parallel()
 
 	current := &runtime.CompiledSnapshot{
-		Entrypoints:      map[string]string{"web": "127.0.0.1:8080"},
-		AdminAddress:     "127.0.0.1:19090",
-		AccessLogEnabled: true,
-		MetricsEnabled:   true,
-		HealthInterval:   "5s",
-		HealthTimeout:    "2s",
-		ProxyEngine:      "",
+		Entrypoints:       mapping.NewMapFrom(map[string]string{"web": "127.0.0.1:8080"}),
+		EntrypointConfigs: mapping.NewMap[string, runtime.EntrypointRuntime](),
+		AdminAddress:      "127.0.0.1:19090",
+		AccessLogEnabled:  true,
+		MetricsEnabled:    true,
+		HealthInterval:    "5s",
+		HealthTimeout:     "2s",
+		ProxyEngine:       "",
 	}
 	next := &runtime.CompiledSnapshot{
-		Entrypoints:      map[string]string{"web": "127.0.0.1:8080"},
-		AdminAddress:     "127.0.0.1:19090",
-		AccessLogEnabled: true,
-		MetricsEnabled:   true,
-		HealthInterval:   "5s",
-		HealthTimeout:    "2s",
-		ProxyEngine:      "oxy",
+		Entrypoints:       mapping.NewMapFrom(map[string]string{"web": "127.0.0.1:8080"}),
+		EntrypointConfigs: mapping.NewMap[string, runtime.EntrypointRuntime](),
+		AdminAddress:      "127.0.0.1:19090",
+		AccessLogEnabled:  true,
+		MetricsEnabled:    true,
+		HealthInterval:    "5s",
+		HealthTimeout:     "2s",
+		ProxyEngine:       "oxy",
 	}
 
 	got := staticRuntimeChanges(current, next)
-	if len(got) != 0 {
+	if !got.IsEmpty() {
 		t.Fatalf("changes = %v, want none", got)
 	}
 }

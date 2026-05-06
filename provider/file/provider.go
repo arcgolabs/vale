@@ -48,9 +48,9 @@ func (p *Provider) Load(_ context.Context) (*runtime.CompiledSnapshot, error) {
 		p.logger.Info("snapshot loaded",
 			"path", p.configPath,
 			"built_at", snapshot.BuiltAt,
-			"entrypoints", len(snapshot.Entrypoints),
-			"services", len(snapshot.Services),
-			"routes", len(snapshot.Routes()),
+			"entrypoints", snapshot.Entrypoints.Len(),
+			"services", snapshot.Services.Len(),
+			"routes", snapshot.Routes().Len(),
 		)
 	}
 	return snapshot, nil

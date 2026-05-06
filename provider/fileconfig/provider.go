@@ -138,7 +138,7 @@ func WithConfigPath(path string) gateway.Option {
 		if path == "" {
 			return fmt.Errorf("config path cannot be empty")
 		}
-		cfg.ConfigSource = []provider.ConfigProvider{New(path)}
+		cfg.ConfigSource = collectionlist.NewList[provider.ConfigProvider](New(path))
 		cfg.Provider = nil
 		return nil
 	}
@@ -160,7 +160,7 @@ func WithConfigFiles(paths ...string) gateway.Option {
 			func(_ int, path string) provider.ConfigProvider {
 				return New(path)
 			},
-		).Values()
+		)
 		cfg.ConfigSource = providers
 		cfg.Provider = nil
 		return nil

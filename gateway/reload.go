@@ -1,43 +1,43 @@
 package gateway
 
 import (
-	"maps"
 	"reflect"
-	"slices"
+	"strings"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/vela/runtime"
 )
 
-func staticRuntimeChanges(current *runtime.CompiledSnapshot, next *runtime.CompiledSnapshot) []string {
+func staticRuntimeChanges(current *runtime.CompiledSnapshot, next *runtime.CompiledSnapshot) *collectionlist.List[string] {
 	if current == nil || next == nil {
 		return nil
 	}
 
-	changes := make([]string, 0, 6)
-	if !maps.Equal(current.Entrypoints, next.Entrypoints) {
-		changes = append(changes, "entrypoints")
+	changes := collectionlist.NewListWithCapacity[string](8)
+	if !reflect.DeepEqual(current.Entrypoints.All(), next.Entrypoints.All()) {
+		changes.Add("entrypoints")
 	}
-	if !reflect.DeepEqual(current.EntrypointConfigs, next.EntrypointConfigs) {
-		changes = append(changes, "entrypoint_configs")
+	if !reflect.DeepEqual(current.EntrypointConfigs.All(), next.EntrypointConfigs.All()) {
+		changes.Add("entrypoint_configs")
 	}
 	if current.AdminAddress != next.AdminAddress {
-		changes = append(changes, "admin_address")
+		changes.Add("admin_address")
 	}
 	if current.AccessLogEnabled != next.AccessLogEnabled {
-		changes = append(changes, "access_log_enabled")
+		changes.Add("access_log_enabled")
 	}
 	if current.MetricsEnabled != next.MetricsEnabled {
-		changes = append(changes, "metrics_enabled")
+		changes.Add("metrics_enabled")
 	}
 	if current.HealthInterval != next.HealthInterval {
-		changes = append(changes, "health_interval")
+		changes.Add("health_interval")
 	}
 	if current.HealthTimeout != next.HealthTimeout {
-		changes = append(changes, "health_timeout")
+		changes.Add("health_timeout")
 	}
 	if current.Security != next.Security {
-		changes = append(changes, "security")
+		changes.Add("security")
 	}
-	slices.Sort(changes)
+	changes.Sort(strings.Compare)
 	return changes
 }

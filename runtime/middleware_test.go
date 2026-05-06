@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/collectionx/mapping"
 )
 
 func TestWrapMiddlewares(t *testing.T) {
@@ -15,18 +18,18 @@ func TestWrapMiddlewares(t *testing.T) {
 		gotPath = r.URL.Path
 		gotHeader = r.Header.Get("X-Test")
 		w.WriteHeader(http.StatusNoContent)
-	}), []MiddlewareRuntime{
-		{
+	}), collectionlist.NewList[MiddlewareRuntime](
+		MiddlewareRuntime{
 			StripPrefix: "/api",
 			AddPrefix:   "/v1",
-			RequestHeaders: map[string]string{
+			RequestHeaders: mapping.NewMapFrom(map[string]string{
 				"X-Test": "ok",
-			},
-			ResponseHeaders: map[string]string{
+			}),
+			ResponseHeaders: mapping.NewMapFrom(map[string]string{
 				"X-Response": "set",
-			},
+			}),
 		},
-	})
+	))
 
 	req := httptest.NewRequest(http.MethodGet, "http://example.com/api/users", nil)
 	rec := httptest.NewRecorder()

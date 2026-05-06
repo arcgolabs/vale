@@ -33,7 +33,7 @@ type Config struct {
 	EventBus      provider.EventBus
 	Observability observabilityx.Observability
 	Provider      provider.SnapshotProvider
-	ConfigSource  []provider.ConfigProvider
+	ConfigSource  *collectionlist.List[provider.ConfigProvider]
 	Metrics       MetricsFactory
 	OnWatchError  func(error)
 }
@@ -41,7 +41,8 @@ type Config struct {
 // DefaultConfig returns defaults used by New/NewFromConfig when paths or watch are unspecified.
 func DefaultConfig() Config {
 	return Config{
-		Watch: false,
+		Watch:        false,
+		ConfigSource: collectionlist.NewList[provider.ConfigProvider](),
 	}
 }
 
@@ -62,7 +63,7 @@ type Gateway struct {
 	runtime *runtime.Gateway
 	health  *runtime.HealthChecker
 	watcher io.Closer
-	servers []*http.Server
+	servers *collectionlist.List[*http.Server]
 }
 
 // New applies options onto DefaultConfig then NewFromConfig.
@@ -106,7 +107,7 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 		ownsBus = true
 	}
 
-	if cfg.Provider != nil && len(cfg.ConfigSource) > 0 {
+	if cfg.Provider != nil && !cfg.ConfigSource.IsEmpty() {
 		return nil, errors.New("cannot set both snapshot provider and config source providers")
 	}
 	if cfg.Provider != nil {
@@ -115,20 +116,22 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 
 	if cfg.Provider == nil {
 		configProviders := cfg.ConfigSource
-		if len(configProviders) == 0 {
-			configProviders = []provider.ConfigProvider{staticconfigprovider.New(config.Default())}
+		if configProviders.IsEmpty() {
+			configProviders = collectionlist.NewList[provider.ConfigProvider](staticconfigprovider.New(config.Default()))
 			cfg.Watch = false
 		}
-		for _, configProvider := range configProviders {
+		configProviders.Range(func(_ int, configProvider provider.ConfigProvider) bool {
 			provider.ApplyLogger(configProvider, cfg.Logger)
-		}
-		sourceList := collectionlist.NewListWithCapacity[mergedprovider.Source](len(configProviders))
-		for index, configProvider := range configProviders {
+			return true
+		})
+		sourceList := collectionlist.NewListWithCapacity[mergedprovider.Source](configProviders.Len())
+		configProviders.Range(func(index int, configProvider provider.ConfigProvider) bool {
 			sourceList.Add(mergedprovider.Source{
 				Name:     provider.ConfigProviderName(configProvider, fmt.Sprintf("source-%d", index)),
 				Provider: configProvider,
 			})
-		}
+			return true
+		})
 		sources := sourceList.Values()
 		cfg.Provider = mergedprovider.NewWithLogger(cfg.EventBus, cfg.Logger, sources...)
 	}
@@ -179,9 +182,9 @@ func (g *Gateway) Start(ctx context.Context) error {
 	}
 	g.logger.Info("initial snapshot loaded",
 		"built_at", snapshot.BuiltAt,
-		"entrypoints", len(snapshot.Entrypoints),
-		"services", len(snapshot.Services),
-		"routes", len(snapshot.Routes()),
+		"entrypoints", snapshot.Entrypoints.Len(),
+		"services", snapshot.Services.Len(),
+		"routes", snapshot.Routes().Len(),
 		"admin_addr", snapshot.AdminAddress,
 		"proxy_engine", snapshot.ProxyEngine,
 	)
@@ -189,15 +192,17 @@ func (g *Gateway) Start(ctx context.Context) error {
 	g.runtime = runtime.NewGateway(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled))
 	g.publishClusterUpdate(snapshot)
 
-	servers := make([]*http.Server, 0, len(snapshot.Entrypoints)+1)
-	listeners := make([]net.Listener, 0, len(snapshot.Entrypoints)+1)
-	entrypointNames := make([]string, 0, len(snapshot.Entrypoints))
-	for entrypoint, address := range snapshot.Entrypoints {
-		entrypointConfig := snapshot.EntrypointConfigs[entrypoint]
+	servers := collectionlist.NewListWithCapacity[*http.Server](snapshot.Entrypoints.Len() + 1)
+	listeners := collectionlist.NewListWithCapacity[net.Listener](snapshot.Entrypoints.Len() + 1)
+	entrypointNames := collectionlist.NewListWithCapacity[string](snapshot.Entrypoints.Len())
+	var startErr error
+	snapshot.Entrypoints.Range(func(entrypoint string, address string) bool {
+		entrypointConfig, _ := snapshot.EntrypointConfigs.Get(entrypoint)
 		server := g.buildHTTPServer(address, g.runtime.Handler(entrypoint), snapshot.Security)
 		if tlsConfig, tlsErr := g.buildTLSConfig(entrypointConfig.TLS); tlsErr != nil {
 			g.cleanupStartFailure(listeners)
-			return fmt.Errorf("build tls config for entrypoint %q: %w", entrypoint, tlsErr)
+			startErr = fmt.Errorf("build tls config for entrypoint %q: %w", entrypoint, tlsErr)
+			return false
 		} else {
 			server.TLSConfig = tlsConfig
 		}
@@ -205,14 +210,19 @@ func (g *Gateway) Start(ctx context.Context) error {
 		if listenErr != nil {
 			g.cleanupStartFailure(listeners)
 			g.logger.Error("entrypoint listen failed", "entrypoint", entrypoint, "addr", address, "error", listenErr)
-			return fmt.Errorf("listen entrypoint %q on %s: %w", entrypoint, address, listenErr)
+			startErr = fmt.Errorf("listen entrypoint %q on %s: %w", entrypoint, address, listenErr)
+			return false
 		}
 		if server.TLSConfig != nil {
 			listener = tls.NewListener(listener, server.TLSConfig)
 		}
-		servers = append(servers, server)
-		listeners = append(listeners, listener)
-		entrypointNames = append(entrypointNames, entrypoint)
+		servers.Add(server)
+		listeners.Add(listener)
+		entrypointNames.Add(entrypoint)
+		return true
+	})
+	if startErr != nil {
+		return startErr
 	}
 
 	adminServer := g.buildHTTPServer(snapshot.AdminAddress, g.buildAdminMux(), snapshot.Security)
@@ -222,8 +232,8 @@ func (g *Gateway) Start(ctx context.Context) error {
 		g.logger.Error("admin listen failed", "addr", snapshot.AdminAddress, "error", listenErr)
 		return fmt.Errorf("listen admin on %s: %w", snapshot.AdminAddress, listenErr)
 	}
-	servers = append(servers, adminServer)
-	listeners = append(listeners, adminListener)
+	servers.Add(adminServer)
+	listeners.Add(adminListener)
 
 	if g.config.Watch {
 		watcher, watchErr := g.provider.Watch(context.Background(), func(snapshot *runtime.CompiledSnapshot) {
@@ -247,13 +257,17 @@ func (g *Gateway) Start(ctx context.Context) error {
 	g.logger.Info("health checker started", "interval", interval, "timeout", timeout)
 
 	g.servers = servers
-	for i, entrypoint := range entrypointNames {
-		go g.listenEntrypoint(entrypoint, servers[i], listeners[i])
-	}
-	go g.listenAdmin(adminServer, listeners[len(listeners)-1])
+	entrypointNames.Range(func(i int, entrypoint string) bool {
+		server, _ := servers.Get(i)
+		listener, _ := listeners.Get(i)
+		go g.listenEntrypoint(entrypoint, server, listener)
+		return true
+	})
+	adminListener, _ = listeners.Get(listeners.Len() - 1)
+	go g.listenAdmin(adminServer, adminListener)
 
 	g.started = true
-	g.logger.Info("gateway started", "entrypoints", len(snapshot.Entrypoints), "admin_addr", snapshot.AdminAddress)
+	g.logger.Info("gateway started", "entrypoints", snapshot.Entrypoints.Len(), "admin_addr", snapshot.AdminAddress)
 	return nil
 }
 
@@ -277,10 +291,11 @@ func (g *Gateway) Stop(ctx context.Context) error {
 		g.health = nil
 		g.logger.Info("health checker stopped")
 	}
-	for _, server := range g.servers {
+	g.servers.Range(func(_ int, server *http.Server) bool {
 		_ = server.Shutdown(ctx)
 		g.logger.Info("server stopped", "addr", server.Addr)
-	}
+		return true
+	})
 
 	g.servers = nil
 	g.runtime = nil
@@ -313,9 +328,9 @@ func (g *Gateway) Status() map[string]any {
 	if g.runtime != nil && g.runtime.Snapshot() != nil {
 		snapshot := g.runtime.Snapshot()
 		status["built_at"] = snapshot.BuiltAt
-		status["entrypoints"] = len(snapshot.Entrypoints)
-		status["services"] = len(snapshot.Services)
-		status["routes"] = len(snapshot.Routes())
+		status["entrypoints"] = snapshot.Entrypoints.Len()
+		status["services"] = snapshot.Services.Len()
+		status["routes"] = snapshot.Routes().Len()
 	}
 	if g.cluster != nil {
 		status["cluster"] = g.cluster.Status()
@@ -369,7 +384,7 @@ func (g *Gateway) buildTLSConfig(config runtime.TLSRuntime) (*tls.Config, error)
 		manager := &autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
 			Email:      config.ACME.Email,
-			HostPolicy: autocert.HostWhitelist(config.ACME.Domains...),
+			HostPolicy: autocert.HostWhitelist(config.ACME.Domains.Values()...),
 		}
 		if config.ACME.CacheDir != "" {
 			manager.Cache = autocert.DirCache(config.ACME.CacheDir)
@@ -383,12 +398,13 @@ func (g *Gateway) buildTLSConfig(config runtime.TLSRuntime) (*tls.Config, error)
 	return tlsConfig, nil
 }
 
-func (g *Gateway) cleanupStartFailure(listeners []net.Listener) {
-	for _, listener := range listeners {
+func (g *Gateway) cleanupStartFailure(listeners *collectionlist.List[net.Listener]) {
+	listeners.Range(func(_ int, listener net.Listener) bool {
 		if listener != nil {
 			_ = listener.Close()
 		}
-	}
+		return true
+	})
 	if g.watcher != nil {
 		_ = g.watcher.Close()
 		g.watcher = nil
@@ -412,7 +428,7 @@ func (g *Gateway) applyReloadSnapshot(snapshot *runtime.CompiledSnapshot) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	current := g.runtime.Snapshot()
-	if changed := staticRuntimeChanges(current, snapshot); len(changed) > 0 {
+	if changed := staticRuntimeChanges(current, snapshot); !changed.IsEmpty() {
 		g.logger.Info("snapshot contains static runtime changes; restarting servers",
 			"fields", changed,
 		)
@@ -431,9 +447,9 @@ func (g *Gateway) applyReloadSnapshot(snapshot *runtime.CompiledSnapshot) {
 	g.publishClusterUpdate(snapshot)
 	g.logger.Info("runtime snapshot swapped",
 		"built_at", snapshot.BuiltAt,
-		"entrypoints", len(snapshot.Entrypoints),
-		"services", len(snapshot.Services),
-		"routes", len(snapshot.Routes()),
+		"entrypoints", snapshot.Entrypoints.Len(),
+		"services", snapshot.Services.Len(),
+		"routes", snapshot.Routes().Len(),
 	)
 }
 
@@ -445,9 +461,10 @@ func (g *Gateway) restartServersLocked(snapshot *runtime.CompiledSnapshot) error
 		g.health.Stop()
 		g.health = nil
 	}
-	for _, server := range g.servers {
+	g.servers.Range(func(_ int, server *http.Server) bool {
 		_ = server.Shutdown(ctx)
-	}
+		return true
+	})
 	g.servers = nil
 
 	g.runtime = runtime.NewGateway(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled))
@@ -463,39 +480,51 @@ func (g *Gateway) restartServersLocked(snapshot *runtime.CompiledSnapshot) error
 	g.health = runtime.NewHealthCheckerWithLogger(interval, timeout, g.logger)
 	g.health.Start(g.runtime)
 
-	for index, entrypoint := range entrypointNames {
-		go g.listenEntrypoint(entrypoint, servers[index], listeners[index])
-	}
-	go g.listenAdmin(servers[len(servers)-1], listeners[len(listeners)-1])
+	entrypointNames.Range(func(index int, entrypoint string) bool {
+		server, _ := servers.Get(index)
+		listener, _ := listeners.Get(index)
+		go g.listenEntrypoint(entrypoint, server, listener)
+		return true
+	})
+	adminServer, _ := servers.Get(servers.Len() - 1)
+	adminListener, _ := listeners.Get(listeners.Len() - 1)
+	go g.listenAdmin(adminServer, adminListener)
 	g.publishClusterUpdate(snapshot)
-	g.logger.Info("servers restarted", "entrypoints", len(snapshot.Entrypoints), "admin_addr", snapshot.AdminAddress)
+	g.logger.Info("servers restarted", "entrypoints", snapshot.Entrypoints.Len(), "admin_addr", snapshot.AdminAddress)
 	return nil
 }
 
-func (g *Gateway) buildServers(snapshot *runtime.CompiledSnapshot) ([]*http.Server, []net.Listener, []string, error) {
-	servers := make([]*http.Server, 0, len(snapshot.Entrypoints)+1)
-	listeners := make([]net.Listener, 0, len(snapshot.Entrypoints)+1)
-	entrypointNames := make([]string, 0, len(snapshot.Entrypoints))
-	for entrypoint, address := range snapshot.Entrypoints {
-		entrypointConfig := snapshot.EntrypointConfigs[entrypoint]
+func (g *Gateway) buildServers(snapshot *runtime.CompiledSnapshot) (*collectionlist.List[*http.Server], *collectionlist.List[net.Listener], *collectionlist.List[string], error) {
+	servers := collectionlist.NewListWithCapacity[*http.Server](snapshot.Entrypoints.Len() + 1)
+	listeners := collectionlist.NewListWithCapacity[net.Listener](snapshot.Entrypoints.Len() + 1)
+	entrypointNames := collectionlist.NewListWithCapacity[string](snapshot.Entrypoints.Len())
+	var buildErr error
+	snapshot.Entrypoints.Range(func(entrypoint string, address string) bool {
+		entrypointConfig, _ := snapshot.EntrypointConfigs.Get(entrypoint)
 		server := g.buildHTTPServer(address, g.runtime.Handler(entrypoint), snapshot.Security)
 		if tlsConfig, tlsErr := g.buildTLSConfig(entrypointConfig.TLS); tlsErr != nil {
 			closeListeners(listeners)
-			return nil, nil, nil, fmt.Errorf("build tls config for entrypoint %q: %w", entrypoint, tlsErr)
+			buildErr = fmt.Errorf("build tls config for entrypoint %q: %w", entrypoint, tlsErr)
+			return false
 		} else {
 			server.TLSConfig = tlsConfig
 		}
 		listener, listenErr := net.Listen("tcp", address)
 		if listenErr != nil {
 			closeListeners(listeners)
-			return nil, nil, nil, fmt.Errorf("listen entrypoint %q on %s: %w", entrypoint, address, listenErr)
+			buildErr = fmt.Errorf("listen entrypoint %q on %s: %w", entrypoint, address, listenErr)
+			return false
 		}
 		if server.TLSConfig != nil {
 			listener = tls.NewListener(listener, server.TLSConfig)
 		}
-		servers = append(servers, server)
-		listeners = append(listeners, listener)
-		entrypointNames = append(entrypointNames, entrypoint)
+		servers.Add(server)
+		listeners.Add(listener)
+		entrypointNames.Add(entrypoint)
+		return true
+	})
+	if buildErr != nil {
+		return nil, nil, nil, buildErr
 	}
 
 	adminServer := g.buildHTTPServer(snapshot.AdminAddress, g.buildAdminMux(), snapshot.Security)
@@ -504,17 +533,18 @@ func (g *Gateway) buildServers(snapshot *runtime.CompiledSnapshot) ([]*http.Serv
 		closeListeners(listeners)
 		return nil, nil, nil, fmt.Errorf("listen admin on %s: %w", snapshot.AdminAddress, listenErr)
 	}
-	servers = append(servers, adminServer)
-	listeners = append(listeners, adminListener)
+	servers.Add(adminServer)
+	listeners.Add(adminListener)
 	return servers, listeners, entrypointNames, nil
 }
 
-func closeListeners(listeners []net.Listener) {
-	for _, listener := range listeners {
+func closeListeners(listeners *collectionlist.List[net.Listener]) {
+	listeners.Range(func(_ int, listener net.Listener) bool {
 		if listener != nil {
 			_ = listener.Close()
 		}
-	}
+		return true
+	})
 }
 
 func (g *Gateway) buildAdminMux() http.Handler {
@@ -547,11 +577,11 @@ func (g *Gateway) buildAdminMux() http.Handler {
 		}
 
 		endpointList := collectionlist.NewList[runtime.EndpointView]()
-		for _, service := range snapshot.ServicesView() {
-			endpointList.MergeSlice(service.Endpoints)
-		}
-		endpoints := endpointList.Values()
-		writeJSON(w, http.StatusOK, endpoints)
+		snapshot.ServicesView().Range(func(_ int, service runtime.ServiceView) bool {
+			endpointList.Merge(service.Endpoints)
+			return true
+		})
+		writeJSON(w, http.StatusOK, endpointList)
 	})
 	mux.HandleFunc("/admin/cluster/status", func(w http.ResponseWriter, _ *http.Request) {
 		if g.cluster == nil {
@@ -659,8 +689,8 @@ func (g *Gateway) publishClusterUpdate(snapshot *runtime.CompiledSnapshot) {
 	}
 	payload := map[string]any{
 		"built_at":  snapshot.BuiltAt.UTC().Format(time.RFC3339Nano),
-		"services":  len(snapshot.Services),
-		"routes":    len(snapshot.Routes()),
+		"services":  snapshot.Services.Len(),
+		"routes":    snapshot.Routes().Len(),
 		"proxy_eng": snapshot.ProxyEngine,
 	}
 	data, err := json.Marshal(payload)

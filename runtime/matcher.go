@@ -3,9 +3,9 @@ package runtime
 import (
 	"net"
 	"net/http"
-	"sort"
 	"strings"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/collectionx/prefix"
 )
@@ -19,7 +19,7 @@ const (
 
 type EntrypointMatcher struct {
 	exactHosts *mapping.Map[string, *routeBucket]
-	wildcards  []wildcardBucket
+	wildcards  *collectionlist.List[wildcardBucket]
 	fallback   *routeBucket
 }
 
@@ -29,14 +29,14 @@ type wildcardBucket struct {
 }
 
 type routeBucket struct {
-	pathRoutes *prefix.Trie[[]*CompiledRoute]
-	fallback   []*CompiledRoute
+	pathRoutes *prefix.Trie[*collectionlist.List[*CompiledRoute]]
+	fallback   *collectionlist.List[*CompiledRoute]
 }
 
 func BuildEntrypointMatcher(routes []*CompiledRoute) *EntrypointMatcher {
 	matcher := &EntrypointMatcher{
 		exactHosts: mapping.NewMap[string, *routeBucket](),
-		wildcards:  make([]wildcardBucket, 0),
+		wildcards:  collectionlist.NewList[wildcardBucket](),
 		fallback:   newRouteBucket(),
 	}
 
@@ -62,14 +62,14 @@ func BuildEntrypointMatcher(routes []*CompiledRoute) *EntrypointMatcher {
 	})
 	wildcardMap.Range(func(suffix string, bucket *routeBucket) bool {
 		bucket.Sort()
-		matcher.wildcards = append(matcher.wildcards, wildcardBucket{
+		matcher.wildcards.Add(wildcardBucket{
 			suffix: suffix,
 			bucket: bucket,
 		})
 		return true
 	})
-	sort.Slice(matcher.wildcards, func(i, j int) bool {
-		return len(matcher.wildcards[i].suffix) > len(matcher.wildcards[j].suffix)
+	matcher.wildcards.Sort(func(left, right wildcardBucket) int {
+		return len(right.suffix) - len(left.suffix)
 	})
 	matcher.fallback.Sort()
 	return matcher
@@ -90,12 +90,18 @@ func MatchRoute(matcher *EntrypointMatcher, routes []*CompiledRoute, request *ht
 		}
 	}
 
-	for _, wildcard := range matcher.wildcards {
+	var wildcardRoute *CompiledRoute
+	matcher.wildcards.Range(func(_ int, wildcard wildcardBucket) bool {
 		if strings.HasSuffix(host, wildcard.suffix) {
 			if route := wildcard.bucket.Match(request.URL.Path, method, request.Header); route != nil {
-				return route
+				wildcardRoute = route
+				return false
 			}
 		}
+		return true
+	})
+	if wildcardRoute != nil {
+		return wildcardRoute
 	}
 
 	return matcher.fallback.Match(request.URL.Path, method, request.Header)
@@ -122,31 +128,42 @@ func linearMatch(routes []*CompiledRoute, request *http.Request) *CompiledRoute 
 	return nil
 }
 
-func matchWithPredicates(routes []*CompiledRoute, path string, method string, headers http.Header) *CompiledRoute {
-	for _, route := range routes {
+func matchWithPredicates(routes *collectionlist.List[*CompiledRoute], path string, method string, headers http.Header) *CompiledRoute {
+	var matched *CompiledRoute
+	routes.Range(func(_ int, route *CompiledRoute) bool {
 		if hasPredicate(route, PredicatePathPrefix) && !strings.HasPrefix(path, route.PathPrefix) {
-			continue
+			return true
 		}
 		if hasPredicate(route, PredicateMethod) && route.Method != method {
-			continue
+			return true
 		}
 		if hasPredicate(route, PredicateHeaders) && !matchHeaders(route.Headers, headers) {
-			continue
+			return true
 		}
-		return route
-	}
-	return nil
+		matched = route
+		return false
+	})
+	return matched
 }
 
-func sortRoutesByPriority(routes []*CompiledRoute) {
-	sort.SliceStable(routes, func(i, j int) bool {
-		left := routeScore(routes[i])
-		right := routeScore(routes[j])
-		if left == right {
-			return routes[i].Name < routes[j].Name
-		}
-		return left > right
-	})
+func sortRoutesByPriority(routes *collectionlist.List[*CompiledRoute]) *collectionlist.List[*CompiledRoute] {
+	if routes == nil || routes.Len() < 2 {
+		return routes
+	}
+	queue, err := collectionlist.NewPriorityQueue(routePriorityLess, routes.Values()...)
+	if err != nil {
+		return routes
+	}
+	return collectionlist.NewList(queue.ValuesSorted()...)
+}
+
+func routePriorityLess(left *CompiledRoute, right *CompiledRoute) bool {
+	leftScore := routeScore(left)
+	rightScore := routeScore(right)
+	if leftScore == rightScore {
+		return left.Name < right.Name
+	}
+	return leftScore > rightScore
 }
 
 func routeScore(route *CompiledRoute) int {
@@ -156,7 +173,7 @@ func routeScore(route *CompiledRoute) int {
 		score += 10
 	}
 	if hasPredicate(route, PredicateHeaders) {
-		score += len(route.Headers)
+		score += route.Headers.Len()
 	}
 	return score
 }
@@ -174,7 +191,8 @@ func normalizeRequestHost(hostPort string) string {
 
 func newRouteBucket() *routeBucket {
 	return &routeBucket{
-		pathRoutes: prefix.NewTrie[[]*CompiledRoute](),
+		pathRoutes: prefix.NewTrie[*collectionlist.List[*CompiledRoute]](),
+		fallback:   collectionlist.NewList[*CompiledRoute](),
 	}
 }
 
@@ -183,23 +201,26 @@ func (b *routeBucket) Add(route *CompiledRoute) {
 		return
 	}
 	if !hasPredicate(route, PredicatePathPrefix) {
-		b.fallback = append(b.fallback, route)
+		b.fallback.Add(route)
 		return
 	}
 	routes, _ := b.pathRoutes.Get(route.PathPrefix)
-	b.pathRoutes.Put(route.PathPrefix, append(routes, route))
+	if routes == nil {
+		routes = collectionlist.NewList[*CompiledRoute]()
+	}
+	routes.Add(route)
+	b.pathRoutes.Put(route.PathPrefix, routes)
 }
 
 func (b *routeBucket) Sort() {
 	if b == nil {
 		return
 	}
-	b.pathRoutes.RangePrefix("", func(pathPrefix string, routes []*CompiledRoute) bool {
-		sortRoutesByPriority(routes)
-		b.pathRoutes.Put(pathPrefix, routes)
+	b.pathRoutes.RangePrefix("", func(pathPrefix string, routes *collectionlist.List[*CompiledRoute]) bool {
+		b.pathRoutes.Put(pathPrefix, sortRoutesByPriority(routes))
 		return true
 	})
-	sortRoutesByPriority(b.fallback)
+	b.fallback = sortRoutesByPriority(b.fallback)
 }
 
 func (b *routeBucket) Match(path string, method string, headers http.Header) *CompiledRoute {
@@ -242,7 +263,7 @@ func hasPredicate(route *CompiledRoute, predicate int) bool {
 	case PredicateMethod:
 		return route.Method != ""
 	case PredicateHeaders:
-		return len(route.Headers) > 0
+		return route.Headers.Len() > 0
 	default:
 		return false
 	}

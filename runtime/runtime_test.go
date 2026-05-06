@@ -3,6 +3,8 @@ package runtime
 import (
 	"net/url"
 	"testing"
+
+	collectionlist "github.com/arcgolabs/collectionx/list"
 )
 
 func TestServiceRuntimePickSkipsUnhealthyEndpoints(t *testing.T) {
@@ -20,13 +22,15 @@ func TestServiceRuntimePickSkipsUnhealthyEndpoints(t *testing.T) {
 	service := &ServiceRuntime{
 		Name:     "api",
 		Strategy: "round_robin",
-		Endpoints: []*EndpointRuntime{
-			{URL: unhealthyURL, Weight: 1},
-			{URL: healthyURL, Weight: 1},
-		},
+		Endpoints: collectionlist.NewList[*EndpointRuntime](
+			&EndpointRuntime{URL: unhealthyURL, Weight: 1},
+			&EndpointRuntime{URL: healthyURL, Weight: 1},
+		),
 	}
-	service.Endpoints[0].Healthy.Store(false)
-	service.Endpoints[1].Healthy.Store(true)
+	unhealthy, _ := service.Endpoints.Get(0)
+	healthy, _ := service.Endpoints.Get(1)
+	unhealthy.Healthy.Store(false)
+	healthy.Healthy.Store(true)
 
 	for i := 0; i < 4; i++ {
 		got, err := service.Pick()
@@ -54,14 +58,15 @@ func TestServiceRuntimeWeightedRoundRobinUsesWeights(t *testing.T) {
 	service := &ServiceRuntime{
 		Name:     "api",
 		Strategy: "weighted_round_robin",
-		Endpoints: []*EndpointRuntime{
-			{URL: firstURL, Weight: 2},
-			{URL: secondURL, Weight: 1},
-		},
+		Endpoints: collectionlist.NewList[*EndpointRuntime](
+			&EndpointRuntime{URL: firstURL, Weight: 2},
+			&EndpointRuntime{URL: secondURL, Weight: 1},
+		),
 	}
-	for _, endpoint := range service.Endpoints {
+	service.Endpoints.Range(func(_ int, endpoint *EndpointRuntime) bool {
 		endpoint.Healthy.Store(true)
-	}
+		return true
+	})
 	service.BuildSlots()
 
 	counts := map[string]int{}

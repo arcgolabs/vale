@@ -8,6 +8,7 @@ package vela
 import (
 	"log/slog"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/observabilityx"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/gateway"
@@ -110,9 +111,9 @@ func applyDefaultConfigSource(cfg *Config) {
 	if cfg == nil {
 		return
 	}
-	if cfg.Provider != nil || len(cfg.ConfigSource) > 0 {
+	if cfg.Provider != nil || !cfg.ConfigSource.IsEmpty() {
 		return
 	}
-	cfg.ConfigSource = []provider.ConfigProvider{staticconfigprovider.New(config.Default())}
+	cfg.ConfigSource = collectionlist.NewList[provider.ConfigProvider](staticconfigprovider.New(config.Default()))
 	cfg.Watch = false
 }

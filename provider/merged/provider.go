@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/compiler"
 	"github.com/arcgolabs/vela/config"
@@ -72,15 +73,15 @@ func (p *Provider) Load(ctx context.Context) (*runtime.CompiledSnapshot, error) 
 	if p.logger != nil {
 		p.logger.Info("merged snapshot compiled",
 			"built_at", snapshot.BuiltAt,
-			"entrypoints", len(snapshot.Entrypoints),
-			"services", len(snapshot.Services),
-			"routes", len(snapshot.Routes()),
+			"entrypoints", snapshot.Entrypoints.Len(),
+			"services", snapshot.Services.Len(),
+			"routes", snapshot.Routes().Len(),
 		)
 	}
 	p.publish(ctx, provider.SnapshotRecompiledEvent{
 		SourceCount:  sourceCount,
-		RouteCount:   len(snapshot.Routes()),
-		ServiceCount: len(snapshot.ServicesView()),
+		RouteCount:   snapshot.Routes().Len(),
+		ServiceCount: snapshot.ServicesView().Len(),
 	})
 	return snapshot, nil
 }
@@ -90,7 +91,7 @@ func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSna
 		return nil, fmt.Errorf("merged provider has no config providers")
 	}
 
-	closers := make([]io.Closer, 0, p.sources.Len())
+	closers := collectionlist.NewListWithCapacity[io.Closer](p.sources.Len())
 	setupFailed := false
 	reload := func(sourceName string) {
 		if p.logger != nil {
@@ -126,9 +127,10 @@ func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSna
 				Source: sourceName,
 				Error:  err.Error(),
 			})
-			for _, c := range closers {
+			closers.Range(func(_ int, c io.Closer) bool {
 				_ = c.Close()
-			}
+				return true
+			})
 			onError(fmt.Errorf("config provider[%s] watch setup failed: %w", sourceName, err))
 			setupFailed = true
 			return false
@@ -136,13 +138,13 @@ func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSna
 		if p.logger != nil {
 			p.logger.Info("config source watcher ready", "source", sourceName)
 		}
-		closers = append(closers, closer)
+		closers.Add(closer)
 		return true
 	})
-	if setupFailed || len(closers) == 0 {
+	if setupFailed || closers.IsEmpty() {
 		return nil, fmt.Errorf("merged provider failed to setup any watcher")
 	}
-	return provider.MultiCloser(closers), nil
+	return provider.MultiCloser(closers.Values()), nil
 }
 
 func (p *Provider) loadMergedConfig(ctx context.Context) (*config.Config, error) {
@@ -150,14 +152,14 @@ func (p *Provider) loadMergedConfig(ctx context.Context) (*config.Config, error)
 		return nil, fmt.Errorf("merged provider has no config providers")
 	}
 
-	loadedConfigs := make([]*config.Config, 0, p.sources.Len())
-	messages := make([]string, 0)
+	loadedConfigs := collectionlist.NewListWithCapacity[*config.Config](p.sources.Len())
+	messages := collectionlist.NewList[string]()
 
 	p.sources.Range(func(sourceName string, configProvider provider.ConfigProvider) bool {
 		start := time.Now()
 		cfg, err := configProvider.Load(ctx)
 		if err != nil {
-			messages = append(messages, fmt.Sprintf("config provider[%s] load failed: %v", sourceName, err))
+			messages.Add(fmt.Sprintf("config provider[%s] load failed: %v", sourceName, err))
 			if p.logger != nil {
 				p.logger.Error("config source load failed", "source", sourceName, "error", err)
 			}
@@ -181,15 +183,15 @@ func (p *Provider) loadMergedConfig(ctx context.Context) (*config.Config, error)
 				"routes", len(cfg.Routes),
 			)
 		}
-		loadedConfigs = append(loadedConfigs, cfg)
+		loadedConfigs.Add(cfg)
 		return true
 	})
 
-	if len(loadedConfigs) == 0 {
-		return nil, fmt.Errorf("failed to load any config: %s", strings.Join(messages, "; "))
+	if loadedConfigs.IsEmpty() {
+		return nil, fmt.Errorf("failed to load any config: %s", strings.Join(messages.Values(), "; "))
 	}
 
-	merged := config.Merge(loadedConfigs...)
+	merged := config.Merge(loadedConfigs.Values()...)
 	if err := config.Validate(merged); err != nil {
 		return nil, err
 	}
