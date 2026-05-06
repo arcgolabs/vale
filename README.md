@@ -35,7 +35,7 @@ This repository includes a `go.work` file for local development and release buil
 ```bash
 go work sync
 go test ./...
-go test ./cluster/raftnode/... ./cmd/... ./provider/docker/... ./provider/file/... ./provider/fileconfig/... ./provider/k8s/... ./examples/embedded_multi_provider/...
+go test ./cluster/raftnode/... ./cmd/... ./events/eventx/... ./observability/prometheus/... ./provider/docker/... ./provider/file/... ./provider/fileconfig/... ./provider/k8s/... ./examples/embedded_multi_provider/... ./examples/embedded_static_config/...
 go run ./cmd
 ```
 
@@ -46,12 +46,14 @@ Current workspace modules:
 - `github.com/arcgolabs/vela`: library-first core module.
 - `github.com/arcgolabs/vela/cmd`: standalone `velad` binary wiring.
 - `github.com/arcgolabs/vela/cluster/raftnode`: optional HashiCorp Raft cluster adapter.
+- `github.com/arcgolabs/vela/events/eventx`: optional arcgolabs/eventx adapter.
 - `github.com/arcgolabs/vela/observability/prometheus`: optional Prometheus metrics adapter.
 - `github.com/arcgolabs/vela/provider/docker`: optional Docker config provider.
 - `github.com/arcgolabs/vela/provider/file`: optional HCL snapshot provider.
 - `github.com/arcgolabs/vela/provider/fileconfig`: optional HCL config source provider.
 - `github.com/arcgolabs/vela/provider/k8s`: optional K8s-like config provider.
 - `github.com/arcgolabs/vela/examples/embedded_multi_provider`: example that consumes optional provider modules.
+- `github.com/arcgolabs/vela/examples/embedded_static_config`: example that consumes optional event adapter.
 
 Local workspace modules are intentionally not declared as `replace` directives. `go.work`
 resolves them during repository development; published modules should use real released

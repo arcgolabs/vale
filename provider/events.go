@@ -1,6 +1,18 @@
 package provider
 
-import "time"
+import (
+	"context"
+	"time"
+)
+
+type Event interface {
+	Name() string
+}
+
+type EventBus interface {
+	Publish(context.Context, Event) error
+	Close() error
+}
 
 const (
 	EventNameConfigSourceLoaded  = "provider.config_source.loaded"

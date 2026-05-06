@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
 	mergedprovider "github.com/arcgolabs/vela/provider/merged"
@@ -25,7 +24,7 @@ type Config struct {
 	Watch        bool
 	Cluster      ClusterFactory
 	Logger       *slog.Logger
-	EventBus     eventx.BusRuntime
+	EventBus     provider.EventBus
 	Provider     provider.SnapshotProvider
 	ConfigSource []provider.ConfigProvider
 	Metrics      MetricsFactory
@@ -46,7 +45,7 @@ type Gateway struct {
 	config   Config
 	provider provider.SnapshotProvider
 	logger   *slog.Logger
-	events   eventx.BusRuntime
+	events   provider.EventBus
 	ownsBus  bool
 	cluster  Cluster
 
@@ -95,7 +94,7 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 	}
 	ownsBus := false
 	if cfg.EventBus == nil {
-		cfg.EventBus = eventx.New()
+		cfg.EventBus = noopEventBus{}
 		ownsBus = true
 	}
 
@@ -257,7 +256,7 @@ func (g *Gateway) Stop(ctx context.Context) error {
 }
 
 // Events returns the event bus configured with WithEventBus or the internal instance.
-func (g *Gateway) Events() eventx.BusRuntime {
+func (g *Gateway) Events() provider.EventBus {
 	return g.events
 }
 

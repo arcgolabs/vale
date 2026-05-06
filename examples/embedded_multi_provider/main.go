@@ -11,6 +11,7 @@ import (
 
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/vela"
+	eventxadapter "github.com/arcgolabs/vela/events/eventx"
 	providerevents "github.com/arcgolabs/vela/provider"
 	providerdocker "github.com/arcgolabs/vela/provider/docker"
 	providerk8s "github.com/arcgolabs/vela/provider/k8s"
@@ -62,7 +63,7 @@ func main() {
 
 	embeddedGateway, err := vela.New(
 		vela.WithLogger(logger),
-		vela.WithEventBus(bus),
+		eventxadapter.WithEventBus(bus),
 		vela.WithConfigSourceProviders(dockerProvider, k8sProvider),
 		vela.WithWatch(true),
 	)

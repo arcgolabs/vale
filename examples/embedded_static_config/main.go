@@ -12,6 +12,7 @@ import (
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/vela"
 	"github.com/arcgolabs/vela/config"
+	eventxadapter "github.com/arcgolabs/vela/events/eventx"
 	providerevents "github.com/arcgolabs/vela/provider"
 )
 
@@ -71,7 +72,7 @@ func main() {
 
 	embeddedGateway, err := vela.New(
 		vela.WithLogger(logger),
-		vela.WithEventBus(bus),
+		eventxadapter.WithEventBus(bus),
 		vela.WithStaticConfig(cfg),
 	)
 	if err != nil {

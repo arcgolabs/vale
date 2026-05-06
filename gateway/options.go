@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
 	staticprovider "github.com/arcgolabs/vela/provider/static"
@@ -50,7 +49,7 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
-func WithEventBus(bus eventx.BusRuntime) Option {
+func WithEventBus(bus provider.EventBus) Option {
 	return func(cfg *Config) error {
 		if bus == nil {
 			return fmt.Errorf("event bus cannot be nil")

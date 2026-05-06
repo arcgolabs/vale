@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/arcgolabs/collectionx/mapping"
-	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/vela/compiler"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
@@ -22,10 +21,10 @@ type Source struct {
 
 type Provider struct {
 	sources *mapping.OrderedMap[string, provider.ConfigProvider]
-	bus     eventx.BusRuntime
+	bus     provider.EventBus
 }
 
-func New(bus eventx.BusRuntime, sources ...Source) *Provider {
+func New(bus provider.EventBus, sources ...Source) *Provider {
 	orderedSources := mapping.NewOrderedMap[string, provider.ConfigProvider]()
 	for index, source := range sources {
 		if source.Provider == nil {
@@ -141,7 +140,7 @@ func (p *Provider) loadMergedConfig(ctx context.Context) (*config.Config, error)
 	return merged, nil
 }
 
-func (p *Provider) publish(ctx context.Context, event eventx.Event) {
+func (p *Provider) publish(ctx context.Context, event provider.Event) {
 	if p.bus == nil || event == nil {
 		return
 	}

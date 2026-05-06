@@ -8,7 +8,6 @@ package vela
 import (
 	"log/slog"
 
-	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/gateway"
 	"github.com/arcgolabs/vela/provider"
@@ -74,7 +73,7 @@ func WithLogger(logger *slog.Logger) Option {
 	return gateway.WithLogger(logger)
 }
 
-func WithEventBus(bus eventx.BusRuntime) Option {
+func WithEventBus(bus provider.EventBus) Option {
 	return gateway.WithEventBus(bus)
 }
 
