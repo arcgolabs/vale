@@ -1,18 +1,13 @@
 package provider
 
 import (
-	"context"
 	"time"
+
+	"github.com/arcgolabs/eventx"
 )
 
-type Event interface {
-	Name() string
-}
-
-type EventBus interface {
-	Publish(context.Context, Event) error
-	Close() error
-}
+type Event = eventx.Event
+type EventBus = eventx.BusRuntime
 
 const (
 	EventNameConfigSourceLoaded  = "provider.config_source.loaded"

@@ -110,7 +110,7 @@ func TestStaticRuntimeChangesIgnoresDynamicSnapshotFields(t *testing.T) {
 		MetricsEnabled:   true,
 		HealthInterval:   "5s",
 		HealthTimeout:    "2s",
-		ProxyEngine:      "stdlib",
+		ProxyEngine:      "",
 	}
 	next := &runtime.CompiledSnapshot{
 		Entrypoints:      map[string]string{"web": "127.0.0.1:8080"},

@@ -12,11 +12,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
 	mergedprovider "github.com/arcgolabs/vela/provider/merged"
 	staticconfigprovider "github.com/arcgolabs/vela/provider/staticconfig"
 	"github.com/arcgolabs/vela/runtime"
+	"github.com/samber/mo"
 )
 
 // Config holds construction-time settings for Gateway.
@@ -94,7 +96,7 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 	}
 	ownsBus := false
 	if cfg.EventBus == nil {
-		cfg.EventBus = noopEventBus{}
+		cfg.EventBus = eventx.New()
 		ownsBus = true
 	}
 
@@ -464,10 +466,7 @@ func parseDurationDefault(value string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	duration, err := time.ParseDuration(value)
-	if err != nil {
-		return fallback
-	}
-	return duration
+	return mo.TupleToOption(duration, err == nil).OrElse(fallback)
 }
 
 func (g *Gateway) publishClusterUpdate(snapshot *runtime.CompiledSnapshot) {

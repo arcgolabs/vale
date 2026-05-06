@@ -38,15 +38,10 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 				weight = 1
 			}
 
-			proxyHandler, err := proxy.Build(cfg.ProxyEngine, parsedURL)
-			if err != nil {
-				return nil, fmt.Errorf("service %q endpoint %q: %w", service.Name, endpoint.URL, err)
-			}
-
 			rtEndpoint := &runtime.EndpointRuntime{
 				URL:    parsedURL,
 				Weight: weight,
-				Proxy:  proxyHandler,
+				Proxy:  proxy.Build(parsedURL),
 			}
 			rtEndpoint.Healthy.Store(true)
 			rtService.Endpoints = append(rtService.Endpoints, rtEndpoint)
@@ -93,7 +88,7 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 		MetricsEnabled:     pickMetricsEnabled(cfg),
 		HealthInterval:     pickHealthInterval(cfg),
 		HealthTimeout:      pickHealthTimeout(cfg),
-		ProxyEngine:        proxy.NormalizeEngine(cfg.ProxyEngine),
+		ProxyEngine:        proxy.DefaultEngine.Name(),
 		BuiltAt:            time.Now(),
 	}, nil
 }

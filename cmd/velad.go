@@ -12,7 +12,6 @@ import (
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/logx"
 	"github.com/arcgolabs/vela"
-	eventxadapter "github.com/arcgolabs/vela/events/eventx"
 	prometheusmetrics "github.com/arcgolabs/vela/observability/prometheus"
 	"github.com/spf13/pflag"
 
@@ -74,7 +73,7 @@ func veladStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
 			}),
 			dix.Provider0(func() eventx.BusRuntime { return eventx.New() }),
 			dix.ProviderErr3(func(cfg veladConfig, logger *slog.Logger, bus eventx.BusRuntime) (*vela.Gateway, error) {
-				opts := append(cfg.gatewayOptions(logger), eventxadapter.WithEventBus(bus))
+				opts := append(cfg.gatewayOptions(logger), vela.WithEventBus(bus))
 				return vela.New(opts...)
 			}),
 		),

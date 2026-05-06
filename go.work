@@ -4,7 +4,6 @@ use (
 	.
 	./cluster/raftnode
 	./cmd
-	./events/eventx
 	./examples/embedded_multi_provider
 	./examples/embedded_static_config
 	./observability/prometheus

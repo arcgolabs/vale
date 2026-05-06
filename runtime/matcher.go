@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+
+	"github.com/arcgolabs/collectionx/mapping"
 )
 
 type EntrypointMatcher struct {
-	exactHosts map[string][]*CompiledRoute
+	exactHosts *mapping.MultiMap[string, *CompiledRoute]
 	wildcards  []wildcardBucket
 	fallback   []*CompiledRoute
 }
@@ -20,12 +22,12 @@ type wildcardBucket struct {
 
 func BuildEntrypointMatcher(routes []*CompiledRoute) *EntrypointMatcher {
 	matcher := &EntrypointMatcher{
-		exactHosts: make(map[string][]*CompiledRoute),
+		exactHosts: mapping.NewMultiMap[string, *CompiledRoute](),
 		wildcards:  make([]wildcardBucket, 0),
 		fallback:   make([]*CompiledRoute, 0),
 	}
 
-	wildcardMap := make(map[string][]*CompiledRoute)
+	wildcardMap := mapping.NewMultiMap[string, *CompiledRoute]()
 	for _, route := range routes {
 		host := strings.TrimSpace(strings.ToLower(route.Host))
 		switch {
@@ -33,23 +35,25 @@ func BuildEntrypointMatcher(routes []*CompiledRoute) *EntrypointMatcher {
 			matcher.fallback = append(matcher.fallback, route)
 		case strings.HasPrefix(host, "*."):
 			suffix := strings.TrimPrefix(host, "*")
-			wildcardMap[suffix] = append(wildcardMap[suffix], route)
+			wildcardMap.Put(suffix, route)
 		default:
-			matcher.exactHosts[host] = append(matcher.exactHosts[host], route)
+			matcher.exactHosts.Put(host, route)
 		}
 	}
 
-	for host, hostRoutes := range matcher.exactHosts {
+	matcher.exactHosts.Range(func(host string, hostRoutes []*CompiledRoute) bool {
 		sortRoutesByPriority(hostRoutes)
-		matcher.exactHosts[host] = hostRoutes
-	}
-	for suffix, wildcardRoutes := range wildcardMap {
+		matcher.exactHosts.Set(host, hostRoutes...)
+		return true
+	})
+	wildcardMap.Range(func(suffix string, wildcardRoutes []*CompiledRoute) bool {
 		sortRoutesByPriority(wildcardRoutes)
 		matcher.wildcards = append(matcher.wildcards, wildcardBucket{
 			suffix: suffix,
 			routes: wildcardRoutes,
 		})
-	}
+		return true
+	})
 	sort.Slice(matcher.wildcards, func(i, j int) bool {
 		return len(matcher.wildcards[i].suffix) > len(matcher.wildcards[j].suffix)
 	})
@@ -66,7 +70,7 @@ func MatchRoute(matcher *EntrypointMatcher, routes []*CompiledRoute, request *ht
 	host := normalizeRequestHost(request.Host)
 	method := strings.ToUpper(request.Method)
 
-	if exactRoutes := matcher.exactHosts[host]; len(exactRoutes) > 0 {
+	if exactRoutes := matcher.exactHosts.Get(host); len(exactRoutes) > 0 {
 		if route := matchWithPredicates(exactRoutes, request.URL.Path, method, request.Header); route != nil {
 			return route
 		}

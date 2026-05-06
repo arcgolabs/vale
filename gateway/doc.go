@@ -2,11 +2,11 @@
 // options, call Start to listen on entrypoints and on the admin address from the
 // compiled snapshot, then Stop for graceful shutdown.
 //
-// Typical wiring combines file-backed HCL paths (defaults to ./vela.hcl with watch on),
-// merged config providers from WithConfigSourceProviders, or a fixed
-// snapshot via WithStaticSnapshot. Enable optional control-plane clustering with WithClusterFactory.
+// Typical wiring combines the built-in default config, merged config providers
+// from WithConfigSourceProviders, or a fixed snapshot via WithStaticSnapshot.
+// Enable optional control-plane clustering with WithClusterFactory.
 // Pass WithEventBus to share lifecycle events across your app or use Events(); if no bus was
-// passed, Gateway creates one and closes it on Stop only when Gateway owned it internally.
+// passed, Gateway creates an eventx bus and closes it on Stop only when Gateway owned it internally.
 //
 // Stable low-level import path: github.com/arcgolabs/vela/gateway
 package gateway

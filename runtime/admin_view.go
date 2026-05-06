@@ -1,5 +1,7 @@
 package runtime
 
+import "github.com/samber/lo"
+
 type RouteView struct {
 	Name       string `json:"name"`
 	Entrypoint string `json:"entrypoint"`
@@ -23,20 +25,18 @@ type ServiceView struct {
 }
 
 func (s *CompiledSnapshot) Routes() []RouteView {
-	result := make([]RouteView, 0)
-	for entrypoint, routes := range s.RoutesByEntrypoint {
-		for _, route := range routes {
-			result = append(result, RouteView{
+	return lo.Flatten(lo.MapToSlice(s.RoutesByEntrypoint, func(entrypoint string, routes []*CompiledRoute) []RouteView {
+		return lo.Map(routes, func(route *CompiledRoute, _ int) RouteView {
+			return RouteView{
 				Name:       route.Name,
 				Entrypoint: entrypoint,
 				Host:       route.Host,
 				PathPrefix: route.PathPrefix,
 				Method:     route.Method,
 				Service:    route.Service.Name,
-			})
-		}
-	}
-	return result
+			}
+		})
+	}))
 }
 
 func (s *CompiledSnapshot) ServicesView() []ServiceView {

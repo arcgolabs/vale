@@ -12,7 +12,6 @@ import (
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/vela"
 	"github.com/arcgolabs/vela/config"
-	eventxadapter "github.com/arcgolabs/vela/events/eventx"
 	providerevents "github.com/arcgolabs/vela/provider"
 )
 
@@ -38,7 +37,6 @@ func main() {
 	}
 
 	cfg := &config.Config{
-		ProxyEngine: "stdlib",
 		Entrypoints: []config.Entrypoint{
 			{Name: "web", Address: ":8080"},
 		},
@@ -72,7 +70,7 @@ func main() {
 
 	embeddedGateway, err := vela.New(
 		vela.WithLogger(logger),
-		eventxadapter.WithEventBus(bus),
+		vela.WithEventBus(bus),
 		vela.WithStaticConfig(cfg),
 	)
 	if err != nil {

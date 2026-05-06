@@ -1,15 +1,12 @@
 package config
 
-func Merge(configs ...*Config) *Config {
-	merged := &Config{
-		Entrypoints: make([]Entrypoint, 0),
-		Services:    make([]Service, 0),
-		Routes:      make([]Route, 0),
-	}
+import "github.com/arcgolabs/collectionx/mapping"
 
-	entrypointIndex := make(map[string]int)
-	serviceIndex := make(map[string]int)
-	routeIndex := make(map[string]int)
+func Merge(configs ...*Config) *Config {
+	merged := &Config{}
+	entrypoints := mapping.NewOrderedMap[string, Entrypoint]()
+	services := mapping.NewOrderedMap[string, Service]()
+	routes := mapping.NewOrderedMap[string, Route]()
 
 	for _, cfg := range configs {
 		if cfg == nil {
@@ -17,34 +14,15 @@ func Merge(configs ...*Config) *Config {
 		}
 
 		for _, entrypoint := range cfg.Entrypoints {
-			if idx, exists := entrypointIndex[entrypoint.Name]; exists {
-				merged.Entrypoints[idx] = entrypoint
-				continue
-			}
-			entrypointIndex[entrypoint.Name] = len(merged.Entrypoints)
-			merged.Entrypoints = append(merged.Entrypoints, entrypoint)
+			entrypoints.Set(entrypoint.Name, entrypoint)
 		}
 
 		for _, service := range cfg.Services {
-			if idx, exists := serviceIndex[service.Name]; exists {
-				merged.Services[idx] = service
-				continue
-			}
-			serviceIndex[service.Name] = len(merged.Services)
-			merged.Services = append(merged.Services, service)
+			services.Set(service.Name, service)
 		}
 
 		for _, route := range cfg.Routes {
-			if idx, exists := routeIndex[route.Name]; exists {
-				merged.Routes[idx] = route
-				continue
-			}
-			routeIndex[route.Name] = len(merged.Routes)
-			merged.Routes = append(merged.Routes, route)
-		}
-
-		if cfg.ProxyEngine != "" {
-			merged.ProxyEngine = cfg.ProxyEngine
+			routes.Set(route.Name, route)
 		}
 		if cfg.Admin != nil {
 			admin := *cfg.Admin
@@ -60,5 +38,8 @@ func Merge(configs ...*Config) *Config {
 		}
 	}
 
+	merged.Entrypoints = entrypoints.Values()
+	merged.Services = services.Values()
+	merged.Routes = routes.Values()
 	return merged
 }

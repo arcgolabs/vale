@@ -6,11 +6,11 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 
 ## Current Capability
 
-- HCL file config (`entrypoint` / `service` / `route` / `proxy_engine` / `admin` / `observability` / `health`)
+- HCL file config (`entrypoint` / `service` / `route` / `admin` / `observability` / `health`)
 - Compiled snapshot + atomic hot swap
 - Compiled route index: exact-host -> wildcard-host -> path-prefix/method/header predicates
 - Round-robin and weighted round-robin endpoint picking
-- Reverse proxy engine selectable by config: `stdlib` (default) or `oxy`
+- Built-in reverse proxy engine based on `oxy`
 - File-based config watching with invalid-config rollback behavior
 - JSON access logging and Prometheus metrics
 - Admin API for routes/services/endpoints and `/metrics`
@@ -35,7 +35,7 @@ This repository includes a `go.work` file for local development and release buil
 ```bash
 go work sync
 go test ./...
-go test ./cluster/raftnode/... ./cmd/... ./events/eventx/... ./observability/prometheus/... ./provider/docker/... ./provider/file/... ./provider/fileconfig/... ./provider/k8s/... ./examples/embedded_multi_provider/... ./examples/embedded_static_config/...
+go test ./cluster/raftnode/... ./cmd/... ./observability/prometheus/... ./provider/docker/... ./provider/file/... ./provider/fileconfig/... ./provider/k8s/... ./examples/embedded_multi_provider/... ./examples/embedded_static_config/...
 go run ./cmd
 ```
 
@@ -46,14 +46,13 @@ Current workspace modules:
 - `github.com/arcgolabs/vela`: library-first core module.
 - `github.com/arcgolabs/vela/cmd`: standalone `velad` binary wiring.
 - `github.com/arcgolabs/vela/cluster/raftnode`: optional HashiCorp Raft cluster adapter.
-- `github.com/arcgolabs/vela/events/eventx`: optional arcgolabs/eventx adapter.
 - `github.com/arcgolabs/vela/observability/prometheus`: optional Prometheus metrics adapter.
 - `github.com/arcgolabs/vela/provider/docker`: optional Docker config provider.
 - `github.com/arcgolabs/vela/provider/file`: optional HCL snapshot provider.
 - `github.com/arcgolabs/vela/provider/fileconfig`: optional HCL config source provider.
 - `github.com/arcgolabs/vela/provider/k8s`: optional K8s-like config provider.
 - `github.com/arcgolabs/vela/examples/embedded_multi_provider`: example that consumes optional provider modules.
-- `github.com/arcgolabs/vela/examples/embedded_static_config`: example that consumes optional event adapter.
+- `github.com/arcgolabs/vela/examples/embedded_static_config`: example that consumes the core event bus.
 
 Local workspace modules are intentionally not declared as `replace` directives. `go.work`
 resolves them during repository development; published modules should use real released
@@ -64,8 +63,9 @@ versions when consumed outside this workspace.
 - `github.com/arcgolabs/dix`: dependency injection for `velad` daemon assembly in `cmd`.
 - `github.com/arcgolabs/logx`: structured logger construction and lifecycle.
 - `github.com/arcgolabs/configx`: bootstrap config from env/defaults.
-- `github.com/arcgolabs/eventx`: provider load/reload/failure event bus.
-- `github.com/arcgolabs/collectionx`: ordered config source registry for merge pipeline.
+- `github.com/arcgolabs/eventx`: core provider load/reload/failure event bus.
+- `github.com/arcgolabs/collectionx`: ordered config/source maps, matcher grouping, and validation sets.
+- `github.com/samber/lo` / `github.com/samber/mo`: focused collection/option helpers for repetitive glue code.
 
 `runtime` package does not depend on DI container, matching the document's "core runtime no DI" rule.
 
@@ -111,11 +111,7 @@ Or merge multiple files (later files override same-name objects):
 go run ./cmd -config-files "./base.hcl,./service.hcl,./override.hcl"
 ```
 
-You can switch proxy engine in HCL:
-
-```hcl
-proxy_engine = "stdlib" # or "oxy"
-```
+The reverse proxy engine is built in and uses `oxy`.
 
 Verify:
 

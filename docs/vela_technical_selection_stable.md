@@ -86,7 +86,7 @@ Vela 属于网络代理和控制面系统，Go 的优势比较明显：
 | 模块 | 选型 | 说明 |
 |---|---|---|
 | HTTP Server | net/http | 第一阶段定稿 |
-| Reverse Proxy | net/http/httputil.ReverseProxy | 第一阶段定稿 |
+| Reverse Proxy | oxy | 核心内置，默认唯一 engine |
 | Transport | 自定义 http.Transport 池 | 定稿 |
 | Snapshot | atomic.Pointer[*CompiledSnapshot] | 定稿 |
 | Router | 自研编译型 matcher | 定稿 |
@@ -158,7 +158,7 @@ request
 `runtime` 包只依赖：
 
 ```text
-stdlib
+stdlib + oxy reverse proxy
 config.CompiledSnapshot
 router.Matcher
 proxy.Proxy
@@ -864,9 +864,8 @@ Vela provider/plugin/admin 可以更多复用 arcgolabs
 ### 15.1 Core Runtime
 
 ```text
-stdlib:
+stdlib + oxy reverse proxy:
   net/http
-  net/http/httputil
   net
   crypto/tls
   sync/atomic
@@ -877,7 +876,7 @@ stdlib:
 原则：
 
 ```text
-core runtime 尽可能只依赖标准库
+core runtime 以标准库为主，反向代理固定使用 oxy
 ```
 
 ### 15.2 Config
@@ -1101,7 +1100,7 @@ vela/
 
   pkg/
     gateway/              # embedded API
-    runtime/              # core runtime, stdlib first
+    runtime/              # core runtime, oxy proxy engine
     router/               # rule parser + matcher compiler
     proxy/                # reverse proxy wrapper
     lb/                   # picker

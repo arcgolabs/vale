@@ -9,6 +9,7 @@ import (
 	staticprovider "github.com/arcgolabs/vela/provider/static"
 	staticconfigprovider "github.com/arcgolabs/vela/provider/staticconfig"
 	"github.com/arcgolabs/vela/runtime"
+	"github.com/samber/lo"
 )
 
 // Option configures [Config] when passed to [New]. Return a non-nil error from a custom
@@ -72,12 +73,9 @@ func WithSnapshotProvider(snapshotProvider provider.SnapshotProvider) Option {
 
 func WithConfigSourceProviders(configProviders ...provider.ConfigProvider) Option {
 	return func(cfg *Config) error {
-		nonNil := make([]provider.ConfigProvider, 0, len(configProviders))
-		for _, p := range configProviders {
-			if p != nil {
-				nonNil = append(nonNil, p)
-			}
-		}
+		nonNil := lo.Filter(configProviders, func(p provider.ConfigProvider, _ int) bool {
+			return p != nil
+		})
 		if len(nonNil) == 0 {
 			return fmt.Errorf("config source providers cannot be empty")
 		}
@@ -104,12 +102,9 @@ func WithStaticConfig(cfgData *config.Config) Option {
 
 func WithFallbackProviders(providers ...provider.SnapshotProvider) Option {
 	return func(cfg *Config) error {
-		nonNil := make([]provider.SnapshotProvider, 0, len(providers))
-		for _, p := range providers {
-			if p != nil {
-				nonNil = append(nonNil, p)
-			}
-		}
+		nonNil := lo.Filter(providers, func(p provider.SnapshotProvider, _ int) bool {
+			return p != nil
+		})
 		if len(nonNil) == 0 {
 			return fmt.Errorf("fallback providers cannot be empty")
 		}

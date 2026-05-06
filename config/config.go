@@ -4,7 +4,6 @@ type Config struct {
 	Entrypoints   []Entrypoint   `hcl:"entrypoint,block"`
 	Services      []Service      `hcl:"service,block"`
 	Routes        []Route        `hcl:"route,block"`
-	ProxyEngine   string         `hcl:"proxy_engine,optional"`
 	Admin         *Admin         `hcl:"admin,block"`
 	Observability *Observability `hcl:"observability,block"`
 	Health        *Health        `hcl:"health,block"`

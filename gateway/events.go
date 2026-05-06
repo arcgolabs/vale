@@ -1,9 +1,6 @@
 package gateway
 
 import (
-	"context"
-
-	"github.com/arcgolabs/vela/provider"
 )
 
 const EventNameStaticRuntimeConfigChanged = "gateway.static_runtime_config.changed"
@@ -16,14 +13,4 @@ type StaticRuntimeConfigChangedEvent struct {
 
 func (e StaticRuntimeConfigChangedEvent) Name() string {
 	return EventNameStaticRuntimeConfigChanged
-}
-
-type noopEventBus struct{}
-
-func (noopEventBus) Publish(context.Context, provider.Event) error {
-	return nil
-}
-
-func (noopEventBus) Close() error {
-	return nil
 }

@@ -2,7 +2,6 @@ package config
 
 func Default() *Config {
 	return &Config{
-		ProxyEngine: "stdlib",
 		Entrypoints: []Entrypoint{
 			{Name: "web", Address: ":8080"},
 		},

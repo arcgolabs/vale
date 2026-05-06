@@ -2,8 +2,6 @@ entrypoint "web" {
   address = ":8080"
 }
 
-proxy_engine = "stdlib"
-
 admin {
   address = ":19090"
 }
