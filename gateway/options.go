@@ -11,6 +11,7 @@ import (
 	"github.com/arcgolabs/vela/runtime"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/observabilityx"
 )
 
 // Option configures [Config] when passed to [New]. Return a non-nil error from a custom
@@ -40,6 +41,16 @@ func WithMetricsFactory(factory MetricsFactory) Option {
 			return fmt.Errorf("metrics factory cannot be nil")
 		}
 		cfg.Metrics = factory
+		return nil
+	}
+}
+
+func WithObservability(obs observabilityx.Observability) Option {
+	return func(cfg *Config) error {
+		if obs == nil {
+			return fmt.Errorf("observability cannot be nil")
+		}
+		cfg.Observability = obs
 		return nil
 	}
 }

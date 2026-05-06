@@ -10,12 +10,12 @@ require (
 	github.com/arcgolabs/collectionx/prefix v0.7.0
 	github.com/arcgolabs/collectionx/set v0.7.0
 	github.com/arcgolabs/eventx v0.1.2
+	github.com/arcgolabs/observabilityx v0.4.0
 	github.com/samber/mo v1.16.0
 	github.com/vulcand/oxy/v2 v2.1.0
 )
 
 require (
-	github.com/arcgolabs/observabilityx v0.4.0 // indirect
 	github.com/arcgolabs/pkg/option v0.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect

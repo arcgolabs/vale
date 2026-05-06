@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/gateway"
 	"github.com/arcgolabs/vela/provider"
@@ -148,13 +149,18 @@ func WithConfigFiles(paths ...string) gateway.Option {
 		if len(paths) == 0 {
 			return fmt.Errorf("config files cannot be empty")
 		}
-		providers := make([]provider.ConfigProvider, 0, len(paths))
-		for _, path := range paths {
-			if path == "" {
-				return fmt.Errorf("config file path cannot be empty")
-			}
-			providers = append(providers, New(path))
+		pathList := collectionlist.NewList(paths...)
+		if pathList.AnyMatch(func(_ int, path string) bool {
+			return path == ""
+		}) {
+			return fmt.Errorf("config file path cannot be empty")
 		}
+		providers := collectionlist.MapList(
+			pathList,
+			func(_ int, path string) provider.ConfigProvider {
+				return New(path)
+			},
+		).Values()
 		cfg.ConfigSource = providers
 		cfg.Provider = nil
 		return nil

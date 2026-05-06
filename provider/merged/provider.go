@@ -119,6 +119,9 @@ func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSna
 			onError(fmt.Errorf("config provider[%s] watch error: %w", sourceName, err))
 		})
 		if err != nil {
+			if p.logger != nil {
+				p.logger.Error("config source watch setup failed", "source", sourceName, "error", err)
+			}
 			p.publish(ctx, provider.WatchSetupFailedEvent{
 				Source: sourceName,
 				Error:  err.Error(),

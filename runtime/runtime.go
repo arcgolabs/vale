@@ -1,15 +1,18 @@
 package runtime
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/arcgolabs/collectionx/bitset"
+	"github.com/arcgolabs/observabilityx"
 )
 
 type CompiledSnapshot struct {
@@ -256,4 +259,70 @@ func (noopMetrics) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "metrics unavailable", http.StatusNotFound)
 	})
+}
+
+type observabilityMetrics struct {
+	enabled  bool
+	requests observabilityx.Counter
+	latency  observabilityx.Histogram
+	handler  http.Handler
+}
+
+type metricsHandler interface {
+	Handler() http.Handler
+}
+
+func NewObservabilityMetrics(enabled bool, obs observabilityx.Observability, handler http.Handler) MetricsRecorder {
+	if obs == nil {
+		obs = observabilityx.Nop()
+	}
+	if handler == nil {
+		if h, ok := obs.(metricsHandler); ok {
+			handler = h.Handler()
+		}
+	}
+	if handler == nil {
+		handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "metrics unavailable", http.StatusNotFound)
+		})
+	}
+	return &observabilityMetrics{
+		enabled: enabled,
+		requests: obs.Counter(observabilityx.NewCounterSpec("vela_http_requests_total",
+			observabilityx.WithDescription("Total HTTP requests handled by vela."),
+			observabilityx.WithLabelKeys("route", "service", "endpoint", "status"),
+		)),
+		latency: obs.Histogram(observabilityx.NewHistogramSpec("vela_http_request_duration_seconds",
+			observabilityx.WithDescription("HTTP request duration in seconds."),
+			observabilityx.WithUnit("s"),
+			observabilityx.WithLabelKeys("route", "service"),
+		)),
+		handler: handler,
+	}
+}
+
+func (m *observabilityMetrics) Observe(route *CompiledRoute, endpoint *EndpointRuntime, status int, duration time.Duration) {
+	if !m.enabled {
+		return
+	}
+	ctx := context.Background()
+	m.requests.Add(ctx, 1,
+		observabilityx.String("route", route.Name),
+		observabilityx.String("service", route.Service.Name),
+		observabilityx.String("endpoint", endpoint.URL.String()),
+		observabilityx.String("status", strconv.Itoa(status)),
+	)
+	m.latency.Record(ctx, duration.Seconds(),
+		observabilityx.String("route", route.Name),
+		observabilityx.String("service", route.Service.Name),
+	)
+}
+
+func (m *observabilityMetrics) Handler() http.Handler {
+	if !m.enabled {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "metrics disabled", http.StatusNotFound)
+		})
+	}
+	return m.handler
 }

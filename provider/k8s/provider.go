@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -39,6 +40,7 @@ type Provider struct {
 	name    string
 	source  Source
 	options Options
+	logger  *slog.Logger
 }
 
 type Options struct {
@@ -71,6 +73,10 @@ func New(name string, source Source, options Options) *Provider {
 	}
 }
 
+func (p *Provider) SetLogger(logger *slog.Logger) {
+	p.logger = logger
+}
+
 func (p *Provider) Name() string {
 	return p.name
 }
@@ -82,28 +88,30 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 
 	routes, err := p.source.ListRoutes(ctx)
 	if err != nil {
+		if p.logger != nil {
+			p.logger.Error("k8s route list failed", "provider", p.name, "error", err)
+		}
 		return nil, err
 	}
 	endpoints, err := p.source.ListEndpoints(ctx)
 	if err != nil {
+		if p.logger != nil {
+			p.logger.Error("k8s endpoint list failed", "provider", p.name, "error", err)
+		}
 		return nil, err
 	}
-
-	cfg := &config.Config{
-		Entrypoints: []config.Entrypoint{
-			{
-				Name:    p.options.DefaultEntrypointName,
-				Address: p.options.DefaultEntrypointAddr,
-			},
-		},
-		Services: make([]config.Service, 0),
-		Routes:   make([]config.Route, 0),
+	if p.logger != nil {
+		p.logger.Info("k8s resources listed", "provider", p.name, "routes", len(routes), "endpoints", len(endpoints))
 	}
 
+	cfg := provider.NewEntrypointConfig(p.options.DefaultEntrypointName, p.options.DefaultEntrypointAddr)
+
 	serviceMap := mapping.NewMap[string, *config.Service]()
+	invalidEndpointCount := 0
 	for _, endpoint := range endpoints {
 		serviceName := strings.TrimSpace(endpoint.Service)
 		if serviceName == "" || endpoint.URL == "" {
+			invalidEndpointCount++
 			continue
 		}
 		service, _ := serviceMap.GetOrCompute(serviceName, func() *config.Service {
@@ -123,6 +131,7 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 		})
 	}
 
+	invalidRouteCount := 0
 	for _, route := range routes {
 		entrypoint := route.Entrypoint
 		if strings.TrimSpace(entrypoint) == "" {
@@ -130,6 +139,7 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 		}
 		method := strings.TrimSpace(route.Method)
 		if strings.TrimSpace(route.Name) == "" || strings.TrimSpace(route.Service) == "" {
+			invalidRouteCount++
 			continue
 		}
 		cfg.Routes = append(cfg.Routes, config.Route{
@@ -143,16 +153,27 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 		})
 	}
 
-	for _, serviceName := range provider.SortedStrings(serviceMap.Keys()) {
-		service, _ := serviceMap.Get(serviceName)
-		cfg.Services = append(cfg.Services, *service)
-	}
+	provider.AppendSortedServices(cfg, serviceMap)
 	slices.SortStableFunc(cfg.Routes, func(i, j config.Route) int {
 		return strings.Compare(i.Name, j.Name)
 	})
 
 	if err := config.Validate(cfg); err != nil {
+		if p.logger != nil {
+			p.logger.Error("k8s config validation failed", "provider", p.name, "error", err)
+		}
 		return nil, err
+	}
+	if p.logger != nil {
+		p.logger.Info("k8s config built",
+			"provider", p.name,
+			"routes_seen", len(routes),
+			"endpoints_seen", len(endpoints),
+			"invalid_routes", invalidRouteCount,
+			"invalid_endpoints", invalidEndpointCount,
+			"services", len(cfg.Services),
+			"routes", len(cfg.Routes),
+		)
 	}
 	return cfg, nil
 }

@@ -8,6 +8,7 @@ package vela
 import (
 	"log/slog"
 
+	"github.com/arcgolabs/observabilityx"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/gateway"
 	"github.com/arcgolabs/vela/provider"
@@ -67,6 +68,10 @@ func WithClusterFactory(factory gateway.ClusterFactory) Option {
 
 func WithMetricsFactory(factory gateway.MetricsFactory) Option {
 	return gateway.WithMetricsFactory(factory)
+}
+
+func WithObservability(obs observabilityx.Observability) Option {
+	return gateway.WithObservability(obs)
 }
 
 func WithLogger(logger *slog.Logger) Option {

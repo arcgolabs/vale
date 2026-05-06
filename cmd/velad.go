@@ -3,7 +3,6 @@
 package main
 
 import (
-	"context"
 	"log/slog"
 	"strings"
 
@@ -17,7 +16,6 @@ import (
 	"github.com/spf13/pflag"
 
 	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
-	providerevents "github.com/arcgolabs/vela/provider"
 	fileconfig "github.com/arcgolabs/vela/provider/fileconfig"
 )
 
@@ -85,38 +83,6 @@ func veladStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
 				return vela.New(opts...)
 			}),
 		),
-		dix.Invokes(dix.Invoke2(func(bus eventx.BusRuntime, logger *slog.Logger) {
-			if _, err := eventx.Subscribe[providerevents.ConfigSourceLoadedEvent](bus, func(_ context.Context, event providerevents.ConfigSourceLoadedEvent) error {
-				logger.Info("config source loaded", "source", event.Source, "duration", event.Duration, "size", event.ConfigSize)
-				return nil
-			}); err != nil {
-				logger.Error("failed to subscribe provider event", "event", providerevents.EventNameConfigSourceLoaded, "error", err)
-			}
-			if _, err := eventx.Subscribe[providerevents.ConfigSourceFailedEvent](bus, func(_ context.Context, event providerevents.ConfigSourceFailedEvent) error {
-				logger.Error("config source load failed", "source", event.Source, "error", event.Error)
-				return nil
-			}); err != nil {
-				logger.Error("failed to subscribe provider event", "event", providerevents.EventNameConfigSourceFailed, "error", err)
-			}
-			if _, err := eventx.Subscribe[providerevents.ConfigSourceChangedEvent](bus, func(_ context.Context, event providerevents.ConfigSourceChangedEvent) error {
-				logger.Info("config source changed", "source", event.Source)
-				return nil
-			}); err != nil {
-				logger.Error("failed to subscribe provider event", "event", providerevents.EventNameConfigSourceChanged, "error", err)
-			}
-			if _, err := eventx.Subscribe[providerevents.SnapshotRecompiledEvent](bus, func(_ context.Context, event providerevents.SnapshotRecompiledEvent) error {
-				logger.Info("snapshot recompiled", "sources", event.SourceCount, "routes", event.RouteCount, "services", event.ServiceCount)
-				return nil
-			}); err != nil {
-				logger.Error("failed to subscribe provider event", "event", providerevents.EventNameSnapshotRecompiled, "error", err)
-			}
-			if _, err := eventx.Subscribe[providerevents.WatchSetupFailedEvent](bus, func(_ context.Context, event providerevents.WatchSetupFailedEvent) error {
-				logger.Error("watch setup failed", "source", event.Source, "error", event.Error)
-				return nil
-			}); err != nil {
-				logger.Error("failed to subscribe provider event", "event", providerevents.EventNameWatchSetupFailed, "error", err)
-			}
-		})),
 	))
 }
 

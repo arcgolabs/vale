@@ -29,9 +29,8 @@ type wildcardBucket struct {
 }
 
 type routeBucket struct {
-	pathRoutes   *prefix.Trie[[]*CompiledRoute]
-	pathPrefixes []string
-	fallback     []*CompiledRoute
+	pathRoutes *prefix.Trie[[]*CompiledRoute]
+	fallback   []*CompiledRoute
 }
 
 func BuildEntrypointMatcher(routes []*CompiledRoute) *EntrypointMatcher {
@@ -188,9 +187,6 @@ func (b *routeBucket) Add(route *CompiledRoute) {
 		return
 	}
 	routes, _ := b.pathRoutes.Get(route.PathPrefix)
-	if len(routes) == 0 {
-		b.pathPrefixes = append(b.pathPrefixes, route.PathPrefix)
-	}
 	b.pathRoutes.Put(route.PathPrefix, append(routes, route))
 }
 
@@ -198,14 +194,11 @@ func (b *routeBucket) Sort() {
 	if b == nil {
 		return
 	}
-	sort.Slice(b.pathPrefixes, func(i, j int) bool {
-		return len(b.pathPrefixes[i]) > len(b.pathPrefixes[j])
-	})
-	for _, pathPrefix := range b.pathPrefixes {
-		routes, _ := b.pathRoutes.Get(pathPrefix)
+	b.pathRoutes.RangePrefix("", func(pathPrefix string, routes []*CompiledRoute) bool {
 		sortRoutesByPriority(routes)
 		b.pathRoutes.Put(pathPrefix, routes)
-	}
+		return true
+	})
 	sortRoutesByPriority(b.fallback)
 }
 
@@ -213,16 +206,25 @@ func (b *routeBucket) Match(path string, method string, headers http.Header) *Co
 	if b == nil {
 		return nil
 	}
-	for _, pathPrefix := range b.pathPrefixes {
-		if !strings.HasPrefix(path, pathPrefix) {
-			continue
+	for probe := path; probe != ""; {
+		pathPrefix, routes, ok := b.pathRoutes.LongestPrefix(probe)
+		if !ok {
+			break
 		}
-		routes, _ := b.pathRoutes.Get(pathPrefix)
 		if route := matchWithPredicates(routes, path, method, headers); route != nil {
 			return route
 		}
+		probe = trimLastRune(pathPrefix)
 	}
 	return matchWithPredicates(b.fallback, path, method, headers)
+}
+
+func trimLastRune(value string) string {
+	runes := []rune(value)
+	if len(runes) == 0 {
+		return ""
+	}
+	return string(runes[:len(runes)-1])
 }
 
 func hasPredicate(route *CompiledRoute, predicate int) bool {

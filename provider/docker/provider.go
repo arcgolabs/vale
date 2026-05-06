@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ type Provider struct {
 	name    string
 	source  Source
 	options Options
+	logger  *slog.Logger
 }
 
 type Options struct {
@@ -62,6 +64,10 @@ func New(name string, source Source, options Options) *Provider {
 	}
 }
 
+func (p *Provider) SetLogger(logger *slog.Logger) {
+	p.logger = logger
+}
+
 func NewFromEnv(name string, options Options) (*Provider, error) {
 	source, err := NewDockerSourceFromEnv()
 	if err != nil {
@@ -80,29 +86,30 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 	}
 	containers, err := p.source.ListContainers(ctx)
 	if err != nil {
+		if p.logger != nil {
+			p.logger.Error("docker source list failed", "provider", p.name, "error", err)
+		}
 		return nil, err
 	}
-
-	cfg := &config.Config{
-		Entrypoints: []config.Entrypoint{
-			{
-				Name:    p.options.DefaultEntrypointName,
-				Address: p.options.DefaultEntrypointAddr,
-			},
-		},
-		Services: make([]config.Service, 0),
-		Routes:   make([]config.Route, 0),
+	if p.logger != nil {
+		p.logger.Info("docker containers listed", "provider", p.name, "containers", len(containers))
 	}
+
+	cfg := provider.NewEntrypointConfig(p.options.DefaultEntrypointName, p.options.DefaultEntrypointAddr)
 
 	serviceMap := mapping.NewMap[string, *config.Service]()
 	routeMap := mapping.NewMap[string, config.Route]()
+	disabledCount := 0
+	invalidEndpointCount := 0
 
 	for _, container := range containers {
 		labels := container.Labels
 		if !parseBool(labels["vela.enable"], false) {
+			disabledCount++
 			continue
 		}
 		if container.Address == "" || container.Port <= 0 {
+			invalidEndpointCount++
 			continue
 		}
 
@@ -140,17 +147,24 @@ func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 		}
 	}
 
-	for _, serviceName := range provider.SortedStrings(serviceMap.Keys()) {
-		service, _ := serviceMap.Get(serviceName)
-		cfg.Services = append(cfg.Services, *service)
-	}
-	for _, routeName := range provider.SortedStrings(routeMap.Keys()) {
-		route, _ := routeMap.Get(routeName)
-		cfg.Routes = append(cfg.Routes, route)
-	}
+	provider.AppendSortedServices(cfg, serviceMap)
+	provider.AppendSortedRoutes(cfg, routeMap)
 
 	if err := config.Validate(cfg); err != nil {
+		if p.logger != nil {
+			p.logger.Error("docker config validation failed", "provider", p.name, "error", err)
+		}
 		return nil, err
+	}
+	if p.logger != nil {
+		p.logger.Info("docker config built",
+			"provider", p.name,
+			"containers", len(containers),
+			"disabled", disabledCount,
+			"invalid_endpoints", invalidEndpointCount,
+			"services", len(cfg.Services),
+			"routes", len(cfg.Routes),
+		)
 	}
 	return cfg, nil
 }

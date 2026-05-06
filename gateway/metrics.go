@@ -1,12 +1,16 @@
 package gateway
 
-import "github.com/arcgolabs/vela/runtime"
+import (
+	"log/slog"
 
-type MetricsFactory func(enabled bool) runtime.MetricsRecorder
+	"github.com/arcgolabs/vela/runtime"
+)
+
+type MetricsFactory func(enabled bool, logger *slog.Logger) runtime.MetricsRecorder
 
 func (g *Gateway) buildMetrics(enabled bool) runtime.MetricsRecorder {
 	if g.config.Metrics == nil {
-		return runtime.NewNoopMetrics()
+		return runtime.NewObservabilityMetrics(enabled, g.config.Observability, nil)
 	}
-	return g.config.Metrics(enabled)
+	return g.config.Metrics(enabled, g.logger)
 }

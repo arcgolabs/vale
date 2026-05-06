@@ -14,6 +14,7 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/eventx"
+	"github.com/arcgolabs/observabilityx"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
 	mergedprovider "github.com/arcgolabs/vela/provider/merged"
@@ -24,14 +25,15 @@ import (
 
 // Config holds construction-time settings for Gateway.
 type Config struct {
-	Watch        bool
-	Cluster      ClusterFactory
-	Logger       *slog.Logger
-	EventBus     provider.EventBus
-	Provider     provider.SnapshotProvider
-	ConfigSource []provider.ConfigProvider
-	Metrics      MetricsFactory
-	OnWatchError func(error)
+	Watch         bool
+	Cluster       ClusterFactory
+	Logger        *slog.Logger
+	EventBus      provider.EventBus
+	Observability observabilityx.Observability
+	Provider      provider.SnapshotProvider
+	ConfigSource  []provider.ConfigProvider
+	Metrics       MetricsFactory
+	OnWatchError  func(error)
 }
 
 // DefaultConfig returns defaults used by New/NewFromConfig when paths or watch are unspecified.
@@ -95,6 +97,7 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
+	cfg.Observability = observabilityx.Normalize(cfg.Observability, cfg.Logger)
 	ownsBus := false
 	if cfg.EventBus == nil {
 		cfg.EventBus = eventx.New()
