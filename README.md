@@ -64,7 +64,7 @@ versions when consumed outside this workspace.
 - `github.com/arcgolabs/logx`: structured logger construction and lifecycle.
 - `github.com/arcgolabs/configx`: bootstrap config from env/defaults.
 - `github.com/arcgolabs/eventx`: core provider load/reload/failure event bus.
-- `github.com/arcgolabs/collectionx`: list/set/map abstractions for config assembly, matcher grouping, and validation.
+- `github.com/arcgolabs/collectionx`: list/set/map abstractions for config assembly, matcher grouping, and validation; prefix trie for path route buckets; bitset for compiled route predicates; graph for config reference validation.
 
 `runtime` package does not depend on DI container, matching the document's "core runtime no DI" rule.
 

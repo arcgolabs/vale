@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arcgolabs/collectionx/bitset"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/proxy"
@@ -74,6 +75,7 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 			Method:     strings.ToUpper(strings.TrimSpace(route.Method)),
 			Headers:    headerMap.All(),
 			Service:    service,
+			Predicates: compileRoutePredicates(route),
 		})
 	}
 	routes := routesByEntrypoint.All()
@@ -96,6 +98,23 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 		ProxyEngine:        proxy.DefaultEngine.Name(),
 		BuiltAt:            time.Now(),
 	}, nil
+}
+
+func compileRoutePredicates(route config.Route) *bitset.BitSet {
+	predicates := bitset.New()
+	if strings.TrimSpace(route.Host) != "" {
+		predicates.Set(runtime.PredicateHost)
+	}
+	if strings.TrimSpace(route.PathPrefix) != "" {
+		predicates.Set(runtime.PredicatePathPrefix)
+	}
+	if strings.TrimSpace(route.Method) != "" {
+		predicates.Set(runtime.PredicateMethod)
+	}
+	if len(route.Headers) > 0 {
+		predicates.Set(runtime.PredicateHeaders)
+	}
+	return predicates
 }
 
 func pickAdminAddress(cfg *config.Config) string {

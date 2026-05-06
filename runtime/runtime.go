@@ -8,6 +8,8 @@ import (
 	"slices"
 	"sync/atomic"
 	"time"
+
+	"github.com/arcgolabs/collectionx/bitset"
 )
 
 type CompiledSnapshot struct {
@@ -32,6 +34,7 @@ type CompiledRoute struct {
 	Method     string
 	Headers    map[string]string
 	Service    *ServiceRuntime
+	Predicates *bitset.BitSet
 }
 
 type ServiceRuntime struct {

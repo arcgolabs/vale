@@ -4,7 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	collectiongraph "github.com/arcgolabs/collectionx/graph"
 	collectionset "github.com/arcgolabs/collectionx/set"
+)
+
+const (
+	configNodeEntrypoint = "entrypoint:"
+	configNodeRoute      = "route:"
+	configNodeService    = "service:"
 )
 
 func Validate(cfg *Config) error {
@@ -48,6 +55,15 @@ func Validate(cfg *Config) error {
 	}
 
 	routeSet := collectionset.NewSetWithCapacity[string](len(cfg.Routes))
+	refGraph := collectiongraph.NewDirectedGraph[string, string]()
+	entrypointSet.Range(func(name string) bool {
+		refGraph.AddNode(configNodeEntrypoint+name, "entrypoint")
+		return true
+	})
+	serviceSet.Range(func(name string) bool {
+		refGraph.AddNode(configNodeService+name, "service")
+		return true
+	})
 	for _, route := range cfg.Routes {
 		if route.Name == "" {
 			return fmt.Errorf("route name cannot be empty")
@@ -55,12 +71,18 @@ func Validate(cfg *Config) error {
 		if routeSet.Contains(route.Name) {
 			return fmt.Errorf("duplicated route %q", route.Name)
 		}
-		if !entrypointSet.Contains(route.Entrypoint) {
+		routeNode := configNodeRoute + route.Name
+		entrypointNode := configNodeEntrypoint + route.Entrypoint
+		serviceNode := configNodeService + route.Service
+		refGraph.AddNode(routeNode, "route")
+		if !refGraph.HasNode(entrypointNode) {
 			return fmt.Errorf("route %q references unknown entrypoint %q", route.Name, route.Entrypoint)
 		}
-		if !serviceSet.Contains(route.Service) {
+		if !refGraph.HasNode(serviceNode) {
 			return fmt.Errorf("route %q references unknown service %q", route.Name, route.Service)
 		}
+		_ = refGraph.AddEdge(routeNode, entrypointNode)
+		_ = refGraph.AddEdge(routeNode, serviceNode)
 		route.Method = strings.ToUpper(route.Method)
 		routeSet.Add(route.Name)
 	}

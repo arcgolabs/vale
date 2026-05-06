@@ -3,8 +3,11 @@ module github.com/arcgolabs/vela
 go 1.26.2
 
 require (
+	github.com/arcgolabs/collectionx/bitset v0.7.0
+	github.com/arcgolabs/collectionx/graph v0.7.0
 	github.com/arcgolabs/collectionx/list v0.7.0
 	github.com/arcgolabs/collectionx/mapping v0.7.0
+	github.com/arcgolabs/collectionx/prefix v0.7.0
 	github.com/arcgolabs/collectionx/set v0.7.0
 	github.com/arcgolabs/eventx v0.1.2
 	github.com/vulcand/oxy/v2 v2.1.0
