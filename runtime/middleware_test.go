@@ -45,3 +45,27 @@ func TestWrapMiddlewares(t *testing.T) {
 		t.Fatalf("response header = %q, want set", rec.Header().Get("X-Response"))
 	}
 }
+
+func TestMiddlewareRegistryUsesCustomFactory(t *testing.T) {
+	t.Parallel()
+
+	registry := NewMiddlewareRegistry()
+	if err := registry.Register("mark", func(next http.Handler, middleware MiddlewareRuntime) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Header.Set("X-Middleware", middleware.Name)
+			next.ServeHTTP(w, r)
+		})
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := WrapMiddlewaresWithRegistry(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-Middleware"); got != "custom" {
+			t.Fatalf("header = %q, want custom", got)
+		}
+	}), collectionlist.NewList[MiddlewareRuntime](
+		MiddlewareRuntime{Name: "custom", Type: "mark"},
+	), registry)
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "http://example.com/", nil))
+}

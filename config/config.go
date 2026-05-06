@@ -55,6 +55,7 @@ type Route struct {
 
 type Middleware struct {
 	Name            string            `hcl:",label"`
+	Type            string            `hcl:"type,optional"`
 	StripPrefix     string            `hcl:"strip_prefix,optional"`
 	AddPrefix       string            `hcl:"add_prefix,optional"`
 	RequestHeaders  map[string]string `hcl:"request_headers,optional"`

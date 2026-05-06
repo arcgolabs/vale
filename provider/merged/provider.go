@@ -6,10 +6,12 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
+	collectionset "github.com/arcgolabs/collectionx/set"
 	"github.com/arcgolabs/vela/compiler"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
@@ -22,9 +24,12 @@ type Source struct {
 }
 
 type Provider struct {
-	sources *mapping.OrderedMap[string, provider.ConfigProvider]
-	bus     provider.EventBus
-	logger  *slog.Logger
+	sources         *mapping.OrderedMap[string, provider.ConfigProvider]
+	bus             provider.EventBus
+	logger          *slog.Logger
+	mu              sync.Mutex
+	lastFingerprint string
+	reloadDebounce  time.Duration
 }
 
 func New(bus provider.EventBus, sources ...Source) *Provider {
@@ -44,9 +49,10 @@ func NewWithLogger(bus provider.EventBus, logger *slog.Logger, sources ...Source
 		orderedSources.Set(name, source.Provider)
 	}
 	return &Provider{
-		sources: orderedSources,
-		bus:     bus,
-		logger:  logger,
+		sources:        orderedSources,
+		bus:            bus,
+		logger:         logger,
+		reloadDebounce: 200 * time.Millisecond,
 	}
 }
 
@@ -59,11 +65,7 @@ func (p *Provider) Load(ctx context.Context) (*runtime.CompiledSnapshot, error) 
 	if p.logger != nil {
 		p.logger.Info("loading merged config", "sources", sourceCount)
 	}
-	cfg, err := p.loadMergedConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-	snapshot, compileErr := compiler.Compile(cfg)
+	snapshot, fingerprint, compileErr := p.loadSnapshot(ctx)
 	if compileErr != nil {
 		if p.logger != nil {
 			p.logger.Error("compile merged config failed", "error", compileErr)
@@ -78,10 +80,12 @@ func (p *Provider) Load(ctx context.Context) (*runtime.CompiledSnapshot, error) 
 			"routes", snapshot.Routes().Len(),
 		)
 	}
+	p.storeFingerprint(fingerprint)
 	p.publish(ctx, provider.SnapshotRecompiledEvent{
 		SourceCount:  sourceCount,
 		RouteCount:   snapshot.Routes().Len(),
 		ServiceCount: snapshot.ServicesView().Len(),
+		Fingerprint:  fingerprint,
 	})
 	return snapshot, nil
 }
@@ -91,32 +95,22 @@ func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSna
 		return nil, fmt.Errorf("merged provider has no config providers")
 	}
 
-	closers := collectionlist.NewListWithCapacity[io.Closer](p.sources.Len())
+	watchCtx, cancel := context.WithCancel(ctx)
+	changes := make(chan string, 32)
+	sourceClosers := collectionlist.NewListWithCapacity[io.Closer](p.sources.Len())
 	setupFailed := false
-	reload := func(sourceName string) {
-		if p.logger != nil {
-			p.logger.Info("config source changed", "source", sourceName)
-		}
-		p.publish(ctx, provider.ConfigSourceChangedEvent{Source: sourceName})
-		snapshot, err := p.Load(ctx)
-		if err != nil {
-			if p.logger != nil {
-				p.logger.Error("reload merged snapshot failed", "source", sourceName, "error", err)
-			}
-			onError(err)
-			return
-		}
-		if p.logger != nil {
-			p.logger.Info("merged snapshot reloaded", "source", sourceName, "built_at", snapshot.BuiltAt)
-		}
-		onReload(snapshot)
-	}
+	go p.runReloadLoop(watchCtx, changes, onReload, onError)
 
 	p.sources.Range(func(sourceName string, configProvider provider.ConfigProvider) bool {
 		if p.logger != nil {
 			p.logger.Info("watching config source", "source", sourceName)
 		}
-		closer, err := configProvider.Watch(ctx, func() { reload(sourceName) }, func(err error) {
+		closer, err := configProvider.Watch(watchCtx, func() {
+			select {
+			case changes <- sourceName:
+			case <-watchCtx.Done():
+			}
+		}, func(err error) {
 			onError(fmt.Errorf("config provider[%s] watch error: %w", sourceName, err))
 		})
 		if err != nil {
@@ -127,10 +121,11 @@ func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSna
 				Source: sourceName,
 				Error:  err.Error(),
 			})
-			closers.Range(func(_ int, c io.Closer) bool {
+			sourceClosers.Range(func(_ int, c io.Closer) bool {
 				_ = c.Close()
 				return true
 			})
+			cancel()
 			onError(fmt.Errorf("config provider[%s] watch setup failed: %w", sourceName, err))
 			setupFailed = true
 			return false
@@ -138,13 +133,32 @@ func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSna
 		if p.logger != nil {
 			p.logger.Info("config source watcher ready", "source", sourceName)
 		}
-		closers.Add(closer)
+		sourceClosers.Add(closer)
 		return true
 	})
-	if setupFailed || closers.IsEmpty() {
+	if setupFailed || sourceClosers.IsEmpty() {
 		return nil, fmt.Errorf("merged provider failed to setup any watcher")
 	}
-	return provider.MultiCloser(closers.Values()), nil
+	return provider.NewOnceCloser(func() {
+		cancel()
+		_ = provider.MultiCloser(sourceClosers.Values()).Close()
+	}), nil
+}
+
+func (p *Provider) loadSnapshot(ctx context.Context) (*runtime.CompiledSnapshot, string, error) {
+	cfg, err := p.loadMergedConfig(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	fingerprint, err := config.Fingerprint(cfg)
+	if err != nil {
+		return nil, "", err
+	}
+	snapshot, err := compiler.Compile(cfg)
+	if err != nil {
+		return nil, "", err
+	}
+	return snapshot, fingerprint, nil
 }
 
 func (p *Provider) loadMergedConfig(ctx context.Context) (*config.Config, error) {
@@ -196,6 +210,80 @@ func (p *Provider) loadMergedConfig(ctx context.Context) (*config.Config, error)
 		return nil, err
 	}
 	return merged, nil
+}
+
+func (p *Provider) runReloadLoop(ctx context.Context, changes <-chan string, onReload func(*runtime.CompiledSnapshot), onError func(error)) {
+	pending := collectionset.NewSet[string]()
+	timer := time.NewTimer(time.Hour)
+	if !timer.Stop() {
+		<-timer.C
+	}
+	timerActive := false
+	for {
+		select {
+		case <-ctx.Done():
+			if timerActive {
+				timer.Stop()
+			}
+			return
+		case sourceName := <-changes:
+			pending.Add(sourceName)
+			if !timerActive {
+				timer.Reset(p.reloadDebounce)
+				timerActive = true
+			}
+		case <-timer.C:
+			timerActive = false
+			sourceNames := provider.SortedStrings(pending.Values())
+			pending.Clear()
+			p.reloadNow(ctx, strings.Join(sourceNames, ","), onReload, onError)
+		}
+	}
+}
+
+func (p *Provider) reloadNow(ctx context.Context, sourceName string, onReload func(*runtime.CompiledSnapshot), onError func(error)) {
+	if p.logger != nil {
+		p.logger.Info("config source changed", "source", sourceName)
+	}
+	p.publish(ctx, provider.ConfigSourceChangedEvent{Source: sourceName})
+	snapshot, fingerprint, err := p.loadSnapshot(ctx)
+	if err != nil {
+		if p.logger != nil {
+			p.logger.Error("reload merged snapshot failed", "source", sourceName, "error", err)
+		}
+		onError(err)
+		return
+	}
+	if p.isSameFingerprint(fingerprint) {
+		if p.logger != nil {
+			p.logger.Info("merged snapshot unchanged", "source", sourceName, "fingerprint", fingerprint)
+		}
+		p.publish(ctx, provider.SnapshotUnchangedEvent{Source: sourceName, Fingerprint: fingerprint})
+		return
+	}
+	p.storeFingerprint(fingerprint)
+	p.publish(ctx, provider.SnapshotRecompiledEvent{
+		SourceCount:  p.sourceCount(),
+		RouteCount:   snapshot.Routes().Len(),
+		ServiceCount: snapshot.ServicesView().Len(),
+		Fingerprint:  fingerprint,
+	})
+	if p.logger != nil {
+		p.logger.Info("merged snapshot reloaded", "source", sourceName, "built_at", snapshot.BuiltAt, "fingerprint", fingerprint)
+	}
+	onReload(snapshot)
+}
+
+func (p *Provider) storeFingerprint(fingerprint string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.lastFingerprint = fingerprint
+}
+
+func (p *Provider) isSameFingerprint(fingerprint string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return fingerprint != "" && fingerprint == p.lastFingerprint
 }
 
 func (p *Provider) publish(ctx context.Context, event provider.Event) {

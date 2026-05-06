@@ -44,7 +44,7 @@ func (h *HealthChecker) Start(gateway *Gateway) {
 		for {
 			select {
 			case <-ticker.C:
-				h.check(gateway.Snapshot())
+				h.check(gateway)
 			case <-h.stop:
 				return
 			}
@@ -56,7 +56,11 @@ func (h *HealthChecker) Stop() {
 	close(h.stop)
 }
 
-func (h *HealthChecker) check(snapshot *CompiledSnapshot) {
+func (h *HealthChecker) check(gateway *Gateway) {
+	if gateway == nil {
+		return
+	}
+	snapshot := gateway.Snapshot()
 	if snapshot == nil {
 		return
 	}
@@ -66,17 +70,21 @@ func (h *HealthChecker) check(snapshot *CompiledSnapshot) {
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.URL.String(), nil)
 			if err != nil {
 				h.setEndpointHealth(endpoint, false, "request_build_failed", err)
+				gateway.ObserveHealth(endpoint, false)
 				cancel()
 				return true
 			}
 			resp, err := h.client.Do(req)
 			if err != nil {
 				h.setEndpointHealth(endpoint, false, "request_failed", err)
+				gateway.ObserveHealth(endpoint, false)
 				cancel()
 				return true
 			}
 			_ = resp.Body.Close()
-			h.setEndpointHealth(endpoint, resp.StatusCode < http.StatusInternalServerError, "status_checked", nil)
+			healthy := resp.StatusCode < http.StatusInternalServerError
+			h.setEndpointHealth(endpoint, healthy, "status_checked", nil)
+			gateway.ObserveHealth(endpoint, healthy)
 			endpoint.LastChecked.Store(time.Now().Unix())
 			cancel()
 			return true

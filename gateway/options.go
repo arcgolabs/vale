@@ -45,6 +45,16 @@ func WithMetricsFactory(factory MetricsFactory) Option {
 	}
 }
 
+func WithMiddlewareRegistry(registry *runtime.MiddlewareRegistry) Option {
+	return func(cfg *Config) error {
+		if registry == nil {
+			return fmt.Errorf("middleware registry cannot be nil")
+		}
+		cfg.Middleware = registry
+		return nil
+	}
+}
+
 func WithObservability(obs observabilityx.Observability) Option {
 	return func(cfg *Config) error {
 		if obs == nil {

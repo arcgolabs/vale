@@ -70,3 +70,37 @@ func TestCompileTLSMiddlewareAndSecurity(t *testing.T) {
 		t.Fatalf("security = %#v", snapshot.Security)
 	}
 }
+
+func TestCompileACMEAppliesDefaultCacheDir(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Entrypoints: []config.Entrypoint{{
+			Name:    "websecure",
+			Address: ":8443",
+			ACME: &config.EntrypointACME{
+				Enabled: true,
+				Email:   "ops@example.com",
+				Domains: []string{"example.com"},
+			},
+		}},
+		Services: []config.Service{{
+			Name:      "api",
+			Endpoints: []config.Endpoint{{URL: "http://127.0.0.1:8081"}},
+		}},
+		Routes: []config.Route{{
+			Name:       "api",
+			Entrypoint: "websecure",
+			Service:    "api",
+		}},
+	}
+
+	snapshot, err := Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entrypoint, _ := snapshot.EntrypointConfigs.Get("websecure")
+	if entrypoint.TLS.ACME.CacheDir != DefaultACMECacheDir {
+		t.Fatalf("acme cache dir = %q, want %q", entrypoint.TLS.ACME.CacheDir, DefaultACMECacheDir)
+	}
+}

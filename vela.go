@@ -71,6 +71,10 @@ func WithMetricsFactory(factory gateway.MetricsFactory) Option {
 	return gateway.WithMetricsFactory(factory)
 }
 
+func WithMiddlewareRegistry(registry *runtime.MiddlewareRegistry) Option {
+	return gateway.WithMiddlewareRegistry(registry)
+}
+
 func WithObservability(obs observabilityx.Observability) Option {
 	return gateway.WithObservability(obs)
 }

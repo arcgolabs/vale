@@ -35,6 +35,7 @@ type Config struct {
 	Provider      provider.SnapshotProvider
 	ConfigSource  *collectionlist.List[provider.ConfigProvider]
 	Metrics       MetricsFactory
+	Middleware    *runtime.MiddlewareRegistry
 	OnWatchError  func(error)
 }
 
@@ -189,7 +190,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 		"proxy_engine", snapshot.ProxyEngine,
 	)
 
-	g.runtime = runtime.NewGateway(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled))
+	g.runtime = runtime.NewGatewayWithMiddlewareRegistry(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled), g.config.Middleware)
 	g.publishClusterUpdate(snapshot)
 
 	servers := collectionlist.NewListWithCapacity[*http.Server](snapshot.Entrypoints.Len() + 1)
@@ -382,9 +383,11 @@ func (g *Gateway) buildTLSConfig(config runtime.TLSRuntime) (*tls.Config, error)
 	}
 	if config.ACME.Enabled {
 		manager := &autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			Email:      config.ACME.Email,
-			HostPolicy: autocert.HostWhitelist(config.ACME.Domains.Values()...),
+			Prompt: autocert.AcceptTOS,
+			Email:  config.ACME.Email,
+		}
+		if !config.ACME.Domains.IsEmpty() {
+			manager.HostPolicy = autocert.HostWhitelist(config.ACME.Domains.Values()...)
 		}
 		if config.ACME.CacheDir != "" {
 			manager.Cache = autocert.DirCache(config.ACME.CacheDir)
@@ -445,6 +448,7 @@ func (g *Gateway) applyReloadSnapshot(snapshot *runtime.CompiledSnapshot) {
 	}
 	g.runtime.Swap(snapshot)
 	g.publishClusterUpdate(snapshot)
+	g.runtime.ObserveReload("swapped")
 	g.logger.Info("runtime snapshot swapped",
 		"built_at", snapshot.BuiltAt,
 		"entrypoints", snapshot.Entrypoints.Len(),
@@ -467,9 +471,10 @@ func (g *Gateway) restartServersLocked(snapshot *runtime.CompiledSnapshot) error
 	})
 	g.servers = nil
 
-	g.runtime = runtime.NewGateway(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled))
+	g.runtime = runtime.NewGatewayWithMiddlewareRegistry(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled), g.config.Middleware)
 	servers, listeners, entrypointNames, err := g.buildServers(snapshot)
 	if err != nil {
+		g.runtime.ObserveReload("failed")
 		g.runtime = nil
 		return err
 	}
@@ -490,6 +495,7 @@ func (g *Gateway) restartServersLocked(snapshot *runtime.CompiledSnapshot) error
 	adminListener, _ := listeners.Get(listeners.Len() - 1)
 	go g.listenAdmin(adminServer, adminListener)
 	g.publishClusterUpdate(snapshot)
+	g.runtime.ObserveReload("restarted")
 	g.logger.Info("servers restarted", "entrypoints", snapshot.Entrypoints.Len(), "admin_addr", snapshot.AdminAddress)
 	return nil
 }

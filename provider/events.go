@@ -13,6 +13,7 @@ const (
 	EventNameConfigSourceLoaded  = "provider.config_source.loaded"
 	EventNameConfigSourceFailed  = "provider.config_source.failed"
 	EventNameSnapshotRecompiled  = "provider.snapshot.recompiled"
+	EventNameSnapshotUnchanged   = "provider.snapshot.unchanged"
 	EventNameWatchSetupFailed    = "provider.watch.setup_failed"
 	EventNameConfigSourceChanged = "provider.config_source.changed"
 )
@@ -36,9 +37,17 @@ type SnapshotRecompiledEvent struct {
 	SourceCount  int
 	RouteCount   int
 	ServiceCount int
+	Fingerprint  string
 }
 
 func (e SnapshotRecompiledEvent) Name() string { return EventNameSnapshotRecompiled }
+
+type SnapshotUnchangedEvent struct {
+	Source      string
+	Fingerprint string
+}
+
+func (e SnapshotUnchangedEvent) Name() string { return EventNameSnapshotUnchanged }
 
 type WatchSetupFailedEvent struct {
 	Source string

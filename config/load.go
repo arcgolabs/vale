@@ -36,6 +36,9 @@ func Validate(cfg *Config) error {
 		if ep.ACME != nil && ep.ACME.Enabled && len(ep.ACME.Domains) == 0 {
 			return fmt.Errorf("entrypoint %q acme requires at least one domain", ep.Name)
 		}
+		if ep.ACME != nil && ep.ACME.Enabled && strings.TrimSpace(ep.ACME.Email) == "" {
+			return fmt.Errorf("entrypoint %q acme requires email", ep.Name)
+		}
 		if entrypointSet.Contains(ep.Name) {
 			return fmt.Errorf("duplicated entrypoint %q", ep.Name)
 		}

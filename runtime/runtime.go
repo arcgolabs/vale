@@ -76,6 +76,7 @@ type SecurityRuntime struct {
 
 type MiddlewareRuntime struct {
 	Name            string
+	Type            string
 	StripPrefix     string
 	AddPrefix       string
 	RequestHeaders  *mapping.Map[string, string]
@@ -147,26 +148,37 @@ func (s *ServiceRuntime) Pick() (*EndpointRuntime, error) {
 }
 
 type Gateway struct {
-	current atomic.Pointer[CompiledSnapshot]
-	access  *AccessLogger
-	metrics MetricsRecorder
+	current            atomic.Pointer[CompiledSnapshot]
+	access             *AccessLogger
+	metrics            MetricsRecorder
+	middlewareRegistry *MiddlewareRegistry
 }
 
 func NewGateway(snapshot *CompiledSnapshot, logger *slog.Logger, accessEnabled bool, metrics MetricsRecorder) *Gateway {
+	return NewGatewayWithMiddlewareRegistry(snapshot, logger, accessEnabled, metrics, nil)
+}
+
+func NewGatewayWithMiddlewareRegistry(snapshot *CompiledSnapshot, logger *slog.Logger, accessEnabled bool, metrics MetricsRecorder, registry *MiddlewareRegistry) *Gateway {
 	accessLogger := NewAccessLogger(logger, accessEnabled)
 	if metrics == nil {
 		metrics = NewNoopMetrics()
 	}
+	if registry == nil {
+		registry = DefaultMiddlewareRegistry()
+	}
 	gateway := &Gateway{
-		access:  accessLogger,
-		metrics: metrics,
+		access:             accessLogger,
+		metrics:            metrics,
+		middlewareRegistry: registry,
 	}
 	gateway.current.Store(snapshot)
+	gateway.ObserveSnapshot(snapshot)
 	return gateway
 }
 
 func (g *Gateway) Swap(snapshot *CompiledSnapshot) {
 	g.current.Store(snapshot)
+	g.ObserveSnapshot(snapshot)
 }
 
 func (g *Gateway) Snapshot() *CompiledSnapshot {
@@ -201,7 +213,7 @@ func (g *Gateway) Handler(entrypoint string) http.Handler {
 
 		start := time.Now()
 		recorder := newStatusRecorder(w)
-		handler := WrapMiddlewares(endpoint.Proxy, route.Middlewares)
+		handler := WrapMiddlewaresWithRegistry(endpoint.Proxy, route.Middlewares, g.middlewareRegistry)
 		if snapshot.Security.MaxBodyBytes > 0 {
 			r.Body = http.MaxBytesReader(recorder, r.Body, snapshot.Security.MaxBodyBytes)
 		}
@@ -324,10 +336,15 @@ func (noopMetrics) Handler() http.Handler {
 }
 
 type observabilityMetrics struct {
-	enabled  bool
-	requests observabilityx.Counter
-	latency  observabilityx.Histogram
-	handler  http.Handler
+	enabled      bool
+	requests     observabilityx.Counter
+	latency      observabilityx.Histogram
+	reloads      observabilityx.Counter
+	healthChecks observabilityx.Counter
+	routes       observabilityx.Gauge
+	services     observabilityx.Gauge
+	endpoints    observabilityx.Gauge
+	handler      http.Handler
 }
 
 type metricsHandler interface {
@@ -359,6 +376,23 @@ func NewObservabilityMetrics(enabled bool, obs observabilityx.Observability, han
 			observabilityx.WithUnit("s"),
 			observabilityx.WithLabelKeys("route", "service"),
 		)),
+		reloads: obs.Counter(observabilityx.NewCounterSpec("vela_runtime_reloads_total",
+			observabilityx.WithDescription("Total runtime reload attempts."),
+			observabilityx.WithLabelKeys("result"),
+		)),
+		healthChecks: obs.Counter(observabilityx.NewCounterSpec("vela_health_checks_total",
+			observabilityx.WithDescription("Total endpoint health check results."),
+			observabilityx.WithLabelKeys("endpoint", "healthy"),
+		)),
+		routes: obs.Gauge(observabilityx.NewGaugeSpec("vela_active_routes",
+			observabilityx.WithDescription("Current compiled route count."),
+		)),
+		services: obs.Gauge(observabilityx.NewGaugeSpec("vela_active_services",
+			observabilityx.WithDescription("Current compiled service count."),
+		)),
+		endpoints: obs.Gauge(observabilityx.NewGaugeSpec("vela_active_endpoints",
+			observabilityx.WithDescription("Current compiled endpoint count."),
+		)),
 		handler: handler,
 	}
 }
@@ -387,4 +421,66 @@ func (m *observabilityMetrics) Handler() http.Handler {
 		})
 	}
 	return m.handler
+}
+
+type SnapshotMetricsRecorder interface {
+	ObserveSnapshot(snapshot *CompiledSnapshot)
+}
+
+type ReloadMetricsRecorder interface {
+	ObserveReload(result string)
+}
+
+type HealthMetricsRecorder interface {
+	ObserveHealth(endpoint *EndpointRuntime, healthy bool)
+}
+
+func (g *Gateway) ObserveSnapshot(snapshot *CompiledSnapshot) {
+	if recorder, ok := g.metrics.(SnapshotMetricsRecorder); ok {
+		recorder.ObserveSnapshot(snapshot)
+	}
+}
+
+func (g *Gateway) ObserveReload(result string) {
+	if recorder, ok := g.metrics.(ReloadMetricsRecorder); ok {
+		recorder.ObserveReload(result)
+	}
+}
+
+func (g *Gateway) ObserveHealth(endpoint *EndpointRuntime, healthy bool) {
+	if recorder, ok := g.metrics.(HealthMetricsRecorder); ok {
+		recorder.ObserveHealth(endpoint, healthy)
+	}
+}
+
+func (m *observabilityMetrics) ObserveSnapshot(snapshot *CompiledSnapshot) {
+	if !m.enabled || snapshot == nil {
+		return
+	}
+	ctx := context.Background()
+	m.routes.Set(ctx, float64(snapshot.Routes().Len()))
+	m.services.Set(ctx, float64(snapshot.Services.Len()))
+	endpointCount := 0
+	snapshot.Services.Range(func(_ string, service *ServiceRuntime) bool {
+		endpointCount += service.Endpoints.Len()
+		return true
+	})
+	m.endpoints.Set(ctx, float64(endpointCount))
+}
+
+func (m *observabilityMetrics) ObserveReload(result string) {
+	if !m.enabled {
+		return
+	}
+	m.reloads.Add(context.Background(), 1, observabilityx.String("result", result))
+}
+
+func (m *observabilityMetrics) ObserveHealth(endpoint *EndpointRuntime, healthy bool) {
+	if !m.enabled || endpoint == nil || endpoint.URL == nil {
+		return
+	}
+	m.healthChecks.Add(context.Background(), 1,
+		observabilityx.String("endpoint", endpoint.URL.String()),
+		observabilityx.String("healthy", strconv.FormatBool(healthy)),
+	)
 }

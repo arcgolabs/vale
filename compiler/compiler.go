@@ -14,11 +14,14 @@ import (
 	"github.com/arcgolabs/vela/runtime"
 )
 
+const DefaultACMECacheDir = ".vela/acme"
+
 func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 	middlewareMap := mapping.NewMapWithCapacity[string, runtime.MiddlewareRuntime](len(cfg.Middlewares))
 	for _, middleware := range cfg.Middlewares {
 		middlewareMap.Set(middleware.Name, runtime.MiddlewareRuntime{
 			Name:            middleware.Name,
+			Type:            normalizeMiddlewareType(middleware.Type),
 			StripPrefix:     strings.TrimSpace(middleware.StripPrefix),
 			AddPrefix:       strings.TrimSpace(middleware.AddPrefix),
 			RequestHeaders:  normalizeHeaders(middleware.RequestHeaders),
@@ -151,14 +154,26 @@ func compileTLS(entrypoint config.Entrypoint) runtime.TLSRuntime {
 	}
 	if entrypoint.ACME != nil {
 		tlsRuntime.Enabled = tlsRuntime.Enabled || entrypoint.ACME.Enabled
+		cacheDir := strings.TrimSpace(entrypoint.ACME.CacheDir)
+		if entrypoint.ACME.Enabled && cacheDir == "" {
+			cacheDir = DefaultACMECacheDir
+		}
 		tlsRuntime.ACME = runtime.ACMERuntime{
 			Enabled:  entrypoint.ACME.Enabled,
 			Email:    strings.TrimSpace(entrypoint.ACME.Email),
-			CacheDir: strings.TrimSpace(entrypoint.ACME.CacheDir),
+			CacheDir: cacheDir,
 			Domains:  collectionlist.NewList(entrypoint.ACME.Domains...),
 		}
 	}
 	return tlsRuntime
+}
+
+func normalizeMiddlewareType(middlewareType string) string {
+	middlewareType = strings.ToLower(strings.TrimSpace(middlewareType))
+	if middlewareType == "" {
+		return runtime.MiddlewareTypeBuiltin
+	}
+	return middlewareType
 }
 
 func compileRoutePredicates(route config.Route) *bitset.BitSet {

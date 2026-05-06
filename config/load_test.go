@@ -97,4 +97,10 @@ func TestValidateEntrypointTLSAndACME(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "acme requires at least one domain") {
 		t.Fatalf("Validate error = %v, want acme domains error", err)
 	}
+
+	cfg.Entrypoints[0].ACME.Domains = []string{"example.com"}
+	err = Validate(cfg)
+	if err == nil || !strings.Contains(err.Error(), "acme requires email") {
+		t.Fatalf("Validate error = %v, want acme email error", err)
+	}
 }

@@ -15,13 +15,19 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 - JSON access logging and Prometheus metrics
 - Admin API for routes/services/endpoints and `/metrics`
 - Active endpoint health checks
+- Library-first builders for runtime snapshots and config source assembly
+- Provider reload coalescing with stable config fingerprints
+- Built-in middleware plus a runtime middleware registry for embedded extensions
+- Static TLS and ACME with secure defaults
 
 ## Architecture Boundary
 
 - `runtime`: data plane runtime, consumes only compiled snapshot.
-- `compiler`: control-plane compile step from config to runtime snapshot.
+- `config`: HCL/JSON DTOs and validation. Native slices/maps are kept here because this is the decoder boundary.
+- `compiler`: control-plane compile step from config DTOs to collectionx-backed runtime snapshot.
 - `provider/fileconfig`: optional HCL file config source provider (file + watch).
 - `provider/merged`: multi-source merge + validate + compile.
+- `provider`: config builder helpers for embedded/library-first use.
 - root `vela`: library-first public API (`New` / `Start` / `Stop`).
 - `gateway`: lower-level embedded gateway implementation.
 - `cmd`: `velad` executable (`dix` graph + `configx` + Cobra + run loop).
@@ -112,6 +118,13 @@ go run ./cmd -config-files "./base.hcl,./service.hcl,./override.hcl"
 
 The reverse proxy engine is built in and uses `oxy`.
 
+TLS and ACME defaults:
+
+- TLS listeners use Go's secure TLS defaults with minimum TLS 1.2.
+- ACME uses `golang.org/x/crypto/acme/autocert`.
+- When ACME is enabled and `cache_dir` is omitted, Vela uses `.vela/acme`.
+- ACME config requires explicit domains and email in file config.
+
 Verify:
 
 - `http://127.0.0.1:8080/`
@@ -157,6 +170,23 @@ func runEmbedded() error {
 
 `vela.NewFromConfig(vela.Config{...})` is also available for struct-based construction.
 
+For code-first runtime construction, `runtime` exposes collectionx-backed helpers:
+
+```go
+endpoint, _ := runtime.NewEndpoint("http://127.0.0.1:8081", 1, http.DefaultServeMux)
+service := runtime.NewService("api", "round_robin", endpoint)
+route := runtime.NewRoute("api", "web", service).WithPathPrefix("/api")
+
+snapshot := runtime.NewSnapshot().
+  AddEntrypoint("web", ":8080", runtime.EntrypointRuntime{}).
+  AddService(service).
+  AddRoute(route).
+  BuildMatchers()
+```
+
+For config-first construction without HCL, use `provider.NewConfigBuilder()` and pass
+the result to `vela.WithStaticConfig`.
+
 ### Embedded Static Config Example
 
 See `examples/embedded_static_config/main.go` for a full example that uses:
@@ -194,6 +224,7 @@ Constructor options currently include:
 - `vela.WithLogger(logger)`
 - `vela.WithEventBus(bus)` (subscribe provider lifecycle events)
 - `vela.WithMetricsFactory(factory)` (optional metrics recorder adapter)
+- `vela.WithMiddlewareRegistry(registry)` (embedded runtime middleware extensions)
 - `vela.WithSnapshotProvider(provider)` (advanced/custom provider)
 - `vela.WithConfigSourceProviders(...)` (advanced merge pipeline input)
 - `docker.NewFromEnv(name, options)` for Docker daemon-backed source
@@ -208,6 +239,7 @@ Provider events currently emitted on the event bus:
 - `provider.config_source.failed`
 - `provider.config_source.changed`
 - `provider.snapshot.recompiled`
+- `provider.snapshot.unchanged` (watch event produced no config fingerprint change)
 - `provider.watch.setup_failed`
 - `gateway.static_runtime_config.changed` (hot-reloaded snapshot changed fields that require process restart)
 
@@ -217,6 +249,37 @@ For non-file embedded scenarios, you can use `provider/memoryconfig` with:
 
 - `memoryconfig.New(name, cfg)`
 - `provider.Update(newCfg)` to trigger hot reload through the same merge/compile pipeline
+
+Merged providers coalesce rapid watch events and compare stable config fingerprints before
+publishing a reload. Unchanged updates publish `provider.snapshot.unchanged` and do not
+swap the runtime snapshot.
+
+### Middleware Extensions
+
+Built-in middleware supports path prefix rewriting, request/response headers, and body
+limits. Embedded users can register runtime middleware factories:
+
+```go
+registry := runtime.DefaultMiddlewareRegistry()
+_ = registry.Register("custom", func(next http.Handler, middleware runtime.MiddlewareRuntime) http.Handler {
+  return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    next.ServeHTTP(w, r)
+  })
+})
+g, err := vela.New(vela.WithMiddlewareRegistry(registry))
+```
+
+### Metrics
+
+The default `observabilityx` metrics recorder exposes:
+
+- `vela_http_requests_total`
+- `vela_http_request_duration_seconds`
+- `vela_runtime_reloads_total`
+- `vela_health_checks_total`
+- `vela_active_routes`
+- `vela_active_services`
+- `vela_active_endpoints`
 
 ### Provider Expansion Notes
 
