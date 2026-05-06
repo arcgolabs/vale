@@ -4,13 +4,10 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"path/filepath"
-	"time"
 
 	"github.com/arcgolabs/vela/compiler"
 	fileconfig "github.com/arcgolabs/vela/provider/fileconfig"
 	"github.com/arcgolabs/vela/runtime"
-	"github.com/fsnotify/fsnotify"
 )
 
 type Provider struct {
@@ -37,51 +34,13 @@ func (p *Provider) Load(_ context.Context) (*runtime.CompiledSnapshot, error) {
 }
 
 func (p *Provider) Watch(_ context.Context, onReload func(*runtime.CompiledSnapshot), onError func(error)) (io.Closer, error) {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return nil, err
-	}
-
-	dir := filepath.Dir(p.configPath)
-	base := filepath.Base(p.configPath)
-	if err := watcher.Add(dir); err != nil {
-		_ = watcher.Close()
-		return nil, err
-	}
-
-	go func() {
-		var lastReload time.Time
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
-				}
-				if filepath.Base(event.Name) != base {
-					continue
-				}
-				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename) == 0 {
-					continue
-				}
-				if time.Since(lastReload) < 300*time.Millisecond {
-					continue
-				}
-				lastReload = time.Now()
-
-				snapshot, loadErr := p.Load(context.Background())
-				if loadErr != nil {
-					onError(loadErr)
-					continue
-				}
-				onReload(snapshot)
-				p.logger.Info("snapshot reloaded", "built_at", snapshot.BuiltAt)
-			case watchErr, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-				onError(watchErr)
-			}
+	return fileconfig.WatchPath(p.configPath, func() {
+		snapshot, loadErr := p.Load(context.Background())
+		if loadErr != nil {
+			onError(loadErr)
+			return
 		}
-	}()
-	return watcher, nil
+		onReload(snapshot)
+		p.logger.Info("snapshot reloaded", "built_at", snapshot.BuiltAt)
+	}, onError)
 }

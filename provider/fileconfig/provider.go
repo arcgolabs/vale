@@ -31,13 +31,17 @@ func (p *Provider) Load(_ context.Context) (*config.Config, error) {
 }
 
 func (p *Provider) Watch(_ context.Context, onReload func(), onError func(error)) (io.Closer, error) {
+	return WatchPath(p.path, onReload, onError)
+}
+
+func WatchPath(path string, onChange func(), onError func(error)) (io.Closer, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
 	}
 
-	dir := filepath.Dir(p.path)
-	base := filepath.Base(p.path)
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
 	if err := watcher.Add(dir); err != nil {
 		_ = watcher.Close()
 		return nil, err
@@ -61,7 +65,7 @@ func (p *Provider) Watch(_ context.Context, onReload func(), onError func(error)
 					continue
 				}
 				lastReload = time.Now()
-				onReload()
+				onChange()
 			case watchErr, ok := <-watcher.Errors:
 				if !ok {
 					return
