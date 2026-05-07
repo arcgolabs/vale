@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -98,6 +99,9 @@ func NewEndpoint(rawURL string, weight int, proxy http.Handler) (*EndpointRuntim
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, err
+	}
+	if parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return nil, fmt.Errorf("endpoint url %q must include scheme and host", rawURL)
 	}
 	if weight <= 0 {
 		weight = 1

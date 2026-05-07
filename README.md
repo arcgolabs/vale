@@ -170,21 +170,22 @@ func runEmbedded() error {
 
 `vela.NewFromConfig(vela.Config{...})` is also available for struct-based construction.
 
-For code-first runtime construction, `runtime` exposes collectionx-backed helpers:
+For code-first runtime construction, the root `vela` package exposes
+collectionx-backed helpers:
 
 ```go
-endpoint, _ := runtime.NewEndpoint("http://127.0.0.1:8081", 1, http.DefaultServeMux)
-service := runtime.NewService("api", "round_robin", endpoint)
-route := runtime.NewRoute("api", "web", service).WithPathPrefix("/api")
+endpoint, _ := vela.NewEndpoint("http://127.0.0.1:8081", 1, http.DefaultServeMux)
+service := vela.NewService("api", "round_robin", endpoint)
+route := vela.NewRoute("api", "web", service).WithPathPrefix("/api")
 
-snapshot := runtime.NewSnapshot().
-  AddEntrypoint("web", ":8080", runtime.EntrypointRuntime{}).
+snapshot := vela.NewSnapshot().
+  AddEntrypoint("web", ":8080", vela.RuntimeEntrypoint{}).
   AddService(service).
   AddRoute(route).
   BuildMatchers()
 ```
 
-For config-first construction without HCL, use `provider.NewConfigBuilder()` and pass
+For config-first construction without HCL, use `vela.NewConfigBuilder()` and pass
 the result to `vela.WithStaticConfig`.
 
 ### Embedded Static Config Example
@@ -260,8 +261,8 @@ Built-in middleware supports path prefix rewriting, request/response headers, an
 limits. Embedded users can register runtime middleware factories:
 
 ```go
-registry := runtime.DefaultMiddlewareRegistry()
-_ = registry.Register("custom", func(next http.Handler, middleware runtime.MiddlewareRuntime) http.Handler {
+registry := vela.DefaultMiddlewareRegistry()
+_ = registry.Register("custom", func(next http.Handler, middleware vela.RuntimeMiddleware) http.Handler {
   return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     next.ServeHTTP(w, r)
   })

@@ -31,3 +31,12 @@ func TestSnapshotBuilderBuildsMatcher(t *testing.T) {
 		t.Fatal("matcher was not built")
 	}
 }
+
+func TestNewEndpointRejectsRelativeURL(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewEndpoint("/api", 1, http.NotFoundHandler())
+	if err == nil {
+		t.Fatal("NewEndpoint returned nil error for relative URL")
+	}
+}
