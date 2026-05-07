@@ -203,6 +203,9 @@ cfg := vela.NewConfigBuilder().
   Build()
 ```
 
+Use `BuildValidated()` when constructing config from user input; it returns the
+config together with accumulated builder errors plus `config.Validate` errors.
+
 ### Embedded Static Config Example
 
 See `examples/embedded_static_config/main.go` for a full example that uses:

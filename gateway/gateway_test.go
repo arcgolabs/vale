@@ -2,14 +2,19 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/arcgolabs/collectionx/mapping"
+	"github.com/arcgolabs/vela/compiler"
+	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/runtime"
 )
 
@@ -130,6 +135,50 @@ func TestStaticRuntimeChangesIgnoresDynamicSnapshotFields(t *testing.T) {
 	got := staticRuntimeChanges(current, next)
 	if !got.IsEmpty() {
 		t.Fatalf("changes = %v, want none", got)
+	}
+}
+
+func TestAdminAPIWritesPlainJSONViews(t *testing.T) {
+	t.Parallel()
+
+	snapshot, err := compiler.Compile(config.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway := &Gateway{
+		runtime: runtime.NewGateway(snapshot, discardLogger(), false, runtime.NewNoopMetrics()),
+		logger:  discardLogger(),
+	}
+	mux := gateway.buildAdminMux()
+
+	routeRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(routeRecorder, httptest.NewRequest(http.MethodGet, "/admin/routes", nil))
+	var routes []runtime.RouteView
+	if err := json.Unmarshal(routeRecorder.Body.Bytes(), &routes); err != nil {
+		t.Fatalf("routes json decode failed: %v; body=%s", err, routeRecorder.Body.String())
+	}
+	if len(routes) != 1 {
+		t.Fatalf("routes len = %d, want 1", len(routes))
+	}
+
+	serviceRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(serviceRecorder, httptest.NewRequest(http.MethodGet, "/admin/services", nil))
+	var services []adminServiceView
+	if err := json.Unmarshal(serviceRecorder.Body.Bytes(), &services); err != nil {
+		t.Fatalf("services json decode failed: %v; body=%s", err, serviceRecorder.Body.String())
+	}
+	if len(services) != 1 || len(services[0].Endpoints) != 1 {
+		t.Fatalf("services = %#v, want one service with one endpoint", services)
+	}
+
+	endpointRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(endpointRecorder, httptest.NewRequest(http.MethodGet, "/admin/endpoints", nil))
+	var endpoints []runtime.EndpointView
+	if err := json.Unmarshal(endpointRecorder.Body.Bytes(), &endpoints); err != nil {
+		t.Fatalf("endpoints json decode failed: %v; body=%s", err, endpointRecorder.Body.String())
+	}
+	if len(endpoints) != 1 {
+		t.Fatalf("endpoints len = %d, want 1", len(endpoints))
 	}
 }
 

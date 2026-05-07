@@ -1,8 +1,10 @@
 package runtime
 
 import (
+	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 )
@@ -84,4 +86,61 @@ func TestServiceRuntimeWeightedRoundRobinUsesWeights(t *testing.T) {
 	if counts[secondURL.String()] != 2 {
 		t.Fatalf("second endpoint picks = %d, want 2", counts[secondURL.String()])
 	}
+}
+
+func TestGatewayInvokesExtendedMetricsRecorder(t *testing.T) {
+	t.Parallel()
+
+	metrics := &testExtendedMetricsRecorder{}
+	gateway := NewGateway(NewSnapshot(), nil, false, metrics)
+	if metrics.snapshots != 1 {
+		t.Fatalf("snapshots = %d, want 1 after NewGateway", metrics.snapshots)
+	}
+
+	gateway.Swap(NewSnapshot())
+	if metrics.snapshots != 2 {
+		t.Fatalf("snapshots = %d, want 2 after Swap", metrics.snapshots)
+	}
+
+	endpointURL, err := url.Parse("http://127.0.0.1:8081")
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := &EndpointRuntime{URL: endpointURL}
+	gateway.ObserveHealth(endpoint, true)
+	if metrics.healthChecks != 1 {
+		t.Fatalf("health checks = %d, want 1", metrics.healthChecks)
+	}
+
+	gateway.ObserveReload("swapped")
+	if metrics.reloads != 1 || metrics.lastReloadResult != "swapped" {
+		t.Fatalf("reloads = %d result = %q, want one swapped reload", metrics.reloads, metrics.lastReloadResult)
+	}
+}
+
+type testExtendedMetricsRecorder struct {
+	snapshots        int
+	reloads          int
+	healthChecks     int
+	lastReloadResult string
+}
+
+func (r *testExtendedMetricsRecorder) Observe(_ *CompiledRoute, _ *EndpointRuntime, _ int, _ time.Duration) {
+}
+
+func (r *testExtendedMetricsRecorder) Handler() http.Handler {
+	return http.NotFoundHandler()
+}
+
+func (r *testExtendedMetricsRecorder) ObserveSnapshot(_ *CompiledSnapshot) {
+	r.snapshots++
+}
+
+func (r *testExtendedMetricsRecorder) ObserveReload(result string) {
+	r.reloads++
+	r.lastReloadResult = result
+}
+
+func (r *testExtendedMetricsRecorder) ObserveHealth(_ *EndpointRuntime, _ bool) {
+	r.healthChecks++
 }

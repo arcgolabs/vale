@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/arcgolabs/vela/config"
@@ -102,5 +103,32 @@ func TestCompileACMEAppliesDefaultCacheDir(t *testing.T) {
 	entrypoint, _ := snapshot.EntrypointConfigs.Get("websecure")
 	if entrypoint.TLS.ACME.CacheDir != DefaultACMECacheDir {
 		t.Fatalf("acme cache dir = %q, want %q", entrypoint.TLS.ACME.CacheDir, DefaultACMECacheDir)
+	}
+}
+
+func TestCompileRejectsUnknownMiddlewareType(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Entrypoints: []config.Entrypoint{{Name: "web", Address: ":8080"}},
+		Services: []config.Service{{
+			Name:      "api",
+			Endpoints: []config.Endpoint{{URL: "http://127.0.0.1:8081"}},
+		}},
+		Middlewares: []config.Middleware{{
+			Name: "custom-auth",
+			Type: "custom",
+		}},
+		Routes: []config.Route{{
+			Name:        "api",
+			Entrypoint:  "web",
+			Service:     "api",
+			Middlewares: []string{"custom-auth"},
+		}},
+	}
+
+	_, err := Compile(cfg)
+	if err == nil || !strings.Contains(err.Error(), `unsupported type "custom"`) {
+		t.Fatalf("Compile error = %v, want unsupported middleware type", err)
 	}
 }

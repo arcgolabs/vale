@@ -563,7 +563,7 @@ func (g *Gateway) buildAdminMux() http.Handler {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "runtime not ready"})
 			return
 		}
-		writeJSON(w, http.StatusOK, snapshot.Routes())
+		writeJSON(w, http.StatusOK, adminRoutesView(snapshot))
 	})
 
 	mux.HandleFunc("/admin/services", func(w http.ResponseWriter, _ *http.Request) {
@@ -572,7 +572,7 @@ func (g *Gateway) buildAdminMux() http.Handler {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "runtime not ready"})
 			return
 		}
-		writeJSON(w, http.StatusOK, snapshot.ServicesView())
+		writeJSON(w, http.StatusOK, adminServicesView(snapshot))
 	})
 
 	mux.HandleFunc("/admin/endpoints", func(w http.ResponseWriter, _ *http.Request) {
@@ -582,12 +582,7 @@ func (g *Gateway) buildAdminMux() http.Handler {
 			return
 		}
 
-		endpointList := collectionlist.NewList[runtime.EndpointView]()
-		snapshot.ServicesView().Range(func(_ int, service runtime.ServiceView) bool {
-			endpointList.Merge(service.Endpoints)
-			return true
-		})
-		writeJSON(w, http.StatusOK, endpointList)
+		writeJSON(w, http.StatusOK, adminEndpointsView(snapshot))
 	})
 	mux.HandleFunc("/admin/cluster/status", func(w http.ResponseWriter, _ *http.Request) {
 		if g.cluster == nil {

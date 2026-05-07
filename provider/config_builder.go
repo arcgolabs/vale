@@ -1,6 +1,9 @@
 package provider
 
 import (
+	"errors"
+	"fmt"
+	"net/url"
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
@@ -18,6 +21,7 @@ type ConfigBuilder struct {
 	middlewares *collectionlist.List[config.Middleware]
 	routes      *collectionlist.List[config.Route]
 	cfg         *config.Config
+	errors      *collectionlist.List[error]
 }
 
 func NewConfigBuilder() *ConfigBuilder {
@@ -27,6 +31,7 @@ func NewConfigBuilder() *ConfigBuilder {
 		middlewares: collectionlist.NewList[config.Middleware](),
 		routes:      collectionlist.NewList[config.Route](),
 		cfg:         &config.Config{},
+		errors:      collectionlist.NewList[error](),
 	}
 }
 
@@ -42,6 +47,12 @@ func (b *ConfigBuilder) Entrypoint(name string, address string, options ...Entry
 		return nil
 	}
 	entrypoint := config.Entrypoint{Name: strings.TrimSpace(name), Address: strings.TrimSpace(address)}
+	if entrypoint.Name == "" {
+		b.addError("entrypoint name cannot be empty")
+	}
+	if entrypoint.Address == "" {
+		b.addError("entrypoint %q address cannot be empty", entrypoint.Name)
+	}
 	collectionlist.NewList(options...).Range(func(_ int, option EntrypointOption) bool {
 		if option != nil {
 			option(&entrypoint)
@@ -97,10 +108,37 @@ func (b *ConfigBuilder) ServiceWithStrategy(name string, strategy string, endpoi
 	if b == nil {
 		return nil
 	}
+	name = strings.TrimSpace(name)
+	strategy = strings.TrimSpace(strategy)
+	if name == "" {
+		b.addError("service name cannot be empty")
+	}
+	if strategy == "" {
+		strategy = "round_robin"
+	}
+	if strategy != "round_robin" && strategy != "weighted_round_robin" {
+		b.addError("service %q has unsupported strategy %q", name, strategy)
+	}
+	if len(endpoints) == 0 {
+		b.addError("service %q must have at least one endpoint", name)
+	}
+	endpointList := collectionlist.NewListWithCapacity[config.Endpoint](len(endpoints))
+	for _, endpoint := range endpoints {
+		endpoint.URL = strings.TrimSpace(endpoint.URL)
+		if endpoint.URL == "" {
+			b.addError("service %q endpoint url cannot be empty", name)
+		} else if parsed, err := url.Parse(endpoint.URL); err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			b.addError("service %q endpoint %q is invalid", name, endpoint.URL)
+		}
+		if endpoint.Weight <= 0 {
+			endpoint.Weight = 1
+		}
+		endpointList.Add(endpoint)
+	}
 	b.services.Add(config.Service{
-		Name:      strings.TrimSpace(name),
-		Strategy:  strings.TrimSpace(strategy),
-		Endpoints: collectionlist.NewList(endpoints...).Values(),
+		Name:      name,
+		Strategy:  strategy,
+		Endpoints: endpointList.Values(),
 	})
 	return b
 }
@@ -113,6 +151,9 @@ func (b *ConfigBuilder) MiddlewareNamed(name string, options ...MiddlewareOption
 		Name:            strings.TrimSpace(name),
 		RequestHeaders:  map[string]string{},
 		ResponseHeaders: map[string]string{},
+	}
+	if middleware.Name == "" {
+		b.addError("middleware name cannot be empty")
 	}
 	collectionlist.NewList(options...).Range(func(_ int, option MiddlewareOption) bool {
 		if option != nil {
@@ -127,6 +168,9 @@ func (b *ConfigBuilder) MiddlewareNamed(name string, options ...MiddlewareOption
 func (b *ConfigBuilder) Middleware(middleware config.Middleware) *ConfigBuilder {
 	if b == nil {
 		return nil
+	}
+	if strings.TrimSpace(middleware.Name) == "" {
+		b.addError("middleware name cannot be empty")
 	}
 	b.middlewares.Add(middleware)
 	return b
@@ -198,6 +242,15 @@ func (b *ConfigBuilder) RouteTo(name string, entrypoint string, service string, 
 		Service:    strings.TrimSpace(service),
 		Headers:    map[string]string{},
 	}
+	if route.Name == "" {
+		b.addError("route name cannot be empty")
+	}
+	if route.Entrypoint == "" {
+		b.addError("route %q entrypoint cannot be empty", route.Name)
+	}
+	if route.Service == "" {
+		b.addError("route %q service cannot be empty", route.Name)
+	}
 	collectionlist.NewList(options...).Range(func(_ int, option RouteOption) bool {
 		if option != nil {
 			option(&route)
@@ -211,6 +264,9 @@ func (b *ConfigBuilder) RouteTo(name string, entrypoint string, service string, 
 func (b *ConfigBuilder) Route(route config.Route) *ConfigBuilder {
 	if b == nil {
 		return nil
+	}
+	if strings.TrimSpace(route.Name) == "" {
+		b.addError("route name cannot be empty")
 	}
 	b.routes.Add(route)
 	return b
@@ -312,6 +368,36 @@ func (b *ConfigBuilder) Build() *config.Config {
 	cfg.Middlewares = b.middlewares.Values()
 	cfg.Routes = b.routes.Values()
 	return &cfg
+}
+
+func (b *ConfigBuilder) BuildValidated() (*config.Config, error) {
+	if b == nil {
+		return &config.Config{}, errors.New("config builder is nil")
+	}
+	cfg := b.Build()
+	errs := collectionlist.NewList[error]()
+	errs.Merge(b.errors)
+	if err := config.Validate(cfg); err != nil {
+		errs.Add(err)
+	}
+	return cfg, errors.Join(errs.Values()...)
+}
+
+func (b *ConfigBuilder) Errors() *collectionlist.List[error] {
+	if b == nil || b.errors == nil {
+		return collectionlist.NewList[error]()
+	}
+	return b.errors.Clone()
+}
+
+func (b *ConfigBuilder) addError(format string, args ...any) {
+	if b == nil {
+		return
+	}
+	if b.errors == nil {
+		b.errors = collectionlist.NewList[error]()
+	}
+	b.errors.Add(fmt.Errorf(format, args...))
 }
 
 func NewEntrypointConfig(name string, address string) *config.Config {

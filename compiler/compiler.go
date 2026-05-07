@@ -9,6 +9,7 @@ import (
 	"github.com/arcgolabs/collectionx/bitset"
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
+	collectionset "github.com/arcgolabs/collectionx/set"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/proxy"
 	"github.com/arcgolabs/vela/runtime"
@@ -16,12 +17,18 @@ import (
 
 const DefaultACMECacheDir = ".vela/acme"
 
+var supportedMiddlewareTypes = collectionset.NewSet(runtime.MiddlewareTypeBuiltin)
+
 func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 	middlewareMap := mapping.NewMapWithCapacity[string, runtime.MiddlewareRuntime](len(cfg.Middlewares))
 	for _, middleware := range cfg.Middlewares {
+		middlewareType := normalizeMiddlewareType(middleware.Type)
+		if !supportedMiddlewareTypes.Contains(middlewareType) {
+			return nil, fmt.Errorf("middleware %q has unsupported type %q", middleware.Name, middleware.Type)
+		}
 		middlewareMap.Set(middleware.Name, runtime.MiddlewareRuntime{
 			Name:            middleware.Name,
-			Type:            normalizeMiddlewareType(middleware.Type),
+			Type:            middlewareType,
 			StripPrefix:     strings.TrimSpace(middleware.StripPrefix),
 			AddPrefix:       strings.TrimSpace(middleware.AddPrefix),
 			RequestHeaders:  normalizeHeaders(middleware.RequestHeaders),

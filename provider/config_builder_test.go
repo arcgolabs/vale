@@ -3,6 +3,7 @@ package provider
 import (
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/arcgolabs/collectionx/mapping"
@@ -40,7 +41,7 @@ func TestAppendSortedRoutes(t *testing.T) {
 func TestConfigBuilderFluentAPI(t *testing.T) {
 	t.Parallel()
 
-	cfg := NewConfigBuilder().
+	cfg, err := NewConfigBuilder().
 		Entrypoint("websecure", ":8443",
 			EntrypointTLS("cert.pem", "key.pem"),
 			EntrypointACME("ops@example.com", "", "example.com"),
@@ -65,9 +66,8 @@ func TestConfigBuilderFluentAPI(t *testing.T) {
 		Admin(":19090").
 		Observability(true, true).
 		Health("5s", "2s").
-		Build()
-
-	if err := config.Validate(cfg); err != nil {
+		BuildValidated()
+	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Entrypoints[0].TLS == nil || cfg.Entrypoints[0].ACME == nil {
@@ -81,5 +81,28 @@ func TestConfigBuilderFluentAPI(t *testing.T) {
 	}
 	if cfg.Routes[0].Method != http.MethodGet || cfg.Routes[0].Middlewares[0] != "strip-api" {
 		t.Fatalf("route = %#v", cfg.Routes[0])
+	}
+}
+
+func TestConfigBuilderBuildValidatedReturnsAccumulatedErrors(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewConfigBuilder().
+		Entrypoint("", "").
+		ServiceWithStrategy("api", "random", ConfigEndpoint("not-a-url", 1)).
+		RouteTo("api", "web", "api").
+		BuildValidated()
+	if err == nil {
+		t.Fatal("BuildValidated returned nil error")
+	}
+	message := err.Error()
+	for _, want := range []string{
+		"entrypoint name cannot be empty",
+		"endpoint \"not-a-url\" is invalid",
+		"unsupported strategy",
+	} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("BuildValidated error = %q, want %q", message, want)
+		}
 	}
 }
