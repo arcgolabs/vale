@@ -1,25 +1,27 @@
-package runtime
+package runtime_test
 
 import (
 	"net/http"
 	"testing"
+
+	velaruntime "github.com/arcgolabs/vela/runtime"
 )
 
 func TestSnapshotBuilderBuildsMatcher(t *testing.T) {
 	t.Parallel()
 
-	endpoint, err := NewEndpoint("http://127.0.0.1:8081", 1, http.NotFoundHandler())
+	endpoint, err := velaruntime.NewEndpoint("http://127.0.0.1:8081", 1, http.NotFoundHandler())
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService("api", "round_robin", endpoint)
-	route := NewRoute("api", "web", service).
+	service := velaruntime.NewService("api", "round_robin", endpoint)
+	route := velaruntime.NewRoute("api", "web", service).
 		WithHost("API.EXAMPLE.COM").
 		WithPathPrefix("/api").
 		WithMethod(http.MethodGet)
 
-	snapshot := NewSnapshot().
-		AddEntrypoint("web", ":8080", EntrypointRuntime{}).
+	snapshot := velaruntime.NewSnapshot().
+		AddEntrypoint("web", ":8080", velaruntime.EntrypointRuntime{}).
 		AddService(service).
 		AddRoute(route).
 		BuildMatchers()
@@ -35,7 +37,7 @@ func TestSnapshotBuilderBuildsMatcher(t *testing.T) {
 func TestNewEndpointRejectsRelativeURL(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewEndpoint("/api", 1, http.NotFoundHandler())
+	_, err := velaruntime.NewEndpoint("/api", 1, http.NotFoundHandler())
 	if err == nil {
 		t.Fatal("NewEndpoint returned nil error for relative URL")
 	}

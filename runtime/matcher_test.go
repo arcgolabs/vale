@@ -1,4 +1,4 @@
-package runtime
+package runtime_test
 
 import (
 	"net/http"
@@ -6,12 +6,13 @@ import (
 	"testing"
 
 	"github.com/arcgolabs/collectionx/bitset"
+	velaruntime "github.com/arcgolabs/vela/runtime"
 )
 
 func TestMatchRoutePrioritizesHostAndPredicates(t *testing.T) {
 	t.Parallel()
 
-	routes := []*CompiledRoute{
+	routes := []*velaruntime.CompiledRoute{
 		{
 			Name:       "fallback",
 			PathPrefix: "/",
@@ -33,22 +34,22 @@ func TestMatchRoutePrioritizesHostAndPredicates(t *testing.T) {
 			PathPrefix: "/api/v1",
 		},
 	}
-	matcher := BuildEntrypointMatcher(routes)
+	matcher := velaruntime.BuildEntrypointMatcher(routes)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://api.example.com/api/v1/users", http.NoBody)
-	got := MatchRoute(matcher, routes, req)
+	got := velaruntime.MatchRoute(matcher, routes, req)
 	if got == nil || got.Name != "host-long-method" {
 		t.Fatalf("matched route = %v, want host-long-method", routeName(got))
 	}
 
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://shop.example.com/api/v1/users", http.NoBody)
-	got = MatchRoute(matcher, routes, req)
+	got = velaruntime.MatchRoute(matcher, routes, req)
 	if got == nil || got.Name != "wildcard" {
 		t.Fatalf("matched route = %v, want wildcard", routeName(got))
 	}
 
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://other.test/anything", http.NoBody)
-	got = MatchRoute(matcher, routes, req)
+	got = velaruntime.MatchRoute(matcher, routes, req)
 	if got == nil || got.Name != "fallback" {
 		t.Fatalf("matched route = %v, want fallback", routeName(got))
 	}
@@ -57,16 +58,16 @@ func TestMatchRoutePrioritizesHostAndPredicates(t *testing.T) {
 func TestMatchRouteStripsPortFromHost(t *testing.T) {
 	t.Parallel()
 
-	routes := []*CompiledRoute{
+	routes := []*velaruntime.CompiledRoute{
 		{
 			Name: "api",
 			Host: "api.example.com",
 		},
 	}
-	matcher := BuildEntrypointMatcher(routes)
+	matcher := velaruntime.BuildEntrypointMatcher(routes)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://api.example.com:8080/", http.NoBody)
 
-	got := MatchRoute(matcher, routes, req)
+	got := velaruntime.MatchRoute(matcher, routes, req)
 	if got == nil || got.Name != "api" {
 		t.Fatalf("matched route = %v, want api", routeName(got))
 	}
@@ -75,48 +76,48 @@ func TestMatchRouteStripsPortFromHost(t *testing.T) {
 func TestMatchRouteFallsBackToShorterPrefixWhenLongerPredicateMisses(t *testing.T) {
 	t.Parallel()
 
-	routes := []*CompiledRoute{
-		routeWithPredicates(&CompiledRoute{
+	routes := []*velaruntime.CompiledRoute{
+		routeWithPredicates(&velaruntime.CompiledRoute{
 			Name:       "api-short",
 			Host:       "api.example.com",
 			PathPrefix: "/api",
 		}),
-		routeWithPredicates(&CompiledRoute{
+		routeWithPredicates(&velaruntime.CompiledRoute{
 			Name:       "api-v1-post",
 			Host:       "api.example.com",
 			PathPrefix: "/api/v1",
 			Method:     http.MethodPost,
 		}),
 	}
-	matcher := BuildEntrypointMatcher(routes)
+	matcher := velaruntime.BuildEntrypointMatcher(routes)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://api.example.com/api/v1/users", http.NoBody)
 
-	got := MatchRoute(matcher, routes, req)
+	got := velaruntime.MatchRoute(matcher, routes, req)
 	if got == nil || got.Name != "api-short" {
 		t.Fatalf("matched route = %v, want api-short", routeName(got))
 	}
 }
 
-func routeName(route *CompiledRoute) string {
+func routeName(route *velaruntime.CompiledRoute) string {
 	if route == nil {
 		return "<nil>"
 	}
 	return route.Name
 }
 
-func routeWithPredicates(route *CompiledRoute) *CompiledRoute {
+func routeWithPredicates(route *velaruntime.CompiledRoute) *velaruntime.CompiledRoute {
 	route.Predicates = bitset.New()
 	if route.Host != "" {
-		route.Predicates.Set(PredicateHost)
+		route.Predicates.Set(velaruntime.PredicateHost)
 	}
 	if route.PathPrefix != "" {
-		route.Predicates.Set(PredicatePathPrefix)
+		route.Predicates.Set(velaruntime.PredicatePathPrefix)
 	}
 	if route.Method != "" {
-		route.Predicates.Set(PredicateMethod)
+		route.Predicates.Set(velaruntime.PredicateMethod)
 	}
 	if route.Headers.Len() > 0 {
-		route.Predicates.Set(PredicateHeaders)
+		route.Predicates.Set(velaruntime.PredicateHeaders)
 	}
 	return route
 }

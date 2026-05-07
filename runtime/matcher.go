@@ -3,6 +3,7 @@ package runtime
 import (
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
@@ -132,6 +133,26 @@ func linearRouteMatches(route *CompiledRoute, request *http.Request, host, metho
 		return false
 	}
 	return true
+}
+
+func matchHeaders(expected *mapping.Map[string, string], actual http.Header) bool {
+	if expected == nil {
+		return true
+	}
+	matched := true
+	expected.Range(func(key string, expectedValue string) bool {
+		values := actual.Values(key)
+		if len(values) == 0 {
+			matched = false
+			return false
+		}
+		if !slices.Contains(values, expectedValue) {
+			matched = false
+			return false
+		}
+		return true
+	})
+	return matched
 }
 
 func matchWithPredicates(routes *collectionlist.List[*CompiledRoute], path, method string, headers http.Header) *CompiledRoute {

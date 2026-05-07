@@ -1,4 +1,4 @@
-package runtime
+package runtime_test
 
 import (
 	"net/http"
@@ -7,6 +7,7 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
+	velaruntime "github.com/arcgolabs/vela/runtime"
 )
 
 func TestWrapMiddlewares(t *testing.T) {
@@ -14,12 +15,12 @@ func TestWrapMiddlewares(t *testing.T) {
 
 	var gotPath string
 	var gotHeader string
-	handler := WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		gotHeader = r.Header.Get("X-Test")
 		w.WriteHeader(http.StatusNoContent)
-	}), collectionlist.NewList[MiddlewareRuntime](
-		MiddlewareRuntime{
+	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
+		velaruntime.MiddlewareRuntime{
 			StripPrefix: "/api",
 			AddPrefix:   "/v1",
 			RequestHeaders: mapping.NewMapFrom(map[string]string{
@@ -49,8 +50,8 @@ func TestWrapMiddlewares(t *testing.T) {
 func TestMiddlewareRegistryUsesCustomFactory(t *testing.T) {
 	t.Parallel()
 
-	registry := NewMiddlewareRegistry()
-	if err := registry.Register("mark", func(next http.Handler, middleware MiddlewareRuntime) http.Handler {
+	registry := velaruntime.NewMiddlewareRegistry()
+	if err := registry.Register("mark", func(next http.Handler, middleware velaruntime.MiddlewareRuntime) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			r.Header.Set("X-Middleware", middleware.Name)
 			next.ServeHTTP(w, r)
@@ -59,12 +60,12 @@ func TestMiddlewareRegistryUsesCustomFactory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handler := WrapMiddlewaresWithRegistry(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	handler := velaruntime.WrapMiddlewaresWithRegistry(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("X-Middleware"); got != "custom" {
 			t.Fatalf("header = %q, want custom", got)
 		}
-	}), collectionlist.NewList[MiddlewareRuntime](
-		MiddlewareRuntime{Name: "custom", Type: "mark"},
+	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
+		velaruntime.MiddlewareRuntime{Name: "custom", Type: "mark"},
 	), registry)
 
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/", http.NoBody))

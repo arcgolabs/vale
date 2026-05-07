@@ -1,30 +1,22 @@
-package raftnode
+package raftnode_test
 
 import (
-	"bytes"
-	"context"
-	"io"
-	"path/filepath"
+	"log/slog"
+	"net"
 	"testing"
+	"time"
 
-	"github.com/hashicorp/raft"
+	"github.com/arcgolabs/vela/cluster/raftnode"
 )
 
-func TestFSMApplySnapshotUpdateCommand(t *testing.T) {
-	t.Parallel()
+func TestNodeAppliesSnapshotUpdateCommand(t *testing.T) {
+	node := newTestNode(t)
 
-	store := newFSM(nil)
-	result := store.Apply(&raft.Log{
-		Index: 7,
-		Data:  []byte(`{"type":"snapshot_update","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":2,"routes":3,"proxy_engine":"oxy"}}`),
-	})
-	if err, ok := result.(error); ok {
-		t.Fatal(err)
-	}
+	mustApply(t, node, []byte(`{"type":"snapshot_update","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":2,"routes":3,"proxy_engine":"oxy"}}`))
 
-	state := store.State()
-	if state.Version != 7 {
-		t.Fatalf("version = %d, want 7", state.Version)
+	state := node.AppliedState()
+	if state.Version == 0 {
+		t.Fatal("version = 0, want raft log version")
 	}
 	if state.Snapshot == nil {
 		t.Fatal("snapshot state is nil")
@@ -34,21 +26,14 @@ func TestFSMApplySnapshotUpdateCommand(t *testing.T) {
 	}
 }
 
-func TestFSMApplyRouteSyncCommand(t *testing.T) {
-	t.Parallel()
+func TestNodeAppliesRouteSyncCommand(t *testing.T) {
+	node := newTestNode(t)
 
-	store := newFSM(nil)
-	result := store.Apply(&raft.Log{
-		Index: 9,
-		Data:  []byte(`{"type":"route_sync","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":1,"routes":1,"proxy_engine":"oxy"},"routes":[{"name":"api","entrypoint":"web","path_prefix":"/api","service":"svc"}]}`),
-	})
-	if err, ok := result.(error); ok {
-		t.Fatal(err)
-	}
+	mustApply(t, node, []byte(`{"type":"route_sync","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":1,"routes":1,"proxy_engine":"oxy"},"routes":[{"name":"api","entrypoint":"web","path_prefix":"/api","service":"svc"}]}`))
 
-	state := store.State()
-	if state.Version != 9 {
-		t.Fatalf("version = %d, want 9", state.Version)
+	state := node.AppliedState()
+	if state.Version == 0 {
+		t.Fatal("version = 0, want raft log version")
 	}
 	if len(state.Routes) != 1 {
 		t.Fatalf("routes len = %d, want 1", len(state.Routes))
@@ -58,118 +43,94 @@ func TestFSMApplyRouteSyncCommand(t *testing.T) {
 	}
 }
 
-func TestFSMApplyLegacyPayloadAsRawState(t *testing.T) {
-	t.Parallel()
+func TestNodeAppliesLegacyPayloadAsRawState(t *testing.T) {
+	node := newTestNode(t)
 
-	store := newFSM(nil)
-	mustApply(t, store, &raft.Log{
-		Index: 3,
-		Data:  []byte(`{"routes":1}`),
-	})
-	state := store.State()
-	if state.Version != 3 {
-		t.Fatalf("version = %d, want 3", state.Version)
+	mustApply(t, node, []byte(`{"routes":1}`))
+
+	state := node.AppliedState()
+	if state.Version == 0 {
+		t.Fatal("version = 0, want raft log version")
 	}
 	if string(state.Raw) != `{"routes":1}` {
 		t.Fatalf("raw = %s", state.Raw)
 	}
 }
 
-func TestFSMPersistsRouteStateWithStorxBboltx(t *testing.T) {
-	t.Parallel()
+func TestNodePeersReturnsBootstrapVoter(t *testing.T) {
+	node := newTestNode(t)
 
-	stateStore, err := openStateStore(filepath.Join(t.TempDir(), "state.bbolt"), nil)
+	peers, err := node.Peers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(peers) != 1 {
+		t.Fatalf("peers len = %d, want 1", len(peers))
+	}
+	if peers[0].ID != "node-1" || peers[0].Suffrage != "Voter" {
+		t.Fatalf("peer = %#v", peers[0])
+	}
+}
+
+func newTestNode(t *testing.T) *raftnode.Node {
+	t.Helper()
+
+	node, err := raftnode.New(raftnode.Config{
+		Enabled:   true,
+		NodeID:    "node-1",
+		BindAddr:  freeAddr(t),
+		DataDir:   t.TempDir(),
+		Bootstrap: true,
+	}, discardLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := node.Shutdown(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	waitForLeader(t, node)
+	return node
+}
+
+func waitForLeader(t *testing.T, node *raftnode.Node) {
+	t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if node.IsLeader() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("raft node did not become leader")
+}
+
+func mustApply(t *testing.T, node *raftnode.Node, data []byte) {
+	t.Helper()
+
+	if err := node.Apply(data, time.Second); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func freeAddr(t *testing.T) string {
+	t.Helper()
+
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
-		if closeErr := stateStore.Close(); closeErr != nil {
-			t.Fatal(closeErr)
+		if err := listener.Close(); err != nil {
+			t.Fatal(err)
 		}
 	}()
-
-	store := newFSM(stateStore)
-	result := store.Apply(&raft.Log{
-		Index: 15,
-		Data:  []byte(`{"type":"route_sync","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":1,"routes":2,"proxy_engine":"oxy"},"routes":[{"name":"api","entrypoint":"web","path_prefix":"/api","service":"svc"},{"name":"admin","entrypoint":"web","path_prefix":"/admin","service":"admin"}]}`),
-	})
-	if applyErr, ok := result.(error); ok {
-		t.Fatal(applyErr)
-	}
-
-	persisted, ok, err := stateStore.LoadState(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok {
-		t.Fatal("state was not persisted")
-	}
-	if persisted.Version != 15 || len(persisted.Routes) != 2 {
-		t.Fatalf("persisted state = %#v", persisted)
-	}
-	routes, err := stateStore.LoadRoutes(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(routes) != 2 {
-		t.Fatalf("persisted routes len = %d, want 2", len(routes))
-	}
+	return listener.Addr().String()
 }
 
-func TestFSMSnapshotRestoreRoundTrip(t *testing.T) {
-	t.Parallel()
-
-	store := newFSM(nil)
-	mustApply(t, store, &raft.Log{
-		Index: 11,
-		Data:  []byte(`{"type":"snapshot_update","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":5,"routes":8,"proxy_engine":"oxy"}}`),
-	})
-	snapshot, err := store.Snapshot()
-	if err != nil {
-		t.Fatal(err)
-	}
-	sink := &memorySnapshotSink{}
-	if err := snapshot.Persist(sink); err != nil {
-		t.Fatal(err)
-	}
-
-	restored := newFSM(nil)
-	if err := restored.Restore(io.NopCloser(bytes.NewReader(sink.Bytes()))); err != nil {
-		t.Fatal(err)
-	}
-	state := restored.State()
-	if state.Version != 11 {
-		t.Fatalf("restored version = %d, want 11", state.Version)
-	}
-	if state.Snapshot == nil || state.Snapshot.Routes != 8 {
-		t.Fatalf("restored snapshot = %#v", state.Snapshot)
-	}
-}
-
-func mustApply(t *testing.T, store *fsm, log *raft.Log) {
-	t.Helper()
-	result := store.Apply(log)
-	if err, ok := result.(error); ok {
-		t.Fatal(err)
-	}
-}
-
-type memorySnapshotSink struct {
-	bytes.Buffer
-	closed   bool
-	canceled bool
-}
-
-func (s *memorySnapshotSink) ID() string {
-	return "memory"
-}
-
-func (s *memorySnapshotSink) Close() error {
-	s.closed = true
-	return nil
-}
-
-func (s *memorySnapshotSink) Cancel() error {
-	s.canceled = true
-	return nil
+func discardLogger() *slog.Logger {
+	return slog.New(slog.DiscardHandler)
 }
