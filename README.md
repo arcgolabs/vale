@@ -186,7 +186,22 @@ snapshot := vela.NewSnapshot().
 ```
 
 For config-first construction without HCL, use `vela.NewConfigBuilder()` and pass
-the result to `vela.WithStaticConfig`.
+the result to `vela.WithStaticConfig`:
+
+```go
+cfg := vela.NewConfigBuilder().
+  Entrypoint("web", ":8080").
+  Service("api", "http://127.0.0.1:8081").
+  MiddlewareNamed("strip-api", vela.MiddlewareStripPrefix("/api")).
+  RouteTo("api", "web", "api",
+    vela.RoutePathPrefix("/api"),
+    vela.RouteMiddlewares("strip-api"),
+  ).
+  Admin(":19090").
+  Observability(true, true).
+  Health("5s", "2s").
+  Build()
+```
 
 ### Embedded Static Config Example
 

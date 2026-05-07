@@ -3,6 +3,7 @@ package vela
 import (
 	"net/http"
 
+	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
 	"github.com/arcgolabs/vela/runtime"
 )
@@ -19,7 +20,14 @@ type (
 	RuntimeMiddleware  = runtime.MiddlewareRuntime
 	MiddlewareRegistry = runtime.MiddlewareRegistry
 	MiddlewareFactory  = runtime.MiddlewareFactory
+	ConfigEndpoint     = config.Endpoint
+	ConfigRoute        = config.Route
+	ConfigMiddleware   = config.Middleware
+	ConfigSecurity     = config.Security
 	ConfigBuilder      = provider.ConfigBuilder
+	EntrypointOption   = provider.EntrypointOption
+	RouteOption        = provider.RouteOption
+	MiddlewareOption   = provider.MiddlewareOption
 )
 
 func NewSnapshot() *RuntimeSnapshot {
@@ -52,4 +60,60 @@ func DefaultMiddlewareRegistry() *MiddlewareRegistry {
 
 func NewConfigBuilder() *ConfigBuilder {
 	return provider.NewConfigBuilder()
+}
+
+func NewConfigEndpoint(rawURL string, weight int) ConfigEndpoint {
+	return provider.ConfigEndpoint(rawURL, weight)
+}
+
+func EntrypointTLS(certFile string, keyFile string) EntrypointOption {
+	return provider.EntrypointTLS(certFile, keyFile)
+}
+
+func EntrypointACME(email string, cacheDir string, domains ...string) EntrypointOption {
+	return provider.EntrypointACME(email, cacheDir, domains...)
+}
+
+func RouteHost(host string) RouteOption {
+	return provider.RouteHost(host)
+}
+
+func RoutePathPrefix(pathPrefix string) RouteOption {
+	return provider.RoutePathPrefix(pathPrefix)
+}
+
+func RouteMethod(method string) RouteOption {
+	return provider.RouteMethod(method)
+}
+
+func RouteHeader(key string, value string) RouteOption {
+	return provider.RouteHeader(key, value)
+}
+
+func RouteMiddlewares(names ...string) RouteOption {
+	return provider.RouteMiddlewares(names...)
+}
+
+func MiddlewareType(middlewareType string) MiddlewareOption {
+	return provider.MiddlewareType(middlewareType)
+}
+
+func MiddlewareStripPrefix(pathPrefix string) MiddlewareOption {
+	return provider.MiddlewareStripPrefix(pathPrefix)
+}
+
+func MiddlewareAddPrefix(pathPrefix string) MiddlewareOption {
+	return provider.MiddlewareAddPrefix(pathPrefix)
+}
+
+func MiddlewareRequestHeader(key string, value string) MiddlewareOption {
+	return provider.MiddlewareRequestHeader(key, value)
+}
+
+func MiddlewareResponseHeader(key string, value string) MiddlewareOption {
+	return provider.MiddlewareResponseHeader(key, value)
+}
+
+func MiddlewareMaxBodyBytes(maxBodyBytes int64) MiddlewareOption {
+	return provider.MiddlewareMaxBodyBytes(maxBodyBytes)
 }

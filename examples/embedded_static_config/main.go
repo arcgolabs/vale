@@ -11,7 +11,6 @@ import (
 
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/vela"
-	"github.com/arcgolabs/vela/config"
 	providerevents "github.com/arcgolabs/vela/provider"
 )
 
@@ -36,37 +35,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg := &config.Config{
-		Entrypoints: []config.Entrypoint{
-			{Name: "web", Address: ":8080"},
-		},
-		Services: []config.Service{
-			{
-				Name:     "echo",
-				Strategy: "round_robin",
-				Endpoints: []config.Endpoint{
-					{URL: "http://127.0.0.1:8081", Weight: 1},
-				},
-			},
-		},
-		Routes: []config.Route{
-			{
-				Name:       "echo-route",
-				Entrypoint: "web",
-				Service:    "echo",
-				PathPrefix: "/",
-			},
-		},
-		Admin: &config.Admin{Address: ":19090"},
-		Observability: &config.Observability{
-			AccessLog: true,
-			Metrics:   true,
-		},
-		Health: &config.Health{
-			Interval: "5s",
-			Timeout:  "2s",
-		},
-	}
+	cfg := vela.NewConfigBuilder().
+		Entrypoint("web", ":8080").
+		Service("echo", "http://127.0.0.1:8081").
+		RouteTo("echo-route", "web", "echo", vela.RoutePathPrefix("/")).
+		Admin(":19090").
+		Observability(true, true).
+		Health("5s", "2s").
+		Build()
 
 	embeddedGateway, err := vela.New(
 		vela.WithLogger(logger),

@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"net/http"
 	"reflect"
 	"testing"
 
@@ -33,5 +34,52 @@ func TestAppendSortedRoutes(t *testing.T) {
 	got := []string{cfg.Routes[0].Name, cfg.Routes[1].Name}
 	if !reflect.DeepEqual(got, []string{"a", "b"}) {
 		t.Fatalf("routes = %v", got)
+	}
+}
+
+func TestConfigBuilderFluentAPI(t *testing.T) {
+	t.Parallel()
+
+	cfg := NewConfigBuilder().
+		Entrypoint("websecure", ":8443",
+			EntrypointTLS("cert.pem", "key.pem"),
+			EntrypointACME("ops@example.com", "", "example.com"),
+		).
+		ServiceWithStrategy("api", "weighted_round_robin",
+			ConfigEndpoint("http://127.0.0.1:8081", 2),
+			ConfigEndpoint("http://127.0.0.1:8082", 1),
+		).
+		MiddlewareNamed("strip-api",
+			MiddlewareStripPrefix("/api"),
+			MiddlewareRequestHeader("X-Test", "ok"),
+			MiddlewareResponseHeader("X-Response", "set"),
+			MiddlewareMaxBodyBytes(1024),
+		).
+		RouteTo("api", "websecure", "api",
+			RouteHost("api.example.com"),
+			RoutePathPrefix("/api"),
+			RouteMethod(http.MethodGet),
+			RouteHeader("X-Env", "test"),
+			RouteMiddlewares("strip-api"),
+		).
+		Admin(":19090").
+		Observability(true, true).
+		Health("5s", "2s").
+		Build()
+
+	if err := config.Validate(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Entrypoints[0].TLS == nil || cfg.Entrypoints[0].ACME == nil {
+		t.Fatalf("entrypoint tls/acme not set: %#v", cfg.Entrypoints[0])
+	}
+	if cfg.Services[0].Strategy != "weighted_round_robin" || len(cfg.Services[0].Endpoints) != 2 {
+		t.Fatalf("service = %#v", cfg.Services[0])
+	}
+	if cfg.Middlewares[0].StripPrefix != "/api" || cfg.Middlewares[0].RequestHeaders["X-Test"] != "ok" {
+		t.Fatalf("middleware = %#v", cfg.Middlewares[0])
+	}
+	if cfg.Routes[0].Method != http.MethodGet || cfg.Routes[0].Middlewares[0] != "strip-api" {
+		t.Fatalf("route = %#v", cfg.Routes[0])
 	}
 }

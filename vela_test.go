@@ -55,7 +55,7 @@ func TestRootPackageConfigBuilder(t *testing.T) {
 	cfg := NewConfigBuilder().
 		Entrypoint("web", ":8080").
 		Service("api", "http://127.0.0.1:8081").
-		Route(config.Route{Name: "api", Entrypoint: "web", Service: "api", PathPrefix: "/api"}).
+		RouteTo("api", "web", "api", RoutePathPrefix("/api")).
 		Admin(":19090").
 		Build()
 
