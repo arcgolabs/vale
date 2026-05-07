@@ -8,6 +8,7 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/rs/cors"
+	"github.com/samber/mo"
 	"github.com/samber/oops"
 	"github.com/sony/gobreaker"
 	"github.com/unrolled/secure"
@@ -155,26 +156,14 @@ func stringListValues(values *collectionlist.List[string]) []string {
 }
 
 func parseDuration(value string) time.Duration {
-	if strings.TrimSpace(value) == "" {
-		return 0
-	}
-	duration, err := time.ParseDuration(value)
-	if err != nil {
-		return 0
-	}
-	return duration
+	duration, err := time.ParseDuration(strings.TrimSpace(value))
+	return mo.TupleToOption(duration, err == nil).OrElse(0)
 }
 
 func maxInt(value, fallback int) int {
-	if value > 0 {
-		return value
-	}
-	return fallback
+	return mo.TupleToOption(value, value > 0).OrElse(fallback)
 }
 
 func defaultString(value, fallback string) string {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	return value
+	return mo.EmptyableToOption(strings.TrimSpace(value)).OrElse(fallback)
 }

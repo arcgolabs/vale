@@ -22,26 +22,20 @@ func adminServicesView(snapshot *runtime.CompiledSnapshot) []adminServiceView {
 	if snapshot == nil {
 		return nil
 	}
-	services := collectionlist.NewListWithCapacity[adminServiceView](snapshot.ServicesView().Len())
-	snapshot.ServicesView().Range(func(_ int, service runtime.ServiceView) bool {
-		services.Add(adminServiceView{
+	return collectionlist.MapList(snapshot.ServicesView(), func(_ int, service runtime.ServiceView) adminServiceView {
+		return adminServiceView{
 			Name:      service.Name,
 			Strategy:  service.Strategy,
 			Endpoints: service.Endpoints.Values(),
-		})
-		return true
-	})
-	return services.Values()
+		}
+	}).Values()
 }
 
 func adminEndpointsView(snapshot *runtime.CompiledSnapshot) []runtime.EndpointView {
 	if snapshot == nil {
 		return nil
 	}
-	endpoints := collectionlist.NewList[runtime.EndpointView]()
-	snapshot.ServicesView().Range(func(_ int, service runtime.ServiceView) bool {
-		endpoints.Merge(service.Endpoints)
-		return true
-	})
-	return endpoints.Values()
+	return collectionlist.FlatMapList(snapshot.ServicesView(), func(_ int, service runtime.ServiceView) []runtime.EndpointView {
+		return service.Endpoints.Values()
+	}).Values()
 }

@@ -93,19 +93,10 @@ func acmeDomainAllowed(serverName string, domains *collectionlist.List[string]) 
 	if serverName == "" || domains == nil {
 		return false
 	}
-	allowed := false
-	domains.Range(func(_ int, domain string) bool {
+	return domains.AnyMatch(func(_ int, domain string) bool {
 		domain = strings.ToLower(strings.TrimSpace(domain))
-		if domain == "" {
-			return true
-		}
-		if serverName == domain || wildcardDomainMatch(serverName, domain) {
-			allowed = true
-			return false
-		}
-		return true
+		return domain != "" && (serverName == domain || wildcardDomainMatch(serverName, domain))
 	})
-	return allowed
 }
 
 func wildcardDomainMatch(serverName, domain string) bool {
@@ -117,17 +108,16 @@ func wildcardDomainMatch(serverName, domain string) bool {
 }
 
 func mergeTLSNextProtos(base, extra []string) []string {
-	seen := collectionset.NewSet[string]()
-	merged := make([]string, 0, len(base)+len(extra))
-	for _, proto := range append(base, extra...) {
-		if strings.TrimSpace(proto) == "" {
-			continue
-		}
-		if seen.Contains(proto) {
-			continue
-		}
-		seen.Add(proto)
-		merged = append(merged, proto)
-	}
-	return merged
+	ordered := collectionset.NewOrderedSet[string]()
+	collectionlist.FilterMapList(
+		collectionlist.NewList[string]().MergeSlice(base).MergeSlice(extra),
+		func(_ int, proto string) (string, bool) {
+			trimmed := strings.TrimSpace(proto)
+			return trimmed, trimmed != ""
+		},
+	).Range(func(_ int, proto string) bool {
+		ordered.Add(proto)
+		return true
+	})
+	return ordered.Values()
 }

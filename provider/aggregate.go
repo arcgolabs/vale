@@ -17,12 +17,9 @@ type fallbackProvider struct {
 }
 
 func Fallback(providers ...SnapshotProvider) SnapshotProvider {
-	nonNilProviders := collectionlist.NewListWithCapacity[SnapshotProvider](len(providers))
-	for _, p := range providers {
-		if p != nil {
-			nonNilProviders.Add(p)
-		}
-	}
+	nonNilProviders := collectionlist.FilterList(collectionlist.NewList(providers...), func(_ int, p SnapshotProvider) bool {
+		return p != nil
+	})
 	return &fallbackProvider{providers: nonNilProviders}
 }
 

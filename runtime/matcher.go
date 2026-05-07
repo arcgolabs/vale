@@ -3,7 +3,6 @@ package runtime
 import (
 	"net"
 	"net/http"
-	"slices"
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
@@ -141,12 +140,9 @@ func matchHeaders(expected *mapping.Map[string, string], actual http.Header) boo
 	}
 	matched := true
 	expected.Range(func(key string, expectedValue string) bool {
-		values := actual.Values(key)
-		if len(values) == 0 {
-			matched = false
-			return false
-		}
-		if !slices.Contains(values, expectedValue) {
+		if !collectionlist.NewList(actual.Values(key)...).AnyMatch(func(_ int, value string) bool {
+			return value == expectedValue
+		}) {
 			matched = false
 			return false
 		}
@@ -156,21 +152,26 @@ func matchHeaders(expected *mapping.Map[string, string], actual http.Header) boo
 }
 
 func matchWithPredicates(routes *collectionlist.List[*CompiledRoute], path, method string, headers http.Header) *CompiledRoute {
-	var matched *CompiledRoute
-	routes.Range(func(_ int, route *CompiledRoute) bool {
-		if hasPredicate(route, PredicatePathPrefix) && !strings.HasPrefix(path, route.PathPrefix) {
-			return true
-		}
-		if hasPredicate(route, PredicateMethod) && route.Method != method {
-			return true
-		}
-		if hasPredicate(route, PredicateHeaders) && !matchHeaders(route.Headers, headers) {
-			return true
-		}
-		matched = route
-		return false
+	matched, ok := collectionlist.FindList(routes, func(_ int, route *CompiledRoute) bool {
+		return routeMatchesRequest(route, path, method, headers)
 	})
+	if !ok {
+		return nil
+	}
 	return matched
+}
+
+func routeMatchesRequest(route *CompiledRoute, path, method string, headers http.Header) bool {
+	if hasPredicate(route, PredicatePathPrefix) && !strings.HasPrefix(path, route.PathPrefix) {
+		return false
+	}
+	if hasPredicate(route, PredicateMethod) && route.Method != method {
+		return false
+	}
+	if hasPredicate(route, PredicateHeaders) && !matchHeaders(route.Headers, headers) {
+		return false
+	}
+	return true
 }
 
 func sortRoutesByPriority(routes *collectionlist.List[*CompiledRoute]) *collectionlist.List[*CompiledRoute] {

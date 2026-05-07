@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
 	"github.com/samber/mo"
@@ -11,42 +12,35 @@ import (
 
 func newDockerConfig(options Options) *config.Config {
 	cfg := provider.NewEntrypointConfig(options.DefaultEntrypointName, options.DefaultEntrypointAddr)
-	for _, name := range provider.SortedStrings(options.EntrypointAddresses.Keys()) {
+	entrypoints := collectionlist.FilterMapList(collectionlist.NewList(provider.SortedStrings(options.EntrypointAddresses.Keys())...), func(_ int, name string) (config.Entrypoint, bool) {
 		if name == options.DefaultEntrypointName {
-			continue
+			return config.Entrypoint{}, false
 		}
 		address, _ := options.EntrypointAddresses.Get(name)
-		if strings.TrimSpace(address) == "" {
-			continue
+		address = strings.TrimSpace(address)
+		if address == "" {
+			return config.Entrypoint{}, false
 		}
-		cfg.Entrypoints = append(cfg.Entrypoints, config.Entrypoint{
+		return config.Entrypoint{
 			Name:    name,
-			Address: strings.TrimSpace(address),
-		})
-	}
+			Address: address,
+		}, true
+	})
+	cfg.Entrypoints = collectionlist.NewList(cfg.Entrypoints...).Merge(entrypoints).Values()
 	return cfg
 }
 
 func valueOr(value, fallback string) string {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	return value
+	return mo.EmptyableToOption(strings.TrimSpace(value)).OrElse(fallback)
 }
 
 func parseBool(value string, fallback bool) bool {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	parsed, err := strconv.ParseBool(value)
+	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
 	return mo.TupleToOption(parsed, err == nil).OrElse(fallback)
 }
 
 func parseInt(value string, fallback int) int {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
 	return mo.TupleToOption(parsed, err == nil).OrElse(fallback)
 }
 

@@ -11,13 +11,7 @@ import (
 )
 
 func labelsEnabled(labels map[string]string, traefikLabels velaprovider.TraefikLabels) bool {
-	if traefikLabels.Enabled.IsPresent() {
-		return traefikLabels.Enabled.OrElse(false)
-	}
-	if parseBool(labels["vela.enable"], false) {
-		return true
-	}
-	return traefikLabels.HasHTTPConfig()
+	return traefikLabels.Enabled.OrElse(parseBool(labels["vela.enable"], false) || traefikLabels.HasHTTPConfig())
 }
 
 func applyTraefikContainerConfig(

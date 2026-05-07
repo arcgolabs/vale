@@ -119,12 +119,9 @@ func (c *Catalog) RouteViews(filter RouteFilter) (*collectionlist.List[RouteView
 			With("entrypoint", filter.Entrypoint, "service", filter.Service, "host", filter.Host, "path_prefix", filter.PathPrefix).
 			Wrapf(err, "query runtime route views")
 	}
-	views := collectionlist.NewListWithCapacity[RouteView](records.Len())
-	records.Range(func(_ int, route RouteRecord) bool {
-		views.Add(RouteView(route))
-		return true
-	})
-	return views, nil
+	return collectionlist.MapList(records, func(_ int, route RouteRecord) RouteView {
+		return RouteView(route)
+	}), nil
 }
 
 func (c *Catalog) Routes(filter RouteFilter) (*collectionlist.List[RouteRecord], error) {
@@ -188,17 +185,12 @@ func (s *CompiledSnapshot) routesFallback() *collectionlist.List[RouteView] {
 
 func filterRouteViews(routes *collectionlist.List[RouteView], filter RouteFilter) *collectionlist.List[RouteView] {
 	filter = normalizeRouteFilter(filter)
-	filtered := collectionlist.NewList[RouteView]()
 	if routes == nil {
-		return filtered
+		return collectionlist.NewList[RouteView]()
 	}
-	routes.Range(func(_ int, route RouteView) bool {
-		if routeMatchesFilter(RouteRecord(route), filter) {
-			filtered.Add(route)
-		}
-		return true
+	return collectionlist.FilterList(routes, func(_ int, route RouteView) bool {
+		return routeMatchesFilter(RouteRecord(route), filter)
 	})
-	return filtered
 }
 
 func routeLookup(filter RouteFilter) (string, []any) {

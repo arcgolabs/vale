@@ -34,23 +34,27 @@ func (s *CompiledSnapshot) ServicesView() *collectionlist.List[ServiceView] {
 	}
 	serviceList := collectionlist.NewListWithCapacity[ServiceView](s.Services.Len())
 	s.Services.Range(func(_ string, service *ServiceRuntime) bool {
-		endpointList := collectionlist.NewListWithCapacity[EndpointView](service.Endpoints.Len())
-		service.Endpoints.Range(func(_ int, endpoint *EndpointRuntime) bool {
-			endpointList.Add(EndpointView{
-				URL:         endpoint.URL.String(),
-				Weight:      endpoint.Weight,
-				Healthy:     endpoint.Healthy.Load(),
-				LastChecked: endpoint.LastChecked.Load(),
-			})
-			return true
-		})
 		serviceView := ServiceView{
 			Name:      service.Name,
 			Strategy:  service.Strategy,
-			Endpoints: endpointList,
+			Endpoints: endpointViews(service),
 		}
 		serviceList.Add(serviceView)
 		return true
 	})
 	return serviceList
+}
+
+func endpointViews(service *ServiceRuntime) *collectionlist.List[EndpointView] {
+	if service == nil {
+		return collectionlist.NewList[EndpointView]()
+	}
+	return collectionlist.MapList(service.Endpoints, func(_ int, endpoint *EndpointRuntime) EndpointView {
+		return EndpointView{
+			URL:         endpoint.URL.String(),
+			Weight:      endpoint.Weight,
+			Healthy:     endpoint.Healthy.Load(),
+			LastChecked: endpoint.LastChecked.Load(),
+		}
+	})
 }

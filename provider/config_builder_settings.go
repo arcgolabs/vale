@@ -3,6 +3,7 @@ package provider
 import (
 	"strings"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
 )
@@ -60,20 +61,23 @@ func AppendSortedServices(cfg *config.Config, services *mapping.Map[string, *con
 	if cfg == nil || services == nil {
 		return
 	}
-	for _, serviceName := range SortedStrings(services.Keys()) {
+	sortedServices := collectionlist.FilterMapList(collectionlist.NewList(SortedStrings(services.Keys())...), func(_ int, serviceName string) (config.Service, bool) {
 		service, _ := services.Get(serviceName)
 		if service != nil {
-			cfg.Services = append(cfg.Services, *service)
+			return *service, true
 		}
-	}
+		return config.Service{}, false
+	})
+	cfg.Services = collectionlist.NewList(cfg.Services...).Merge(sortedServices).Values()
 }
 
 func AppendSortedRoutes(cfg *config.Config, routes *mapping.Map[string, config.Route]) {
 	if cfg == nil || routes == nil {
 		return
 	}
-	for _, routeName := range SortedStrings(routes.Keys()) {
+	sortedRoutes := collectionlist.MapList(collectionlist.NewList(SortedStrings(routes.Keys())...), func(_ int, routeName string) config.Route {
 		route, _ := routes.Get(routeName)
-		cfg.Routes = append(cfg.Routes, route)
-	}
+		return route
+	})
+	cfg.Routes = collectionlist.NewList(cfg.Routes...).Merge(sortedRoutes).Values()
 }

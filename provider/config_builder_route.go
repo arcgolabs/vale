@@ -80,13 +80,7 @@ func RouteMiddlewares(names ...string) RouteOption {
 		if route == nil {
 			return
 		}
-		nameList := collectionlist.NewListWithCapacity[string](len(names))
-		for _, name := range names {
-			if trimmed := strings.TrimSpace(name); trimmed != "" {
-				nameList.Add(trimmed)
-			}
-		}
-		route.Middlewares = nameList.Values()
+		route.Middlewares = cleanStrings(names)
 	}
 }
 

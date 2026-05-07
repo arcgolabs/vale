@@ -227,20 +227,14 @@ func normalizeMiddlewareType(middlewareType string) string {
 }
 
 func cleanStringList(values []string) *collectionlist.List[string] {
-	cleaned := collectionlist.NewListWithCapacity[string](len(values))
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			cleaned.Add(trimmed)
-		}
-	}
-	return cleaned
+	return collectionlist.FilterMapList(collectionlist.NewList(values...), func(_ int, value string) (string, bool) {
+		trimmed := strings.TrimSpace(value)
+		return trimmed, trimmed != ""
+	})
 }
 
 func hasAnyTrue(values *collectionlist.List[bool]) bool {
-	matched := false
-	values.Range(func(_ int, value bool) bool {
-		matched = value
-		return !matched
+	return values.AnyMatch(func(_ int, value bool) bool {
+		return value
 	})
-	return matched
 }

@@ -97,29 +97,24 @@ func normalizeTraefikLabels(labels map[string]string) *mapping.Map[string, strin
 }
 
 func traefikCSVList(value string, stripNamespace bool) *collectionlist.List[string] {
-	items := collectionlist.NewList[string]()
-	for _, item := range SplitCSV(value) {
+	return collectionlist.FilterMapList(collectionlist.NewList(SplitCSV(value)...), func(_ int, item string) (string, bool) {
 		if stripNamespace {
 			item = StripTraefikProviderNamespace(item)
 		}
-		if item != "" {
-			items.Add(item)
-		}
-	}
-	return items
+		return item, item != ""
+	})
 }
 
 func firstTraefikCSV(value string) string {
-	for _, item := range SplitCSV(value) {
-		return item
-	}
-	return ""
+	return collectionlist.NewList(SplitCSV(value)...).
+		FirstWhere(func(_ int, _ string) bool { return true }).
+		OrElse("")
 }
 
 func setHeader(headers map[string]string, key, value string) {
-	if strings.TrimSpace(key) != "" {
-		headers[strings.TrimSpace(key)] = strings.TrimSpace(value)
-	}
+	mo.EmptyableToOption(strings.TrimSpace(key)).ForEach(func(header string) {
+		headers[header] = strings.TrimSpace(value)
+	})
 }
 
 func applyTraefikSecurityHeader(middleware *config.Middleware, option, value string) {
@@ -146,17 +141,11 @@ func applyTraefikSecurityHeader(middleware *config.Middleware, option, value str
 }
 
 func parseTraefikBool(value string) bool {
-	if strings.TrimSpace(value) == "" {
-		return false
-	}
-	parsed, err := strconv.ParseBool(value)
+	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
 	return mo.TupleToOption(parsed, err == nil).OrElse(false)
 }
 
 func parseTraefikInt(value string, fallback int) int {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
 	return mo.TupleToOption(parsed, err == nil).OrElse(fallback)
 }

@@ -5,9 +5,9 @@ package main
 import (
 	"strings"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/configx"
 	"github.com/arcgolabs/dix"
-	"github.com/samber/lo"
 	"github.com/samber/oops"
 	"github.com/spf13/pflag"
 )
@@ -84,10 +84,10 @@ func parseCSV(input string) []string {
 	if strings.TrimSpace(input) == "" {
 		return nil
 	}
-	return lo.FilterMap(strings.Split(input, ","), func(part string, _ int) (string, bool) {
+	return collectionlist.FilterMapList(collectionlist.NewList(strings.Split(input, ",")...), func(_ int, part string) (string, bool) {
 		trimmed := strings.TrimSpace(part)
 		return trimmed, trimmed != ""
-	})
+	}).Values()
 }
 
 func execute() error {

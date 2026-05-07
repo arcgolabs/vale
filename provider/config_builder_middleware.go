@@ -154,11 +154,8 @@ func MiddlewareMaxBodyBytes(maxBodyBytes int64) MiddlewareOption {
 }
 
 func cleanStrings(values []string) []string {
-	items := collectionlist.NewListWithCapacity[string](len(values))
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			items.Add(trimmed)
-		}
-	}
-	return items.Values()
+	return collectionlist.FilterMapList(collectionlist.NewList(values...), func(_ int, value string) (string, bool) {
+		trimmed := strings.TrimSpace(value)
+		return trimmed, trimmed != ""
+	}).Values()
 }

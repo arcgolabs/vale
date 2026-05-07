@@ -53,17 +53,11 @@ func EntrypointACME(email, cacheDir string, domains ...string) EntrypointOption 
 		if entrypoint == nil {
 			return
 		}
-		domainList := collectionlist.NewListWithCapacity[string](len(domains))
-		for _, domain := range domains {
-			if trimmed := strings.TrimSpace(domain); trimmed != "" {
-				domainList.Add(trimmed)
-			}
-		}
 		entrypoint.ACME = &config.EntrypointACME{
 			Enabled:  true,
 			Email:    strings.TrimSpace(email),
 			CacheDir: strings.TrimSpace(cacheDir),
-			Domains:  domainList.Values(),
+			Domains:  cleanStrings(domains),
 		}
 	}
 }

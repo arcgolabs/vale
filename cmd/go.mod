@@ -3,18 +3,17 @@ module github.com/arcgolabs/vela/cmd
 go 1.26.2
 
 require (
+	github.com/arcgolabs/collectionx/list v0.7.0
 	github.com/arcgolabs/configx v0.3.2
 	github.com/arcgolabs/dix v0.7.2
 	github.com/arcgolabs/eventx v0.1.2
 	github.com/arcgolabs/logx v0.1.2
-	github.com/samber/lo v1.53.0
 	github.com/samber/oops v1.21.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 )
 
 require (
-	github.com/arcgolabs/collectionx/list v0.7.0 // indirect
 	github.com/arcgolabs/collectionx/mapping v0.7.0 // indirect
 	github.com/arcgolabs/collectionx/set v0.7.0 // indirect
 	github.com/arcgolabs/observabilityx v0.4.0 // indirect
