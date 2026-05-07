@@ -3,21 +3,13 @@
 package main
 
 import (
-	"log/slog"
 	"strings"
 
 	"github.com/arcgolabs/configx"
 	"github.com/arcgolabs/dix"
-	"github.com/arcgolabs/eventx"
-	"github.com/arcgolabs/logx"
-	"github.com/arcgolabs/vela"
-	prometheusmetrics "github.com/arcgolabs/vela/observability/prometheus"
 	"github.com/samber/lo"
 	"github.com/samber/oops"
 	"github.com/spf13/pflag"
-
-	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
-	fileconfig "github.com/arcgolabs/vela/provider/fileconfig"
 )
 
 // veladConfig is the standalone process bootstrap shape (env VELA_*, defaults, changed CLI flags).
@@ -33,31 +25,6 @@ type veladConfig struct {
 	RaftBoot    bool   `koanf:"raft_bootstrap"`
 }
 
-func (c veladConfig) gatewayOptions(logger *slog.Logger) []vela.Option {
-	options := []vela.Option{
-		vela.WithWatch(c.Watch),
-		vela.WithLogger(logger),
-		prometheusmetrics.WithMetrics(),
-	}
-	if c.RaftEnabled {
-		options = append(options, raftnode.WithCluster(raftnode.Config{
-			Enabled:   true,
-			NodeID:    c.RaftNodeID,
-			BindAddr:  c.RaftBind,
-			DataDir:   c.RaftDataDir,
-			Bootstrap: c.RaftBoot,
-		}))
-	}
-	files := parseCSV(c.ConfigFiles)
-	switch {
-	case len(files) > 0:
-		options = append(options, fileconfig.WithConfigFiles(files...))
-	case strings.TrimSpace(c.ConfigPath) != "":
-		options = append(options, fileconfig.WithConfigPath(c.ConfigPath))
-	}
-	return options
-}
-
 // veladStandaloneApp is the sole DI assembly entry for this process.
 func veladStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
 	return dix.NewApp("velad", dix.NewModule(
@@ -65,33 +32,17 @@ func veladStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
 		dix.Providers(
 			dix.Value(cliFlags),
 			dix.ProviderErr1(provideVeladConfig),
-			dix.ProviderErr1(func(cfg veladConfig) (*slog.Logger, error) {
-				logger, err := logx.New(
-					logx.WithConsole(true),
-					logx.WithLevelString(cfg.LogLevel),
-					logx.WithGlobalLogger(),
-				)
-				if err != nil {
-					return nil, oops.
-						In("cmd").
-						With("log_level", cfg.LogLevel).
-						Wrapf(err, "create logger")
-				}
-				logx.SetDefault(logger)
-				logger.Info("logger configured", "level", cfg.LogLevel)
-				return logger, nil
-			}),
-			dix.Provider0(func() eventx.BusRuntime { return eventx.New() }),
-			dix.ProviderErr3(func(cfg veladConfig, logger *slog.Logger, bus eventx.BusRuntime) (*vela.Gateway, error) {
-				opts := append(cfg.gatewayOptions(logger), vela.WithEventBus(bus))
-				gateway, err := vela.New(opts...)
-				if err != nil {
-					return nil, oops.
-						In("cmd").
-						Wrapf(err, "create gateway")
-				}
-				return gateway, nil
-			}),
+			dix.ProviderErr1(provideLogger),
+			dix.Provider0(provideEventBus),
+			dix.ProviderErr0(providePluginRegistry),
+			dix.Provider2(provideBaseOptions),
+			dix.Provider1(provideMetricsOptions),
+			dix.Provider1(provideConfigSourceOptions),
+			dix.Provider1(provideClusterOptions),
+			dix.Provider1(provideEventBusOptions),
+			dix.Provider5(provideGatewayOptions),
+			dix.ProviderErr1(provideGateway),
+			dix.Provider3(provideRunner),
 		),
 	))
 }
