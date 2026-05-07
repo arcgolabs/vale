@@ -170,6 +170,16 @@ func TestAdminAPIWritesPlainJSONViews(t *testing.T) {
 		t.Fatalf("routes len = %d, want 1", len(routes))
 	}
 
+	filterRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(filterRecorder, httptest.NewRequest(http.MethodGet, "/admin/routes?service=missing", nil))
+	var filteredRoutes []runtime.RouteView
+	if err := json.Unmarshal(filterRecorder.Body.Bytes(), &filteredRoutes); err != nil {
+		t.Fatalf("filtered routes json decode failed: %v; body=%s", err, filterRecorder.Body.String())
+	}
+	if len(filteredRoutes) != 0 {
+		t.Fatalf("filtered routes len = %d, want 0", len(filteredRoutes))
+	}
+
 	serviceRecorder := httptest.NewRecorder()
 	mux.ServeHTTP(serviceRecorder, httptest.NewRequest(http.MethodGet, "/admin/services", nil))
 	var services []adminServiceView

@@ -25,24 +25,7 @@ type ServiceView struct {
 }
 
 func (s *CompiledSnapshot) Routes() *collectionlist.List[RouteView] {
-	routeList := collectionlist.NewList[RouteView]()
-	if s == nil || s.RoutesByEntrypoint == nil {
-		return routeList
-	}
-	s.RoutesByEntrypoint.Range(func(entrypoint string, routes []*CompiledRoute) bool {
-		for _, route := range routes {
-			routeList.Add(RouteView{
-				Name:       route.Name,
-				Entrypoint: entrypoint,
-				Host:       route.Host,
-				PathPrefix: route.PathPrefix,
-				Method:     route.Method,
-				Service:    route.Service.Name,
-			})
-		}
-		return true
-	})
-	return routeList
+	return s.QueryRoutes(RouteFilter{})
 }
 
 func (s *CompiledSnapshot) ServicesView() *collectionlist.List[ServiceView] {

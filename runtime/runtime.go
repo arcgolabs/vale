@@ -22,6 +22,7 @@ type CompiledSnapshot struct {
 	EntrypointConfigs  *mapping.Map[string, EntrypointRuntime]
 	RoutesByEntrypoint *mapping.MultiMap[string, *CompiledRoute]
 	EntrypointMatchers *mapping.Map[string, *EntrypointMatcher]
+	Catalog            *Catalog
 	Services           *mapping.Map[string, *ServiceRuntime]
 	AdminAddress       string
 	AccessLogEnabled   bool

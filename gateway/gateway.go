@@ -557,13 +557,19 @@ func (g *Gateway) buildAdminMux() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", g.runtime.MetricsHandler())
 
-	mux.HandleFunc("/admin/routes", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/admin/routes", func(w http.ResponseWriter, r *http.Request) {
 		snapshot := g.runtime.Snapshot()
 		if snapshot == nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "runtime not ready"})
 			return
 		}
-		writeJSON(w, http.StatusOK, adminRoutesView(snapshot))
+		query := r.URL.Query()
+		writeJSON(w, http.StatusOK, adminRoutesView(snapshot, runtime.RouteFilter{
+			Entrypoint: query.Get("entrypoint"),
+			Service:    query.Get("service"),
+			Host:       query.Get("host"),
+			PathPrefix: query.Get("path_prefix"),
+		}))
 	})
 
 	mux.HandleFunc("/admin/services", func(w http.ResponseWriter, _ *http.Request) {
@@ -689,10 +695,13 @@ func (g *Gateway) publishClusterUpdate(snapshot *runtime.CompiledSnapshot) {
 		return
 	}
 	payload := map[string]any{
-		"built_at":  snapshot.BuiltAt.UTC().Format(time.RFC3339Nano),
-		"services":  snapshot.Services.Len(),
-		"routes":    snapshot.Routes().Len(),
-		"proxy_eng": snapshot.ProxyEngine,
+		"type": "snapshot_update",
+		"snapshot": map[string]any{
+			"built_at":     snapshot.BuiltAt.UTC().Format(time.RFC3339Nano),
+			"services":     snapshot.Services.Len(),
+			"routes":       snapshot.Routes().Len(),
+			"proxy_engine": snapshot.ProxyEngine,
+		},
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

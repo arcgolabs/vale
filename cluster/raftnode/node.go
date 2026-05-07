@@ -2,6 +2,7 @@ package raftnode
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -23,6 +24,28 @@ type Config struct {
 	BindAddr  string
 	DataDir   string
 	Bootstrap bool
+}
+
+const CommandTypeSnapshotUpdate = "snapshot_update"
+
+type Command struct {
+	Type     string          `json:"type"`
+	Snapshot *SnapshotUpdate `json:"snapshot,omitempty"`
+	Raw      json.RawMessage `json:"raw,omitempty"`
+}
+
+type SnapshotUpdate struct {
+	BuiltAt     string `json:"built_at"`
+	Services    int    `json:"services"`
+	Routes      int    `json:"routes"`
+	ProxyEngine string `json:"proxy_engine"`
+}
+
+type State struct {
+	Version   uint64          `json:"version"`
+	AppliedAt time.Time       `json:"applied_at"`
+	Snapshot  *SnapshotUpdate `json:"snapshot,omitempty"`
+	Raw       json.RawMessage `json:"raw,omitempty"`
 }
 
 func DefaultConfig() Config {
@@ -140,11 +163,24 @@ func (n *Node) Apply(data []byte, timeout time.Duration) error {
 	if n.logger != nil {
 		n.logger.Info("raft apply started", "bytes", len(data), "timeout", timeout)
 	}
-	err := n.raft.Apply(data, timeout).Error()
+	future := n.raft.Apply(data, timeout)
+	err := future.Error()
+	if err == nil {
+		if responseErr, ok := future.Response().(error); ok {
+			err = responseErr
+		}
+	}
 	if err != nil && n.logger != nil {
 		n.logger.Error("raft apply failed", "error", err)
 	}
 	return err
+}
+
+func (n *Node) AppliedState() State {
+	if n == nil || n.fsm == nil {
+		return State{}
+	}
+	return n.fsm.State()
 }
 
 func (n *Node) Status() map[string]any {
@@ -159,6 +195,7 @@ func (n *Node) Status() map[string]any {
 		"state":   n.raft.State().String(),
 		"leader":  string(n.raft.Leader()),
 		"stats":   stats,
+		"applied": n.fsm.State(),
 	}
 }
 
@@ -255,8 +292,8 @@ func (w *raftLogWriter) Write(data []byte) (int, error) {
 }
 
 type fsm struct {
-	mu   sync.RWMutex
-	data []byte
+	mu    sync.RWMutex
+	state State
 }
 
 func newFSM() *fsm {
@@ -266,15 +303,22 @@ func newFSM() *fsm {
 func (f *fsm) Apply(log *raft.Log) any {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.data = append(f.data[:0], log.Data...)
-	return nil
+	state, err := applyCommand(f.state, log.Index, log.Data)
+	if err != nil {
+		return err
+	}
+	f.state = state
+	return state
 }
 
 func (f *fsm) Snapshot() (raft.FSMSnapshot, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	copied := append([]byte(nil), f.data...)
-	return &fsmSnapshot{data: copied}, nil
+	data, err := json.Marshal(f.state)
+	if err != nil {
+		return nil, err
+	}
+	return &fsmSnapshot{data: data}, nil
 }
 
 func (f *fsm) Restore(reader io.ReadCloser) error {
@@ -283,10 +327,22 @@ func (f *fsm) Restore(reader io.ReadCloser) error {
 	if err != nil {
 		return err
 	}
+	var state State
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &state); err != nil {
+			return err
+		}
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.data = data
+	f.state = cloneState(state)
 	return nil
+}
+
+func (f *fsm) State() State {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return cloneState(f.state)
 }
 
 type fsmSnapshot struct {
@@ -302,3 +358,46 @@ func (s *fsmSnapshot) Persist(sink raft.SnapshotSink) error {
 }
 
 func (s *fsmSnapshot) Release() {}
+
+func applyCommand(current State, index uint64, data []byte) (State, error) {
+	command := Command{}
+	if err := json.Unmarshal(data, &command); err != nil || command.Type == "" {
+		return State{
+			Version:   index,
+			AppliedAt: time.Now().UTC(),
+			Snapshot:  cloneSnapshot(current.Snapshot),
+			Raw:       append(json.RawMessage(nil), data...),
+		}, nil
+	}
+
+	next := State{
+		Version:   index,
+		AppliedAt: time.Now().UTC(),
+		Snapshot:  cloneSnapshot(current.Snapshot),
+		Raw:       append(json.RawMessage(nil), command.Raw...),
+	}
+	switch command.Type {
+	case CommandTypeSnapshotUpdate:
+		next.Snapshot = cloneSnapshot(command.Snapshot)
+		return next, nil
+	default:
+		return current, fmt.Errorf("unsupported raft command type %q", command.Type)
+	}
+}
+
+func cloneState(state State) State {
+	return State{
+		Version:   state.Version,
+		AppliedAt: state.AppliedAt,
+		Snapshot:  cloneSnapshot(state.Snapshot),
+		Raw:       append(json.RawMessage(nil), state.Raw...),
+	}
+}
+
+func cloneSnapshot(snapshot *SnapshotUpdate) *SnapshotUpdate {
+	if snapshot == nil {
+		return nil
+	}
+	copied := *snapshot
+	return &copied
+}

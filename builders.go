@@ -18,6 +18,9 @@ type (
 	RuntimeACME        = runtime.ACMERuntime
 	RuntimeSecurity    = runtime.SecurityRuntime
 	RuntimeMiddleware  = runtime.MiddlewareRuntime
+	RuntimeCatalog     = runtime.Catalog
+	RuntimeRouteFilter = runtime.RouteFilter
+	RuntimeRouteRecord = runtime.RouteRecord
 	MiddlewareRegistry = runtime.MiddlewareRegistry
 	MiddlewareFactory  = runtime.MiddlewareFactory
 	ConfigEndpoint     = config.Endpoint

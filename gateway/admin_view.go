@@ -11,11 +11,11 @@ type adminServiceView struct {
 	Endpoints []runtime.EndpointView `json:"endpoints"`
 }
 
-func adminRoutesView(snapshot *runtime.CompiledSnapshot) []runtime.RouteView {
+func adminRoutesView(snapshot *runtime.CompiledSnapshot, filter runtime.RouteFilter) []runtime.RouteView {
 	if snapshot == nil {
 		return nil
 	}
-	return snapshot.Routes().Values()
+	return snapshot.QueryRoutes(filter).Values()
 }
 
 func adminServicesView(snapshot *runtime.CompiledSnapshot) []adminServiceView {

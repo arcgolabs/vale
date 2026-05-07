@@ -14,6 +14,7 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 - File-based config watching with invalid-config rollback behavior
 - JSON access logging and Prometheus metrics
 - Admin API for routes/services/endpoints and `/metrics`
+- Control-plane route catalog backed by `go-memdb` for admin queries and future reload diffing
 - Active endpoint health checks
 - Library-first builders for runtime snapshots and config source assembly
 - Provider reload coalescing with stable config fingerprints
@@ -71,6 +72,7 @@ versions when consumed outside this workspace.
 - `github.com/arcgolabs/configx`: bootstrap config from env/defaults.
 - `github.com/arcgolabs/eventx`: core provider load/reload/failure event bus.
 - `github.com/arcgolabs/collectionx`: list/set/map abstractions for config assembly, matcher grouping, and validation; prefix trie for path route buckets; bitset for compiled route predicates; graph for config reference validation.
+- `github.com/hashicorp/go-memdb`: immutable-radix-backed control-plane catalog for compiled routes/services without replacing the hot-path matcher.
 
 `runtime` package does not depend on DI container, matching the document's "core runtime no DI" rule.
 
@@ -130,6 +132,7 @@ Verify:
 - `http://127.0.0.1:8080/`
 - `http://127.0.0.1:19090/metrics`
 - `http://127.0.0.1:19090/admin/routes`
+- `http://127.0.0.1:19090/admin/routes?service=echo`
 - `http://127.0.0.1:19090/admin/services`
 - `http://127.0.0.1:19090/admin/endpoints`
 - `http://127.0.0.1:19090/admin/cluster/status`
@@ -326,6 +329,10 @@ Leader-only membership APIs:
 
 - `POST /admin/cluster/join` body: `{"id":"node-2","address":"127.0.0.1:17001"}`
 - `POST /admin/cluster/leave` body: `{"id":"node-2"}`
+
+Raft apply payloads are structured commands. The current command stores snapshot
+metadata in the FSM as typed JSON so the adapter can evolve toward replicated
+config state without changing the gateway cluster interface.
 
 ## Bootstrap Env Variables
 

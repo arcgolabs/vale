@@ -105,7 +105,7 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 		return true
 	})
 
-	return &runtime.CompiledSnapshot{
+	snapshot := &runtime.CompiledSnapshot{
 		Entrypoints:        entrypointMap,
 		EntrypointConfigs:  entrypointConfigMap,
 		RoutesByEntrypoint: routesByEntrypoint,
@@ -119,7 +119,9 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 		Security:           pickSecurity(cfg),
 		ProxyEngine:        proxy.DefaultEngine.Name(),
 		BuiltAt:            time.Now(),
-	}, nil
+	}
+	snapshot.BuildCatalog()
+	return snapshot, nil
 }
 
 func normalizeHeaders(headers map[string]string) *mapping.Map[string, string] {

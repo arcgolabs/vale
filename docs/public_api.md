@@ -9,7 +9,7 @@ embedded users; subpackages remain available for advanced wiring and optional mo
 | --- | --- | --- |
 | `github.com/arcgolabs/vela` | Public | Primary embedded API, functional options, runtime builders, config builders. |
 | `github.com/arcgolabs/vela/config` | Public DTO | HCL/JSON config structs, validation, fingerprinting. Native slices/maps remain here for decoder compatibility. |
-| `github.com/arcgolabs/vela/runtime` | Public advanced | Compiled data-plane model, matcher, middleware registry, metrics contracts. Uses collectionx containers. |
+| `github.com/arcgolabs/vela/runtime` | Public advanced | Compiled data-plane model, matcher, control-plane catalog, middleware registry, metrics contracts. Uses collectionx containers. |
 | `github.com/arcgolabs/vela/provider` | Public advanced | Provider interfaces, config builder implementation, events, fallback provider, closers. |
 | `github.com/arcgolabs/vela/provider/merged` | Public advanced | Multi-source merge, validate, compile, debounce, fingerprint dedupe. |
 | `github.com/arcgolabs/vela/provider/memoryconfig` | Public advanced | Mutable in-memory config source for embedded dynamic updates. |
@@ -37,5 +37,6 @@ embedded users; subpackages remain available for advanced wiring and optional mo
 - The root package should remain the stable surface for typical embedded usage.
 - `config` DTO structs intentionally use native Go collections because HCL/JSON decoding is their boundary.
 - Compiled runtime structs intentionally use `collectionx` containers.
+- Runtime route catalog queries return collectionx lists and keep request matching on the optimized matcher.
 - Admin HTTP responses are stable plain JSON DTOs and should not expose collectionx serialization details.
 - Middleware config type is strict: empty type means builtin, non-empty unknown values fail compilation.

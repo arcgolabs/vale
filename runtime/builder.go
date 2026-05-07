@@ -32,6 +32,7 @@ func (s *CompiledSnapshot) BuildMatchers() *CompiledSnapshot {
 		s.EntrypointMatchers.Set(entrypoint, BuildEntrypointMatcher(routes))
 		return true
 	})
+	s.BuildCatalog()
 	return s
 }
 
