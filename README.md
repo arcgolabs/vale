@@ -330,9 +330,10 @@ Leader-only membership APIs:
 - `POST /admin/cluster/join` body: `{"id":"node-2","address":"127.0.0.1:17001"}`
 - `POST /admin/cluster/leave` body: `{"id":"node-2"}`
 
-Raft apply payloads are structured commands. The current command stores snapshot
-metadata in the FSM as typed JSON so the adapter can evolve toward replicated
-config state without changing the gateway cluster interface.
+Raft apply payloads are structured commands. Route sync commands store snapshot
+metadata and route records in the FSM as typed JSON and persist the applied
+state through `github.com/arcgolabs/storx/bboltx`, so the adapter can evolve
+toward replicated config state without changing the gateway cluster interface.
 
 ## Bootstrap Env Variables
 

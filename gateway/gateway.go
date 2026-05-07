@@ -695,13 +695,14 @@ func (g *Gateway) publishClusterUpdate(snapshot *runtime.CompiledSnapshot) {
 		return
 	}
 	payload := map[string]any{
-		"type": "snapshot_update",
+		"type": "route_sync",
 		"snapshot": map[string]any{
 			"built_at":     snapshot.BuiltAt.UTC().Format(time.RFC3339Nano),
 			"services":     snapshot.Services.Len(),
 			"routes":       snapshot.Routes().Len(),
 			"proxy_engine": snapshot.ProxyEngine,
 		},
+		"routes": adminRoutesView(snapshot, runtime.RouteFilter{}),
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

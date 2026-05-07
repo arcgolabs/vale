@@ -2,6 +2,7 @@ package raftnode
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,11 +27,15 @@ type Config struct {
 	Bootstrap bool
 }
 
-const CommandTypeSnapshotUpdate = "snapshot_update"
+const (
+	CommandTypeSnapshotUpdate = "snapshot_update"
+	CommandTypeRouteSync      = "route_sync"
+)
 
 type Command struct {
 	Type     string          `json:"type"`
 	Snapshot *SnapshotUpdate `json:"snapshot,omitempty"`
+	Routes   []RouteRecord   `json:"routes,omitempty"`
 	Raw      json.RawMessage `json:"raw,omitempty"`
 }
 
@@ -45,7 +50,17 @@ type State struct {
 	Version   uint64          `json:"version"`
 	AppliedAt time.Time       `json:"applied_at"`
 	Snapshot  *SnapshotUpdate `json:"snapshot,omitempty"`
+	Routes    []RouteRecord   `json:"routes,omitempty"`
 	Raw       json.RawMessage `json:"raw,omitempty"`
+}
+
+type RouteRecord struct {
+	Name       string `json:"name"`
+	Entrypoint string `json:"entrypoint"`
+	Host       string `json:"host,omitempty"`
+	PathPrefix string `json:"path_prefix,omitempty"`
+	Method     string `json:"method,omitempty"`
+	Service    string `json:"service"`
 }
 
 func DefaultConfig() Config {
@@ -67,6 +82,7 @@ func WithCluster(config Config) gateway.Option {
 type Node struct {
 	raft   *raft.Raft
 	fsm    *fsm
+	store  *stateStore
 	logger *slog.Logger
 }
 
@@ -90,7 +106,17 @@ func New(config Config, logger *slog.Logger) (*Node, error) {
 		Output: logWriter,
 	})
 
-	fsmStore := newFSM()
+	stateStore, err := openStateStore(filepath.Join(config.DataDir, "vela-state.bbolt"), logger)
+	if err != nil {
+		return nil, err
+	}
+	storeOwned := true
+	defer func() {
+		if storeOwned {
+			_ = stateStore.Close()
+		}
+	}()
+	fsmStore := newFSM(stateStore)
 	logStore, err := raftboltdb.New(raftboltdb.Options{
 		Path: filepath.Join(config.DataDir, "raft-log.bolt"),
 	})
@@ -138,9 +164,11 @@ func New(config Config, logger *slog.Logger) (*Node, error) {
 		}
 	}
 
+	storeOwned = false
 	return &Node{
 		raft:   r,
 		fsm:    fsmStore,
+		store:  stateStore,
 		logger: logger,
 	}, nil
 }
@@ -269,6 +297,11 @@ func (n *Node) Shutdown() error {
 	if err != nil && n.logger != nil {
 		n.logger.Error("raft shutdown failed", "error", err)
 	}
+	if n.store != nil {
+		if closeErr := n.store.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}
 	return err
 }
 
@@ -294,10 +327,20 @@ func (w *raftLogWriter) Write(data []byte) (int, error) {
 type fsm struct {
 	mu    sync.RWMutex
 	state State
+	store *stateStore
 }
 
-func newFSM() *fsm {
-	return &fsm{}
+func newFSM(store *stateStore) *fsm {
+	state := State{}
+	if store != nil {
+		if loaded, ok, err := store.LoadState(context.Background()); err == nil && ok {
+			state = loaded
+		}
+	}
+	return &fsm{
+		state: cloneState(state),
+		store: store,
+	}
 }
 
 func (f *fsm) Apply(log *raft.Log) any {
@@ -306,6 +349,11 @@ func (f *fsm) Apply(log *raft.Log) any {
 	state, err := applyCommand(f.state, log.Index, log.Data)
 	if err != nil {
 		return err
+	}
+	if f.store != nil {
+		if err := f.store.SaveState(context.Background(), state); err != nil {
+			return err
+		}
 	}
 	f.state = state
 	return state
@@ -336,6 +384,9 @@ func (f *fsm) Restore(reader io.ReadCloser) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.state = cloneState(state)
+	if f.store != nil {
+		return f.store.SaveState(context.Background(), f.state)
+	}
 	return nil
 }
 
@@ -366,6 +417,7 @@ func applyCommand(current State, index uint64, data []byte) (State, error) {
 			Version:   index,
 			AppliedAt: time.Now().UTC(),
 			Snapshot:  cloneSnapshot(current.Snapshot),
+			Routes:    cloneRoutes(current.Routes),
 			Raw:       append(json.RawMessage(nil), data...),
 		}, nil
 	}
@@ -374,11 +426,16 @@ func applyCommand(current State, index uint64, data []byte) (State, error) {
 		Version:   index,
 		AppliedAt: time.Now().UTC(),
 		Snapshot:  cloneSnapshot(current.Snapshot),
+		Routes:    cloneRoutes(current.Routes),
 		Raw:       append(json.RawMessage(nil), command.Raw...),
 	}
 	switch command.Type {
 	case CommandTypeSnapshotUpdate:
 		next.Snapshot = cloneSnapshot(command.Snapshot)
+		return next, nil
+	case CommandTypeRouteSync:
+		next.Snapshot = cloneSnapshot(command.Snapshot)
+		next.Routes = cloneRoutes(command.Routes)
 		return next, nil
 	default:
 		return current, fmt.Errorf("unsupported raft command type %q", command.Type)
@@ -390,6 +447,7 @@ func cloneState(state State) State {
 		Version:   state.Version,
 		AppliedAt: state.AppliedAt,
 		Snapshot:  cloneSnapshot(state.Snapshot),
+		Routes:    cloneRoutes(state.Routes),
 		Raw:       append(json.RawMessage(nil), state.Raw...),
 	}
 }
@@ -400,4 +458,11 @@ func cloneSnapshot(snapshot *SnapshotUpdate) *SnapshotUpdate {
 	}
 	copied := *snapshot
 	return &copied
+}
+
+func cloneRoutes(routes []RouteRecord) []RouteRecord {
+	if len(routes) == 0 {
+		return nil
+	}
+	return append([]RouteRecord(nil), routes...)
 }

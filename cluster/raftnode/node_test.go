@@ -2,7 +2,9 @@ package raftnode
 
 import (
 	"bytes"
+	"context"
 	"io"
+	"path/filepath"
 	"testing"
 
 	"github.com/hashicorp/raft"
@@ -11,7 +13,7 @@ import (
 func TestFSMApplySnapshotUpdateCommand(t *testing.T) {
 	t.Parallel()
 
-	store := newFSM()
+	store := newFSM(nil)
 	result := store.Apply(&raft.Log{
 		Index: 7,
 		Data:  []byte(`{"type":"snapshot_update","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":2,"routes":3,"proxy_engine":"oxy"}}`),
@@ -32,10 +34,34 @@ func TestFSMApplySnapshotUpdateCommand(t *testing.T) {
 	}
 }
 
+func TestFSMApplyRouteSyncCommand(t *testing.T) {
+	t.Parallel()
+
+	store := newFSM(nil)
+	result := store.Apply(&raft.Log{
+		Index: 9,
+		Data:  []byte(`{"type":"route_sync","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":1,"routes":1,"proxy_engine":"oxy"},"routes":[{"name":"api","entrypoint":"web","path_prefix":"/api","service":"svc"}]}`),
+	})
+	if err, ok := result.(error); ok {
+		t.Fatal(err)
+	}
+
+	state := store.State()
+	if state.Version != 9 {
+		t.Fatalf("version = %d, want 9", state.Version)
+	}
+	if len(state.Routes) != 1 {
+		t.Fatalf("routes len = %d, want 1", len(state.Routes))
+	}
+	if state.Routes[0].Name != "api" || state.Routes[0].PathPrefix != "/api" {
+		t.Fatalf("route = %#v", state.Routes[0])
+	}
+}
+
 func TestFSMApplyLegacyPayloadAsRawState(t *testing.T) {
 	t.Parallel()
 
-	store := newFSM()
+	store := newFSM(nil)
 	store.Apply(&raft.Log{
 		Index: 3,
 		Data:  []byte(`{"routes":1}`),
@@ -49,10 +75,47 @@ func TestFSMApplyLegacyPayloadAsRawState(t *testing.T) {
 	}
 }
 
+func TestFSMPersistsRouteStateWithStorxBboltx(t *testing.T) {
+	t.Parallel()
+
+	stateStore, err := openStateStore(filepath.Join(t.TempDir(), "state.bbolt"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stateStore.Close()
+
+	store := newFSM(stateStore)
+	result := store.Apply(&raft.Log{
+		Index: 15,
+		Data:  []byte(`{"type":"route_sync","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":1,"routes":2,"proxy_engine":"oxy"},"routes":[{"name":"api","entrypoint":"web","path_prefix":"/api","service":"svc"},{"name":"admin","entrypoint":"web","path_prefix":"/admin","service":"admin"}]}`),
+	})
+	if err, ok := result.(error); ok {
+		t.Fatal(err)
+	}
+
+	persisted, ok, err := stateStore.LoadState(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("state was not persisted")
+	}
+	if persisted.Version != 15 || len(persisted.Routes) != 2 {
+		t.Fatalf("persisted state = %#v", persisted)
+	}
+	routes, err := stateStore.LoadRoutes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(routes) != 2 {
+		t.Fatalf("persisted routes len = %d, want 2", len(routes))
+	}
+}
+
 func TestFSMSnapshotRestoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	store := newFSM()
+	store := newFSM(nil)
 	store.Apply(&raft.Log{
 		Index: 11,
 		Data:  []byte(`{"type":"snapshot_update","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":5,"routes":8,"proxy_engine":"oxy"}}`),
@@ -66,7 +129,7 @@ func TestFSMSnapshotRestoreRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	restored := newFSM()
+	restored := newFSM(nil)
 	if err := restored.Restore(io.NopCloser(bytes.NewReader(sink.Bytes()))); err != nil {
 		t.Fatal(err)
 	}
