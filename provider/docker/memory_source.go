@@ -46,12 +46,17 @@ func (s *MemorySource) Watch(_ context.Context, onReload func(), _ func(error)) 
 func (s *MemorySource) Update(containers ...Container) {
 	s.mu.Lock()
 	s.containers = collectionlist.NewList(containers...)
-	listeners := s.listeners.Values()
+	listeners := collectionlist.NewListWithCapacity[func()](s.listeners.Len())
+	s.listeners.Range(func(_ int, listener func()) bool {
+		listeners.Add(listener)
+		return true
+	})
 	s.mu.Unlock()
 
-	for _, listener := range listeners {
+	listeners.Range(func(_ int, listener func()) bool {
 		if listener != nil {
 			listener()
 		}
-	}
+		return true
+	})
 }

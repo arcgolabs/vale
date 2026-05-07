@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/vela/runtime"
@@ -17,7 +16,11 @@ type fallbackProvider struct {
 }
 
 func Fallback(providers ...SnapshotProvider) SnapshotProvider {
-	nonNilProviders := collectionlist.FilterList(collectionlist.NewList(providers...), func(_ int, p SnapshotProvider) bool {
+	return FallbackList(collectionlist.NewList(providers...))
+}
+
+func FallbackList(providers *collectionlist.List[SnapshotProvider]) SnapshotProvider {
+	nonNilProviders := collectionlist.FilterList(providers, func(_ int, p SnapshotProvider) bool {
 		return p != nil
 	})
 	return &fallbackProvider{providers: nonNilProviders}
@@ -42,7 +45,7 @@ func (p *fallbackProvider) Load(ctx context.Context) (*runtime.CompiledSnapshot,
 	if loaded != nil {
 		return loaded, nil
 	}
-	return nil, fmt.Errorf("all providers failed: %s", strings.Join(messages.Values(), "; "))
+	return nil, fmt.Errorf("all providers failed: %s", messages.Join("; "))
 }
 
 func (p *fallbackProvider) Watch(ctx context.Context, onReload func(*runtime.CompiledSnapshot), onError func(error)) (io.Closer, error) {
@@ -56,7 +59,7 @@ func (p *fallbackProvider) Watch(ctx context.Context, onReload func(*runtime.Com
 			onError(fmt.Errorf("provider[%d] watch error: %w", index, err))
 		})
 		if err != nil {
-			closeErr := MultiCloser(closers.Values()).Close()
+			closeErr := NewMultiCloser(closers).Close()
 			setupErr = errors.Join(fmt.Errorf("provider[%d] watch setup failed: %w", index, err), closeErr)
 			return false
 		}
@@ -66,5 +69,5 @@ func (p *fallbackProvider) Watch(ctx context.Context, onReload func(*runtime.Com
 	if setupErr != nil {
 		return nil, setupErr
 	}
-	return MultiCloser(closers.Values()), nil
+	return NewMultiCloser(closers), nil
 }

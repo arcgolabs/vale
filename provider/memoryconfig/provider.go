@@ -6,6 +6,7 @@ import (
 	"io"
 	"sync"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
@@ -71,13 +72,18 @@ func (p *Provider) Update(cfg *config.Config) error {
 
 	p.mu.Lock()
 	p.cfg = cfg
-	listeners := p.listeners.Values()
+	listeners := collectionlist.NewListWithCapacity[func()](p.listeners.Len())
+	p.listeners.Range(func(_ int, listener func()) bool {
+		listeners.Add(listener)
+		return true
+	})
 	p.mu.Unlock()
 
-	for _, listener := range listeners {
+	listeners.Range(func(_ int, listener func()) bool {
 		if listener != nil {
 			listener()
 		}
-	}
+		return true
+	})
 	return nil
 }

@@ -1,7 +1,9 @@
+// Package fileconfig provides HCL file config loading and watching.
 package fileconfig
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -71,64 +73,107 @@ func WatchPath(path string, onChange func(), onError func(error)) (io.Closer, er
 }
 
 func WatchPathWithLogger(path string, logger *slog.Logger, onChange func(), onError func(error)) (io.Closer, error) {
-	watcher, err := fsnotify.NewWatcher()
+	watcher, err := newConfigFileWatcher(path, logger)
 	if err != nil {
 		return nil, err
 	}
+	go fileWatch{
+		path:     path,
+		base:     filepath.Base(path),
+		watcher:  watcher,
+		logger:   logger,
+		onChange: onChange,
+		onError:  onError,
+	}.run()
+	return watcher, nil
+}
+
+type fileWatch struct {
+	path     string
+	base     string
+	watcher  *fsnotify.Watcher
+	logger   *slog.Logger
+	onChange func()
+	onError  func(error)
+}
+
+func newConfigFileWatcher(path string, logger *slog.Logger) (*fsnotify.Watcher, error) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, fmt.Errorf("create config file watcher: %w", err)
+	}
 
 	dir := filepath.Dir(path)
-	base := filepath.Base(path)
 	if err := watcher.Add(dir); err != nil {
-		_ = watcher.Close()
-		return nil, err
+		closeErr := watcher.Close()
+		return nil, errors.Join(
+			fmt.Errorf("watch config directory %q: %w", dir, err),
+			closeErr,
+		)
 	}
 	if logger != nil {
 		logger.Info("watching config file", "path", path, "dir", dir)
 	}
-
-	go func() {
-		var lastReload time.Time
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
-				}
-				if filepath.Base(event.Name) != base {
-					continue
-				}
-				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename) == 0 {
-					continue
-				}
-				if time.Since(lastReload) < 300*time.Millisecond {
-					continue
-				}
-				lastReload = time.Now()
-				if logger != nil {
-					logger.Info("config file changed", "path", path, "op", event.Op.String())
-				}
-				onChange()
-			case watchErr, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-				if logger != nil {
-					logger.Error("config file watch error", "path", path, "error", watchErr)
-				}
-				onError(watchErr)
-			}
-		}
-	}()
 	return watcher, nil
+}
+
+func (w fileWatch) run() {
+	var lastReload time.Time
+	for {
+		select {
+		case event, ok := <-w.watcher.Events:
+			if !ok {
+				return
+			}
+			w.handleEvent(event, &lastReload)
+		case watchErr, ok := <-w.watcher.Errors:
+			if !ok {
+				return
+			}
+			w.handleError(watchErr)
+		}
+	}
+}
+
+func (w fileWatch) handleEvent(event fsnotify.Event, lastReload *time.Time) {
+	if !w.shouldReload(event, *lastReload) {
+		return
+	}
+	*lastReload = time.Now()
+	if w.logger != nil {
+		w.logger.Info("config file changed", "path", w.path, "op", event.Op.String())
+	}
+	if w.onChange != nil {
+		w.onChange()
+	}
+}
+
+func (w fileWatch) shouldReload(event fsnotify.Event, lastReload time.Time) bool {
+	if filepath.Base(event.Name) != w.base {
+		return false
+	}
+	if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename) == 0 {
+		return false
+	}
+	return time.Since(lastReload) >= 300*time.Millisecond
+}
+
+func (w fileWatch) handleError(watchErr error) {
+	if w.logger != nil {
+		w.logger.Error("config file watch error", "path", w.path, "error", watchErr)
+	}
+	if w.onError != nil {
+		w.onError(watchErr)
+	}
 }
 
 func Load(path string) (*config.Config, error) {
 	var cfg config.Config
 	if err := hclsimple.DecodeFile(path, nil, &cfg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode config file %q: %w", path, err)
 	}
 	if err := config.Validate(&cfg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate config file %q: %w", path, err)
 	}
 	return &cfg, nil
 }
@@ -136,7 +181,7 @@ func Load(path string) (*config.Config, error) {
 func WithConfigPath(path string) gateway.Option {
 	return func(cfg *gateway.Config) error {
 		if path == "" {
-			return fmt.Errorf("config path cannot be empty")
+			return errors.New("config path cannot be empty")
 		}
 		cfg.ConfigSource = collectionlist.NewList[provider.ConfigProvider](New(path))
 		cfg.Provider = nil
@@ -145,18 +190,21 @@ func WithConfigPath(path string) gateway.Option {
 }
 
 func WithConfigFiles(paths ...string) gateway.Option {
+	return WithConfigFileList(collectionlist.NewList(paths...))
+}
+
+func WithConfigFileList(paths *collectionlist.List[string]) gateway.Option {
 	return func(cfg *gateway.Config) error {
-		if len(paths) == 0 {
-			return fmt.Errorf("config files cannot be empty")
+		if paths == nil || paths.IsEmpty() {
+			return errors.New("config files cannot be empty")
 		}
-		pathList := collectionlist.NewList(paths...)
-		if pathList.AnyMatch(func(_ int, path string) bool {
+		if paths.AnyMatch(func(_ int, path string) bool {
 			return path == ""
 		}) {
-			return fmt.Errorf("config file path cannot be empty")
+			return errors.New("config file path cannot be empty")
 		}
 		providers := collectionlist.MapList(
-			pathList,
+			paths,
 			func(_ int, path string) provider.ConfigProvider {
 				return New(path)
 			},

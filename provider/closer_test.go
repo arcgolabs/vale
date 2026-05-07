@@ -22,12 +22,12 @@ func TestMultiCloserClose(t *testing.T) {
 	secondErr := errors.New("second")
 	closed := 0
 
-	err := provider.MultiCloser{
+	err := provider.NewMultiCloserFrom(
 		testCloser{closed: &closed, err: firstErr},
 		nil,
 		testCloser{closed: &closed, err: secondErr},
 		testCloser{closed: &closed},
-	}.Close()
+	).Close()
 
 	if !errors.Is(err, firstErr) {
 		t.Fatalf("expected first error, got %v", err)

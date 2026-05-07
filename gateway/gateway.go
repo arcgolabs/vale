@@ -132,8 +132,7 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 			})
 			return true
 		})
-		sources := sourceList.Values()
-		cfg.Provider = mergedprovider.NewWithLogger(cfg.EventBus, cfg.Logger, sources...)
+		cfg.Provider = mergedprovider.NewWithLoggerList(cfg.EventBus, cfg.Logger, sourceList)
 	}
 	if cfg.OnWatchError == nil {
 		cfg.OnWatchError = func(err error) {

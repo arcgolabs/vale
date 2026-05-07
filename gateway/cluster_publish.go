@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/runtime"
 )
 
@@ -11,16 +12,15 @@ func (g *Gateway) publishClusterUpdate(snapshot *runtime.CompiledSnapshot) {
 	if g.cluster == nil || !g.cluster.IsLeader() || snapshot == nil {
 		return
 	}
-	payload := map[string]any{
-		"type": "route_sync",
-		"snapshot": map[string]any{
-			"built_at":     snapshot.BuiltAt.UTC().Format(time.RFC3339Nano),
-			"services":     snapshot.Services.Len(),
-			"routes":       snapshot.Routes().Len(),
-			"proxy_engine": snapshot.ProxyEngine,
-		},
-		"routes": adminRoutesView(snapshot, runtime.RouteFilter{}),
-	}
+	payload := mapping.NewMap[string, any]()
+	payload.Set("type", "route_sync")
+	snapshotStatus := mapping.NewMap[string, any]()
+	snapshotStatus.Set("built_at", snapshot.BuiltAt.UTC().Format(time.RFC3339Nano))
+	snapshotStatus.Set("services", snapshot.Services.Len())
+	snapshotStatus.Set("routes", snapshot.Routes().Len())
+	snapshotStatus.Set("proxy_engine", snapshot.ProxyEngine)
+	payload.Set("snapshot", snapshotStatus)
+	payload.Set("routes", snapshot.QueryRoutes(runtime.RouteFilter{}))
 	data, err := json.Marshal(payload)
 	if err != nil {
 		g.logger.Error("raft payload marshal failed", "error", err)

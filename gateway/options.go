@@ -158,7 +158,7 @@ func WithFallbackProviders(providers ...provider.SnapshotProvider) Option {
 				With("providers", len(providers)).
 				New("fallback providers cannot be empty")
 		}
-		cfg.Provider = provider.Fallback(nonNil.Values()...)
+		cfg.Provider = provider.FallbackList(nonNil)
 		cfg.ConfigSource = collectionlist.NewList[provider.ConfigProvider]()
 		return nil
 	}

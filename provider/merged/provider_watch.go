@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
@@ -105,7 +104,7 @@ func (p *Provider) closeSourceClosers(sourceClosers *collectionlist.List[io.Clos
 	if sourceClosers == nil || sourceClosers.IsEmpty() {
 		return
 	}
-	if err := provider.MultiCloser(sourceClosers.Values()).Close(); err != nil {
+	if err := provider.NewMultiCloser(sourceClosers).Close(); err != nil {
 		reportWatchError(onError, fmt.Errorf("close merged provider watchers: %w", err))
 	}
 }
@@ -143,9 +142,14 @@ func (p *Provider) reloadPending(
 	onReload func(*runtime.CompiledSnapshot),
 	onError func(error),
 ) {
-	sourceNames := provider.SortedStrings(collectionlist.NewList(pending.Values()...))
+	sourceNames := collectionlist.NewListWithCapacity[string](pending.Len())
+	pending.Range(func(sourceName string) bool {
+		sourceNames.Add(sourceName)
+		return true
+	})
+	sourceNames = provider.SortedStrings(sourceNames)
 	pending.Clear()
-	p.reloadNow(ctx, strings.Join(sourceNames.Values(), ","), onReload, onError)
+	p.reloadNow(ctx, sourceNames.Join(","), onReload, onError)
 }
 
 func stopTimer(timer *time.Timer) bool {

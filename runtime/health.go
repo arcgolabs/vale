@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/samber/oops"
 )
 
@@ -122,13 +121,18 @@ func (h *HealthChecker) setEndpointHealth(endpoint *EndpointRuntime, healthy boo
 	if h.logger == nil || previous == healthy {
 		return
 	}
-	args := collectionlist.NewList[any](
+	if err != nil {
+		h.logger.Info("endpoint health changed",
+			"endpoint", endpoint.URL.String(),
+			"healthy", healthy,
+			"reason", reason,
+			"error", err,
+		)
+		return
+	}
+	h.logger.Info("endpoint health changed",
 		"endpoint", endpoint.URL.String(),
 		"healthy", healthy,
 		"reason", reason,
 	)
-	if err != nil {
-		args.Add("error", err)
-	}
-	h.logger.Info("endpoint health changed", args.Values()...)
 }

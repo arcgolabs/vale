@@ -35,7 +35,11 @@ func adminEndpointsView(snapshot *runtime.CompiledSnapshot) []runtime.EndpointVi
 	if snapshot == nil {
 		return nil
 	}
-	return collectionlist.FlatMapList(snapshot.ServicesView(), func(_ int, service runtime.ServiceView) []runtime.EndpointView {
-		return service.Endpoints.Values()
-	}).Values()
+	return collectionlist.ReduceList(
+		snapshot.ServicesView(),
+		collectionlist.NewList[runtime.EndpointView](),
+		func(endpoints *collectionlist.List[runtime.EndpointView], _ int, service runtime.ServiceView) *collectionlist.List[runtime.EndpointView] {
+			return endpoints.Merge(service.Endpoints)
+		},
+	).Values()
 }

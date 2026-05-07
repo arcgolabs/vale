@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/hashicorp/raft"
 	"github.com/samber/oops"
 )
@@ -210,9 +211,9 @@ func cloneSnapshot(snapshot *SnapshotUpdate) *SnapshotUpdate {
 	return &copied
 }
 
-func cloneRoutes(routes []RouteRecord) []RouteRecord {
-	if len(routes) == 0 {
+func cloneRoutes(routes *collectionlist.List[RouteRecord]) *collectionlist.List[RouteRecord] {
+	if routes == nil || routes.IsEmpty() {
 		return nil
 	}
-	return append([]RouteRecord(nil), routes...)
+	return routes.Clone()
 }

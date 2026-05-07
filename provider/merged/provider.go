@@ -37,17 +37,22 @@ func New(bus provider.EventBus, sources ...Source) *Provider {
 }
 
 func NewWithLogger(bus provider.EventBus, logger *slog.Logger, sources ...Source) *Provider {
+	return NewWithLoggerList(bus, logger, collectionlist.NewList(sources...))
+}
+
+func NewWithLoggerList(bus provider.EventBus, logger *slog.Logger, sources *collectionlist.List[Source]) *Provider {
 	orderedSources := mapping.NewOrderedMap[string, provider.ConfigProvider]()
-	for index, source := range sources {
+	sources.Range(func(index int, source Source) bool {
 		if source.Provider == nil {
-			continue
+			return true
 		}
 		name := strings.TrimSpace(source.Name)
 		if name == "" {
 			name = provider.ConfigProviderName(source.Provider, fmt.Sprintf("source-%d", index))
 		}
 		orderedSources.Set(name, source.Provider)
-	}
+		return true
+	})
 	return &Provider{
 		sources:        orderedSources,
 		bus:            bus,
@@ -124,10 +129,10 @@ func (p *Provider) loadMergedConfig(ctx context.Context) (*config.Config, error)
 	})
 
 	if loadedConfigs.IsEmpty() {
-		return nil, fmt.Errorf("failed to load any config: %s", strings.Join(messages.Values(), "; "))
+		return nil, fmt.Errorf("failed to load any config: %s", messages.Join("; "))
 	}
 
-	merged := config.Merge(loadedConfigs.Values()...)
+	merged := config.MergeList(loadedConfigs)
 	if err := config.Validate(merged); err != nil {
 		return nil, oops.In("provider.merged").Wrapf(err, "validate merged config")
 	}

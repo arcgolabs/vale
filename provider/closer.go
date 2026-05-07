@@ -3,6 +3,8 @@ package provider
 import (
 	"io"
 	"sync"
+
+	collectionlist "github.com/arcgolabs/collectionx/list"
 )
 
 // NopCloser is an io.Closer that does nothing.
@@ -32,17 +34,31 @@ func (c *onceCloser) Close() error {
 }
 
 // MultiCloser closes a group of resources and returns the first close error.
-type MultiCloser []io.Closer
+type MultiCloser struct {
+	closers *collectionlist.List[io.Closer]
+}
+
+func NewMultiCloser(closers *collectionlist.List[io.Closer]) MultiCloser {
+	if closers == nil {
+		closers = collectionlist.NewList[io.Closer]()
+	}
+	return MultiCloser{closers: closers}
+}
+
+func NewMultiCloserFrom(closers ...io.Closer) MultiCloser {
+	return NewMultiCloser(collectionlist.NewList(closers...))
+}
 
 func (m MultiCloser) Close() error {
 	var firstErr error
-	for _, closer := range m {
+	m.closers.Range(func(_ int, closer io.Closer) bool {
 		if closer == nil {
-			continue
+			return true
 		}
 		if err := closer.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
-	}
+		return true
+	})
 	return firstErr
 }

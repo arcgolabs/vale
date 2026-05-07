@@ -1,21 +1,29 @@
 package config
 
-import "github.com/arcgolabs/collectionx/mapping"
+import (
+	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/collectionx/mapping"
+)
 
 func Merge(configs ...*Config) *Config {
+	return MergeList(collectionlist.NewList(configs...))
+}
+
+func MergeList(configs *collectionlist.List[*Config]) *Config {
 	merged := &Config{}
 	entrypoints := mapping.NewOrderedMap[string, Entrypoint]()
 	services := mapping.NewOrderedMap[string, Service]()
 	middlewares := mapping.NewOrderedMap[string, Middleware]()
 	routes := mapping.NewOrderedMap[string, Route]()
 
-	for _, cfg := range configs {
+	configs.Range(func(_ int, cfg *Config) bool {
 		if cfg == nil {
-			continue
+			return true
 		}
 		mergeConfigResources(cfg, entrypoints, services, middlewares, routes)
 		mergeConfigBlocks(merged, cfg)
-	}
+		return true
+	})
 
 	merged.Entrypoints = entrypoints.Values()
 	merged.Services = services.Values()

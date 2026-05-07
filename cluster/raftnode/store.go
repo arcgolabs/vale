@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/storx/bboltx"
 	"github.com/arcgolabs/storx/codec"
 	"github.com/arcgolabs/storx/keycodec"
@@ -79,14 +80,14 @@ func (s *stateStore) SaveState(ctx context.Context, state State) error {
 	return s.replaceRoutes(ctx, state.Routes)
 }
 
-func (s *stateStore) LoadRoutes(ctx context.Context) ([]RouteRecord, error) {
+func (s *stateStore) LoadRoutes(ctx context.Context) (*collectionlist.List[RouteRecord], error) {
 	if s == nil || s.routes == nil {
-		return nil, nil
+		return collectionlist.NewList[RouteRecord](), nil
 	}
-	routes := make([]RouteRecord, 0)
+	routes := collectionlist.NewList[RouteRecord]()
 	err := s.routes.View(ctx, func(tx bboltx.ViewTx[string, RouteRecord]) error {
 		return tx.ForEach(func(_ string, route RouteRecord) error {
-			routes = append(routes, route)
+			routes.Add(route)
 			return nil
 		})
 	})
@@ -111,7 +112,7 @@ func (s *stateStore) Close() error {
 	return nil
 }
 
-func (s *stateStore) replaceRoutes(ctx context.Context, routes []RouteRecord) error {
+func (s *stateStore) replaceRoutes(ctx context.Context, routes *collectionlist.List[RouteRecord]) error {
 	if s == nil || s.routes == nil {
 		return nil
 	}
@@ -120,30 +121,30 @@ func (s *stateStore) replaceRoutes(ctx context.Context, routes []RouteRecord) er
 	}); err != nil {
 		return oops.
 			In("raftnode").
-			With("bucket", routeBucketName, "routes", len(routes)).
+			With("bucket", routeBucketName, "routes", routes.Len()).
 			Wrapf(err, "replace raft routes")
 	}
 	return nil
 }
 
-func replaceRouteRecords(tx bboltx.UpdateTx[string, RouteRecord], routes []RouteRecord) error {
+func replaceRouteRecords(tx bboltx.UpdateTx[string, RouteRecord], routes *collectionlist.List[RouteRecord]) error {
 	existingKeys, err := routeRecordKeys(tx)
 	if err != nil {
 		return err
 	}
-	if err := tx.DeleteMany(existingKeys...); err != nil {
+	if err := tx.DeleteMany(existingKeys.Values()...); err != nil {
 		return oops.
 			In("raftnode").
-			With("bucket", routeBucketName, "keys", len(existingKeys)).
+			With("bucket", routeBucketName, "keys", existingKeys.Len()).
 			Wrapf(err, "delete existing raft routes")
 	}
 	return putRouteRecords(tx, routes)
 }
 
-func routeRecordKeys(tx bboltx.UpdateTx[string, RouteRecord]) ([]string, error) {
-	existingKeys := make([]string, 0)
+func routeRecordKeys(tx bboltx.UpdateTx[string, RouteRecord]) (*collectionlist.List[string], error) {
+	existingKeys := collectionlist.NewList[string]()
 	if err := tx.ForEach(func(key string, _ RouteRecord) error {
-		existingKeys = append(existingKeys, key)
+		existingKeys.Add(key)
 		return nil
 	}); err != nil {
 		return nil, oops.
@@ -154,17 +155,20 @@ func routeRecordKeys(tx bboltx.UpdateTx[string, RouteRecord]) ([]string, error) 
 	return existingKeys, nil
 }
 
-func putRouteRecords(tx bboltx.UpdateTx[string, RouteRecord], routes []RouteRecord) error {
-	for _, route := range routes {
+func putRouteRecords(tx bboltx.UpdateTx[string, RouteRecord], routes *collectionlist.List[RouteRecord]) error {
+	var putErr error
+	routes.Range(func(_ int, route RouteRecord) bool {
 		if route.Name == "" {
-			continue
+			return true
 		}
 		if err := tx.Put(route.Name, route); err != nil {
-			return oops.
+			putErr = oops.
 				In("raftnode").
 				With("bucket", routeBucketName, "route", route.Name).
 				Wrapf(err, "save raft route")
+			return false
 		}
-	}
-	return nil
+		return true
+	})
+	return putErr
 }

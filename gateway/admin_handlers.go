@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/httpx"
 	"github.com/arcgolabs/httpx/adapter"
 	httpxstd "github.com/arcgolabs/httpx/adapter/std"
@@ -32,11 +34,11 @@ type adminEndpointsOutput struct {
 }
 
 type adminClusterStatusOutput struct {
-	Body map[string]any `json:"body"`
+	Body *mapping.Map[string, any] `json:"body"`
 }
 
 type adminClusterPeersOutput struct {
-	Body []ClusterPeer `json:"body"`
+	Body *collectionlist.List[ClusterPeer] `json:"body"`
 }
 
 type adminJoinInput struct {
@@ -57,7 +59,7 @@ type adminLeaveRequest struct {
 }
 
 type adminOKOutput struct {
-	Body map[string]string `json:"body"`
+	Body *mapping.Map[string, string] `json:"body"`
 }
 
 func (g *Gateway) buildAdminMux() http.Handler {
@@ -120,14 +122,14 @@ func (g *Gateway) handleAdminEndpoints(context.Context, *struct{}) (*adminEndpoi
 
 func (g *Gateway) handleAdminClusterStatus(context.Context, *struct{}) (*adminClusterStatusOutput, error) {
 	if g.cluster == nil {
-		return &adminClusterStatusOutput{Body: map[string]any{"enabled": false}}, nil
+		return &adminClusterStatusOutput{Body: disabledClusterStatus()}, nil
 	}
 	return &adminClusterStatusOutput{Body: g.cluster.Status()}, nil
 }
 
 func (g *Gateway) handleAdminClusterPeers(context.Context, *struct{}) (*adminClusterPeersOutput, error) {
 	if g.cluster == nil {
-		return &adminClusterPeersOutput{Body: []ClusterPeer{}}, nil
+		return &adminClusterPeersOutput{Body: collectionlist.NewList[ClusterPeer]()}, nil
 	}
 	peers, err := g.cluster.Peers()
 	if err != nil {
@@ -178,5 +180,7 @@ func (g *Gateway) requireClusterLeader(action string) error {
 }
 
 func adminOK() *adminOKOutput {
-	return &adminOKOutput{Body: map[string]string{"status": "ok"}}
+	body := mapping.NewMap[string, string]()
+	body.Set("status", "ok")
+	return &adminOKOutput{Body: body}
 }

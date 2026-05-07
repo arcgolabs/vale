@@ -1,6 +1,9 @@
 package gateway
 
-import "github.com/arcgolabs/vela/provider"
+import (
+	"github.com/arcgolabs/collectionx/mapping"
+	"github.com/arcgolabs/vela/provider"
+)
 
 // Events returns the event bus configured with WithEventBus or the internal instance.
 func (g *Gateway) Events() provider.EventBus {
@@ -8,23 +11,28 @@ func (g *Gateway) Events() provider.EventBus {
 }
 
 // Status returns a coarse snapshot-only map (started flag, counts, and cluster status when enabled).
-func (g *Gateway) Status() map[string]any {
+func (g *Gateway) Status() *mapping.Map[string, any] {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	status := map[string]any{
-		"started": g.started,
-	}
+	status := mapping.NewMap[string, any]()
+	status.Set("started", g.started)
 	if g.runtime != nil && g.runtime.Snapshot() != nil {
 		snapshot := g.runtime.Snapshot()
-		status["built_at"] = snapshot.BuiltAt
-		status["entrypoints"] = snapshot.Entrypoints.Len()
-		status["services"] = snapshot.Services.Len()
-		status["routes"] = snapshot.Routes().Len()
+		status.Set("built_at", snapshot.BuiltAt)
+		status.Set("entrypoints", snapshot.Entrypoints.Len())
+		status.Set("services", snapshot.Services.Len())
+		status.Set("routes", snapshot.Routes().Len())
 	}
 	if g.cluster != nil {
-		status["cluster"] = g.cluster.Status()
+		status.Set("cluster", g.cluster.Status())
 	} else {
-		status["cluster"] = map[string]any{"enabled": false}
+		status.Set("cluster", disabledClusterStatus())
 	}
+	return status
+}
+
+func disabledClusterStatus() *mapping.Map[string, any] {
+	status := mapping.NewMap[string, any]()
+	status.Set("enabled", false)
 	return status
 }

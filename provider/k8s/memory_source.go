@@ -55,10 +55,14 @@ func (s *MemorySource) Update(routes *collectionlist.List[HTTPRoute], endpoints 
 	s.mu.Lock()
 	s.routes = routes
 	s.endpoints = endpoints
-	listeners := s.listeners.Values()
+	listeners := collectionlist.NewListWithCapacity[func()](s.listeners.Len())
+	s.listeners.Range(func(_ int, listener func()) bool {
+		listeners.Add(listener)
+		return true
+	})
 	s.mu.Unlock()
 
-	collectionlist.NewList(listeners...).Range(func(_ int, listener func()) bool {
+	listeners.Range(func(_ int, listener func()) bool {
 		if listener != nil {
 			listener()
 		}

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/gateway"
 	"github.com/hashicorp/raft"
 	"github.com/samber/oops"
@@ -30,10 +32,10 @@ const (
 )
 
 type Command struct {
-	Type     string          `json:"type"`
-	Snapshot *SnapshotUpdate `json:"snapshot,omitempty"`
-	Routes   []RouteRecord   `json:"routes,omitempty"`
-	Raw      json.RawMessage `json:"raw,omitempty"`
+	Type     string                            `json:"type"`
+	Snapshot *SnapshotUpdate                   `json:"snapshot,omitempty"`
+	Routes   *collectionlist.List[RouteRecord] `json:"routes,omitempty"`
+	Raw      json.RawMessage                   `json:"raw,omitempty"`
 }
 
 type SnapshotUpdate struct {
@@ -44,11 +46,11 @@ type SnapshotUpdate struct {
 }
 
 type State struct {
-	Version   uint64          `json:"version"`
-	AppliedAt time.Time       `json:"applied_at"`
-	Snapshot  *SnapshotUpdate `json:"snapshot,omitempty"`
-	Routes    []RouteRecord   `json:"routes,omitempty"`
-	Raw       json.RawMessage `json:"raw,omitempty"`
+	Version   uint64                            `json:"version"`
+	AppliedAt time.Time                         `json:"applied_at"`
+	Snapshot  *SnapshotUpdate                   `json:"snapshot,omitempty"`
+	Routes    *collectionlist.List[RouteRecord] `json:"routes,omitempty"`
+	Raw       json.RawMessage                   `json:"raw,omitempty"`
 }
 
 type RouteRecord struct {
@@ -133,20 +135,20 @@ func (n *Node) AppliedState() State {
 	return n.fsm.State()
 }
 
-func (n *Node) Status() map[string]any {
+func (n *Node) Status() *mapping.Map[string, any] {
 	if !n.IsEnabled() {
-		return map[string]any{
-			"enabled": false,
-		}
+		status := mapping.NewMap[string, any]()
+		status.Set("enabled", false)
+		return status
 	}
 	stats := n.raft.Stats()
-	return map[string]any{
-		"enabled": true,
-		"state":   n.raft.State().String(),
-		"leader":  string(n.raft.Leader()),
-		"stats":   stats,
-		"applied": n.fsm.State(),
-	}
+	status := mapping.NewMap[string, any]()
+	status.Set("enabled", true)
+	status.Set("state", n.raft.State().String())
+	status.Set("leader", string(n.raft.Leader()))
+	status.Set("stats", stats)
+	status.Set("applied", n.fsm.State())
+	return status
 }
 
 type Peer struct {
@@ -155,9 +157,9 @@ type Peer struct {
 	Suffrage string `json:"suffrage"`
 }
 
-func (n *Node) Peers() ([]gateway.ClusterPeer, error) {
+func (n *Node) Peers() (*collectionlist.List[gateway.ClusterPeer], error) {
 	if !n.IsEnabled() {
-		return nil, nil
+		return collectionlist.NewList[gateway.ClusterPeer](), nil
 	}
 	future := n.raft.GetConfiguration()
 	if err := future.Error(); err != nil {
@@ -165,14 +167,15 @@ func (n *Node) Peers() ([]gateway.ClusterPeer, error) {
 			In("raftnode").
 			Wrapf(err, "get raft configuration")
 	}
-	peers := make([]gateway.ClusterPeer, 0, len(future.Configuration().Servers))
-	for _, server := range future.Configuration().Servers {
-		peers = append(peers, gateway.ClusterPeer{
+	peers := collectionlist.NewListWithCapacity[gateway.ClusterPeer](len(future.Configuration().Servers))
+	collectionlist.NewList(future.Configuration().Servers...).Range(func(_ int, server raft.Server) bool {
+		peers.Add(gateway.ClusterPeer{
 			ID:       string(server.ID),
 			Address:  string(server.Address),
 			Suffrage: server.Suffrage.String(),
 		})
-	}
+		return true
+	})
 	return peers, nil
 }
 

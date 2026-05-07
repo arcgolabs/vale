@@ -54,7 +54,7 @@ func (b *ConfigBuilder) BuildValidated() (*config.Config, error) {
 	if err := config.Validate(cfg); err != nil {
 		errs.Add(err)
 	}
-	return cfg, errors.Join(errs.Values()...)
+	return cfg, joinErrors(errs)
 }
 
 func (b *ConfigBuilder) Errors() *collectionlist.List[error] {
@@ -72,4 +72,13 @@ func (b *ConfigBuilder) addError(format string, args ...any) {
 		b.errors = collectionlist.NewList[error]()
 	}
 	b.errors.Add(fmt.Errorf(format, args...))
+}
+
+func joinErrors(errs *collectionlist.List[error]) error {
+	var joined error
+	errs.Range(func(_ int, err error) bool {
+		joined = errors.Join(joined, err)
+		return true
+	})
+	return joined
 }

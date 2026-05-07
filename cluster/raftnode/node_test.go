@@ -35,11 +35,12 @@ func TestNodeAppliesRouteSyncCommand(t *testing.T) {
 	if state.Version == 0 {
 		t.Fatal("version = 0, want raft log version")
 	}
-	if len(state.Routes) != 1 {
-		t.Fatalf("routes len = %d, want 1", len(state.Routes))
+	if state.Routes.Len() != 1 {
+		t.Fatalf("routes len = %d, want 1", state.Routes.Len())
 	}
-	if state.Routes[0].Name != "api" || state.Routes[0].PathPrefix != "/api" {
-		t.Fatalf("route = %#v", state.Routes[0])
+	route, _ := state.Routes.GetFirst()
+	if route.Name != "api" || route.PathPrefix != "/api" {
+		t.Fatalf("route = %#v", route)
 	}
 }
 
@@ -64,11 +65,12 @@ func TestNodePeersReturnsBootstrapVoter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(peers) != 1 {
-		t.Fatalf("peers len = %d, want 1", len(peers))
+	if peers.Len() != 1 {
+		t.Fatalf("peers len = %d, want 1", peers.Len())
 	}
-	if peers[0].ID != "node-1" || peers[0].Suffrage != "Voter" {
-		t.Fatalf("peer = %#v", peers[0])
+	peer, _ := peers.GetFirst()
+	if peer.ID != "node-1" || peer.Suffrage != "Voter" {
+		t.Fatalf("peer = %#v", peer)
 	}
 }
 

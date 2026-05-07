@@ -39,10 +39,12 @@ type Options struct {
 }
 
 func DefaultOptions() Options {
+	entrypointAddresses := mapping.NewMap[string, string]()
+	entrypointAddresses.Set("web", ":8080")
 	return Options{
 		DefaultEntrypointName: "web",
 		DefaultEntrypointAddr: ":8080",
-		EntrypointAddresses:   mapping.NewMapFrom(map[string]string{"web": ":8080"}),
+		EntrypointAddresses:   entrypointAddresses,
 	}
 }
 

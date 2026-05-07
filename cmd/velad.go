@@ -80,14 +80,14 @@ func cliFlagKoanfPath(name string) string {
 	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(name)), "-", "_")
 }
 
-func parseCSV(input string) []string {
+func parseCSV(input string) *collectionlist.List[string] {
 	if strings.TrimSpace(input) == "" {
-		return nil
+		return collectionlist.NewList[string]()
 	}
 	return collectionlist.FilterMapList(collectionlist.NewList(strings.Split(input, ",")...), func(_ int, part string) (string, bool) {
 		trimmed := strings.TrimSpace(part)
 		return trimmed, trimmed != ""
-	}).Values()
+	})
 }
 
 func execute() error {

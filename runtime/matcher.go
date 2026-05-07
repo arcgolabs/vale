@@ -180,20 +180,16 @@ func sortRoutesByPriority(routes *collectionlist.List[*CompiledRoute]) *collecti
 	if routes == nil || routes.Len() < 2 {
 		return routes
 	}
-	queue, err := collectionlist.NewPriorityQueue(routePriorityLess, routes.Values()...)
-	if err != nil {
-		return routes
-	}
-	return collectionlist.NewList(queue.ValuesSorted()...)
+	return routes.Clone().Sort(routePriorityCompare)
 }
 
-func routePriorityLess(left, right *CompiledRoute) bool {
+func routePriorityCompare(left, right *CompiledRoute) int {
 	leftScore := routeScore(left)
 	rightScore := routeScore(right)
 	if leftScore == rightScore {
-		return left.Name < right.Name
+		return strings.Compare(left.Name, right.Name)
 	}
-	return leftScore > rightScore
+	return rightScore - leftScore
 }
 
 func routeScore(route *CompiledRoute) int {

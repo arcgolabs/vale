@@ -72,8 +72,8 @@ func provideMetricsOptions(registry *vela.Registry) veladMetricsOptions {
 func provideConfigSourceOptions(cfg veladConfig) veladConfigSourceOptions {
 	files := parseCSV(cfg.ConfigFiles)
 	switch {
-	case len(files) > 0:
-		return veladConfigSourceOptions{fileconfig.WithConfigFiles(files...)}
+	case !files.IsEmpty():
+		return veladConfigSourceOptions{fileconfig.WithConfigFileList(files)}
 	case strings.TrimSpace(cfg.ConfigPath) != "":
 		return veladConfigSourceOptions{fileconfig.WithConfigPath(cfg.ConfigPath)}
 	default:
