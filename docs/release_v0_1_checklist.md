@@ -2,6 +2,7 @@
 
 ## Required Checks
 
+- GitHub CI is green on the release commit.
 - `go test ./...`
 - `go vet ./...`
 - Workspace module tests:
@@ -26,5 +27,7 @@
 ## Release Notes
 
 - Update `CHANGELOG.md`.
+- Confirm and add the project license before public release.
+- Review `CONTRIBUTING.md` and `SECURITY.md` for public repository accuracy.
 - Tag the root module.
 - Tag optional modules only when their public contracts are ready for consumers.
