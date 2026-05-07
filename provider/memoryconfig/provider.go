@@ -2,13 +2,14 @@ package memoryconfig
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"io"
 	"sync"
 
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
+	"github.com/samber/oops"
 )
 
 type Provider struct {
@@ -22,10 +23,10 @@ type Provider struct {
 
 func New(name string, cfg *config.Config) (*Provider, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("memory config provider: config cannot be nil")
+		return nil, errors.New("memory config provider: config cannot be nil")
 	}
 	if err := config.Validate(cfg); err != nil {
-		return nil, err
+		return nil, oops.In("provider.memoryconfig").Wrapf(err, "validate memory config")
 	}
 	if name == "" {
 		name = "memory-config"
@@ -62,10 +63,10 @@ func (p *Provider) Watch(_ context.Context, onReload func(), _ func(error)) (io.
 
 func (p *Provider) Update(cfg *config.Config) error {
 	if cfg == nil {
-		return fmt.Errorf("memory config provider: config cannot be nil")
+		return errors.New("memory config provider: config cannot be nil")
 	}
 	if err := config.Validate(cfg); err != nil {
-		return err
+		return oops.In("provider.memoryconfig").Wrapf(err, "validate memory config")
 	}
 
 	p.mu.Lock()

@@ -70,13 +70,23 @@ type SecurityRuntime struct {
 }
 
 type MiddlewareRuntime struct {
-	Name            string
-	Type            string
-	StripPrefix     string
-	AddPrefix       string
-	RequestHeaders  *mapping.Map[string, string]
-	ResponseHeaders *mapping.Map[string, string]
-	MaxBodyBytes    int64
+	Name                   string
+	Type                   string
+	StripPrefix            string
+	StripPrefixes          *collectionlist.List[string]
+	AddPrefix              string
+	ReplacePath            string
+	ReplacePathRegex       string
+	ReplacePathReplacement string
+	RedirectScheme         string
+	RedirectPort           string
+	RedirectRegex          string
+	RedirectReplacement    string
+	RedirectPermanent      bool
+	RequestHeaders         *mapping.Map[string, string]
+	ResponseHeaders        *mapping.Map[string, string]
+	MaxBodyBytes           int64
+	Chain                  *collectionlist.List[string]
 }
 
 type ServiceRuntime struct {

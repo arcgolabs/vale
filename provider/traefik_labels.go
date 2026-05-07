@@ -49,7 +49,7 @@ func ParseTraefikLabels(labels map[string]string) TraefikLabels {
 	normalizeTraefikLabels(labels).Range(func(key string, value string) bool {
 		switch {
 		case key == "traefik.enable":
-			result.Enabled = mo.Some(parseTraefikBool(value, false))
+			result.Enabled = mo.Some(parseTraefikBool(value))
 		case strings.HasPrefix(key, traefikRouterPrefix):
 			result.applyRouterLabel(strings.TrimPrefix(key, traefikRouterPrefix), value)
 		case strings.HasPrefix(key, traefikServicePrefix):
@@ -130,21 +130,79 @@ func (labels *TraefikLabels) applyMiddlewareLabel(rest, value string) {
 		return
 	}
 	labels.updateMiddleware(name, func(middleware *config.Middleware) {
-		switch {
-		case option == "addprefix.prefix":
-			middleware.Type = "add_prefix"
-			middleware.AddPrefix = strings.TrimSpace(value)
-		case option == "stripprefix.prefixes":
-			middleware.Type = "strip_prefix"
-			middleware.StripPrefix = firstTraefikCSV(value)
-		case option == "buffering.maxrequestbodybytes":
-			middleware.MaxBodyBytes = int64(parseTraefikInt(value, 0))
-		case strings.HasPrefix(option, "headers.customrequestheaders."):
-			setHeader(middleware.RequestHeaders, strings.TrimPrefix(option, "headers.customrequestheaders."), value)
-		case strings.HasPrefix(option, "headers.customresponseheaders."):
-			setHeader(middleware.ResponseHeaders, strings.TrimPrefix(option, "headers.customresponseheaders."), value)
-		}
+		applyTraefikMiddlewareOption(middleware, option, value)
 	})
+}
+
+func applyTraefikMiddlewareOption(middleware *config.Middleware, option, value string) {
+	if applyTraefikPathMiddleware(middleware, option, value) {
+		return
+	}
+	if applyTraefikRedirectMiddleware(middleware, option, value) {
+		return
+	}
+	if applyTraefikHeaderMiddleware(middleware, option, value) {
+		return
+	}
+	applyTraefikSecurityHeader(middleware, option, value)
+}
+
+func applyTraefikPathMiddleware(middleware *config.Middleware, option, value string) bool {
+	switch option {
+	case "addprefix.prefix":
+		middleware.Type = "add_prefix"
+		middleware.AddPrefix = strings.TrimSpace(value)
+	case "stripprefix.prefixes":
+		middleware.Type = "strip_prefix"
+		middleware.StripPrefixes = SplitCSV(value)
+		middleware.StripPrefix = firstTraefikCSV(value)
+	case "replacepath.path":
+		middleware.ReplacePath = strings.TrimSpace(value)
+	case "replacepathregex.regex":
+		middleware.ReplacePathRegex = strings.TrimSpace(value)
+	case "replacepathregex.replacement":
+		middleware.ReplacePathReplacement = strings.TrimSpace(value)
+	default:
+		return false
+	}
+	return true
+}
+
+func applyTraefikRedirectMiddleware(middleware *config.Middleware, option, value string) bool {
+	switch option {
+	case "redirectscheme.scheme":
+		middleware.RedirectScheme = strings.TrimSpace(value)
+	case "redirectscheme.port":
+		middleware.RedirectPort = strings.TrimSpace(value)
+	case "redirectscheme.permanent":
+		middleware.RedirectPermanent = parseTraefikBool(value)
+	case "redirectregex.regex":
+		middleware.RedirectRegex = strings.TrimSpace(value)
+	case "redirectregex.replacement":
+		middleware.RedirectReplacement = strings.TrimSpace(value)
+	case "redirectregex.permanent":
+		middleware.RedirectPermanent = parseTraefikBool(value)
+	default:
+		return false
+	}
+	return true
+}
+
+func applyTraefikHeaderMiddleware(middleware *config.Middleware, option, value string) bool {
+	switch {
+	case option == "chain.middlewares":
+		middleware.Type = "chain"
+		middleware.Chain = traefikCSVList(value, true).Values()
+	case option == "buffering.maxrequestbodybytes":
+		middleware.MaxBodyBytes = int64(parseTraefikInt(value, 0))
+	case strings.HasPrefix(option, "headers.customrequestheaders."):
+		setHeader(middleware.RequestHeaders, strings.TrimPrefix(option, "headers.customrequestheaders."), value)
+	case strings.HasPrefix(option, "headers.customresponseheaders."):
+		setHeader(middleware.ResponseHeaders, strings.TrimPrefix(option, "headers.customresponseheaders."), value)
+	default:
+		return false
+	}
+	return true
 }
 
 func (labels *TraefikLabels) updateRouter(name string, apply func(*TraefikRouter)) {

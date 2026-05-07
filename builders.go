@@ -113,8 +113,32 @@ func MiddlewareStripPrefix(pathPrefix string) MiddlewareOption {
 	return provider.MiddlewareStripPrefix(pathPrefix)
 }
 
+func MiddlewareStripPrefixes(pathPrefixes ...string) MiddlewareOption {
+	return provider.MiddlewareStripPrefixes(pathPrefixes...)
+}
+
 func MiddlewareAddPrefix(pathPrefix string) MiddlewareOption {
 	return provider.MiddlewareAddPrefix(pathPrefix)
+}
+
+func MiddlewareReplacePath(path string) MiddlewareOption {
+	return provider.MiddlewareReplacePath(path)
+}
+
+func MiddlewareReplacePathRegex(pattern, replacement string) MiddlewareOption {
+	return provider.MiddlewareReplacePathRegex(pattern, replacement)
+}
+
+func MiddlewareRedirectScheme(scheme, port string, permanent bool) MiddlewareOption {
+	return provider.MiddlewareRedirectScheme(scheme, port, permanent)
+}
+
+func MiddlewareRedirectRegex(pattern, replacement string, permanent bool) MiddlewareOption {
+	return provider.MiddlewareRedirectRegex(pattern, replacement, permanent)
+}
+
+func MiddlewareChain(names ...string) MiddlewareOption {
+	return provider.MiddlewareChain(names...)
 }
 
 func MiddlewareRequestHeader(key, value string) MiddlewareOption {

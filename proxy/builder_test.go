@@ -1,8 +1,10 @@
-package proxy
+package proxy_test
 
 import (
 	"net/url"
 	"testing"
+
+	"github.com/arcgolabs/vela/proxy"
 )
 
 func TestRewriteTargetURLPreservesRequestPathAndQuery(t *testing.T) {
@@ -67,19 +69,24 @@ func TestRewriteTargetURLPreservesRequestPathAndQuery(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got := rewriteTargetURL(targetURL, requestURL)
-			if got.Scheme != tt.wantScheme {
-				t.Fatalf("scheme = %q, want %q", got.Scheme, tt.wantScheme)
-			}
-			if got.Host != tt.wantHost {
-				t.Fatalf("host = %q, want %q", got.Host, tt.wantHost)
-			}
-			if got.Path != tt.wantPath {
-				t.Fatalf("path = %q, want %q", got.Path, tt.wantPath)
-			}
-			if got.RawQuery != tt.wantQuery {
-				t.Fatalf("raw query = %q, want %q", got.RawQuery, tt.wantQuery)
-			}
+			got := proxy.RewriteTargetURL(targetURL, requestURL)
+			assertRewrittenURL(t, got, tt.wantScheme, tt.wantHost, tt.wantPath, tt.wantQuery)
 		})
+	}
+}
+
+func assertRewrittenURL(t *testing.T, got *url.URL, wantScheme, wantHost, wantPath, wantQuery string) {
+	t.Helper()
+	if got.Scheme != wantScheme {
+		t.Fatalf("scheme = %q, want %q", got.Scheme, wantScheme)
+	}
+	if got.Host != wantHost {
+		t.Fatalf("host = %q, want %q", got.Host, wantHost)
+	}
+	if got.Path != wantPath {
+		t.Fatalf("path = %q, want %q", got.Path, wantPath)
+	}
+	if got.RawQuery != wantQuery {
+		t.Fatalf("raw query = %q, want %q", got.RawQuery, wantQuery)
 	}
 }

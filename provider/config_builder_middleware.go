@@ -56,10 +56,67 @@ func MiddlewareStripPrefix(pathPrefix string) MiddlewareOption {
 	}
 }
 
+func MiddlewareStripPrefixes(pathPrefixes ...string) MiddlewareOption {
+	return func(middleware *config.Middleware) {
+		if middleware == nil {
+			return
+		}
+		middleware.StripPrefixes = cleanStrings(pathPrefixes)
+	}
+}
+
 func MiddlewareAddPrefix(pathPrefix string) MiddlewareOption {
 	return func(middleware *config.Middleware) {
 		if middleware != nil {
 			middleware.AddPrefix = strings.TrimSpace(pathPrefix)
+		}
+	}
+}
+
+func MiddlewareReplacePath(path string) MiddlewareOption {
+	return func(middleware *config.Middleware) {
+		if middleware != nil {
+			middleware.ReplacePath = strings.TrimSpace(path)
+		}
+	}
+}
+
+func MiddlewareReplacePathRegex(pattern, replacement string) MiddlewareOption {
+	return func(middleware *config.Middleware) {
+		if middleware == nil {
+			return
+		}
+		middleware.ReplacePathRegex = strings.TrimSpace(pattern)
+		middleware.ReplacePathReplacement = strings.TrimSpace(replacement)
+	}
+}
+
+func MiddlewareRedirectScheme(scheme, port string, permanent bool) MiddlewareOption {
+	return func(middleware *config.Middleware) {
+		if middleware == nil {
+			return
+		}
+		middleware.RedirectScheme = strings.TrimSpace(scheme)
+		middleware.RedirectPort = strings.TrimSpace(port)
+		middleware.RedirectPermanent = permanent
+	}
+}
+
+func MiddlewareRedirectRegex(pattern, replacement string, permanent bool) MiddlewareOption {
+	return func(middleware *config.Middleware) {
+		if middleware == nil {
+			return
+		}
+		middleware.RedirectRegex = strings.TrimSpace(pattern)
+		middleware.RedirectReplacement = strings.TrimSpace(replacement)
+		middleware.RedirectPermanent = permanent
+	}
+}
+
+func MiddlewareChain(names ...string) MiddlewareOption {
+	return func(middleware *config.Middleware) {
+		if middleware != nil {
+			middleware.Chain = cleanStrings(names)
 		}
 	}
 }
@@ -94,4 +151,14 @@ func MiddlewareMaxBodyBytes(maxBodyBytes int64) MiddlewareOption {
 			middleware.MaxBodyBytes = maxBodyBytes
 		}
 	}
+}
+
+func cleanStrings(values []string) []string {
+	items := collectionlist.NewListWithCapacity[string](len(values))
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			items.Add(trimmed)
+		}
+	}
+	return items.Values()
 }

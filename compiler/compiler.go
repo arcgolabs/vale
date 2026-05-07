@@ -9,7 +9,6 @@ import (
 	"github.com/arcgolabs/collectionx/bitset"
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
-	collectionset "github.com/arcgolabs/collectionx/set"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/proxy"
 	"github.com/arcgolabs/vela/runtime"
@@ -17,99 +16,23 @@ import (
 
 const DefaultACMECacheDir = ".vela/acme"
 
-var supportedMiddlewareTypes = collectionset.NewSet(runtime.MiddlewareTypeBuiltin)
-
 func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
-	middlewareMap := mapping.NewMapWithCapacity[string, runtime.MiddlewareRuntime](len(cfg.Middlewares))
-	for _, middleware := range cfg.Middlewares {
-		middlewareType := normalizeMiddlewareType(middleware.Type)
-		if !supportedMiddlewareTypes.Contains(middlewareType) {
-			return nil, fmt.Errorf("middleware %q has unsupported type %q", middleware.Name, middleware.Type)
-		}
-		middlewareMap.Set(middleware.Name, runtime.MiddlewareRuntime{
-			Name:            middleware.Name,
-			Type:            middlewareType,
-			StripPrefix:     strings.TrimSpace(middleware.StripPrefix),
-			AddPrefix:       strings.TrimSpace(middleware.AddPrefix),
-			RequestHeaders:  normalizeHeaders(middleware.RequestHeaders),
-			ResponseHeaders: normalizeHeaders(middleware.ResponseHeaders),
-			MaxBodyBytes:    middleware.MaxBodyBytes,
-		})
+	middlewareMap, err := compileMiddlewares(cfg.Middlewares)
+	if err != nil {
+		return nil, err
 	}
 
-	serviceMap := mapping.NewMapWithCapacity[string, *runtime.ServiceRuntime](len(cfg.Services))
-	for _, service := range cfg.Services {
-		strategy := strings.TrimSpace(service.Strategy)
-		if strategy == "" {
-			strategy = "round_robin"
-		}
-		if strategy != "round_robin" && strategy != "weighted_round_robin" {
-			return nil, fmt.Errorf("service %q has unsupported strategy %q", service.Name, strategy)
-		}
-
-		rtService := &runtime.ServiceRuntime{
-			Name:      service.Name,
-			Strategy:  strategy,
-			Endpoints: collectionlist.NewListWithCapacity[*runtime.EndpointRuntime](len(service.Endpoints)),
-		}
-		for _, endpoint := range service.Endpoints {
-			parsedURL, err := url.Parse(endpoint.URL)
-			if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
-				return nil, fmt.Errorf("service %q endpoint %q is invalid", service.Name, endpoint.URL)
-			}
-
-			weight := endpoint.Weight
-			if weight <= 0 {
-				weight = 1
-			}
-
-			rtEndpoint := &runtime.EndpointRuntime{
-				URL:    parsedURL,
-				Weight: weight,
-				Proxy:  proxy.Build(parsedURL),
-			}
-			rtEndpoint.Healthy.Store(true)
-			rtService.Endpoints.Add(rtEndpoint)
-		}
-
-		rtService.BuildSlots()
-		serviceMap.Set(rtService.Name, rtService)
+	serviceMap, err := compileServices(cfg.Services)
+	if err != nil {
+		return nil, err
 	}
-
-	entrypointMap := mapping.NewMapWithCapacity[string, string](len(cfg.Entrypoints))
-	entrypointConfigMap := mapping.NewMapWithCapacity[string, runtime.EntrypointRuntime](len(cfg.Entrypoints))
-	for _, entrypoint := range cfg.Entrypoints {
-		entrypointMap.Set(entrypoint.Name, entrypoint.Address)
-		entrypointConfigMap.Set(entrypoint.Name, compileEntrypoint(entrypoint))
-	}
-
-	routesByEntrypoint := mapping.NewMultiMap[string, *runtime.CompiledRoute]()
-	for _, route := range cfg.Routes {
-		service, _ := serviceMap.Get(route.Service)
-		headerMap := normalizeHeaders(route.Headers)
-		routesByEntrypoint.Put(route.Entrypoint, &runtime.CompiledRoute{
-			Name:        route.Name,
-			Entrypoint:  route.Entrypoint,
-			Host:        strings.ToLower(strings.TrimSpace(route.Host)),
-			PathPrefix:  strings.TrimSpace(route.PathPrefix),
-			Method:      strings.ToUpper(strings.TrimSpace(route.Method)),
-			Headers:     headerMap,
-			Service:     service,
-			Predicates:  compileRoutePredicates(route),
-			Middlewares: compileRouteMiddlewares(route.Middlewares, middlewareMap),
-		})
-	}
-	matcherMap := mapping.NewMapWithCapacity[string, *runtime.EntrypointMatcher](routesByEntrypoint.Len())
-	routesByEntrypoint.Range(func(entrypoint string, entrypointRoutes []*runtime.CompiledRoute) bool {
-		matcherMap.Set(entrypoint, runtime.BuildEntrypointMatcher(entrypointRoutes))
-		return true
-	})
-
+	entrypointMap, entrypointConfigMap := compileEntrypoints(cfg.Entrypoints)
+	routesByEntrypoint := compileRoutes(cfg.Routes, serviceMap, middlewareMap)
 	snapshot := &runtime.CompiledSnapshot{
 		Entrypoints:        entrypointMap,
 		EntrypointConfigs:  entrypointConfigMap,
 		RoutesByEntrypoint: routesByEntrypoint,
-		EntrypointMatchers: matcherMap,
+		EntrypointMatchers: compileEntrypointMatchers(routesByEntrypoint),
 		Services:           serviceMap,
 		AdminAddress:       pickAdminAddress(cfg),
 		AccessLogEnabled:   pickAccessLogEnabled(cfg),
@@ -124,26 +47,120 @@ func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 	return snapshot, nil
 }
 
+func compileServices(services []config.Service) (*mapping.Map[string, *runtime.ServiceRuntime], error) {
+	serviceMap := mapping.NewMapWithCapacity[string, *runtime.ServiceRuntime](len(services))
+	for index := range services {
+		service := &services[index]
+		rtService, err := compileService(service)
+		if err != nil {
+			return nil, err
+		}
+		serviceMap.Set(rtService.Name, rtService)
+	}
+	return serviceMap, nil
+}
+
+func compileService(service *config.Service) (*runtime.ServiceRuntime, error) {
+	strategy := strings.TrimSpace(service.Strategy)
+	if strategy == "" {
+		strategy = "round_robin"
+	}
+	if strategy != "round_robin" && strategy != "weighted_round_robin" {
+		return nil, fmt.Errorf("service %q has unsupported strategy %q", service.Name, strategy)
+	}
+	rtService := &runtime.ServiceRuntime{
+		Name:      service.Name,
+		Strategy:  strategy,
+		Endpoints: collectionlist.NewListWithCapacity[*runtime.EndpointRuntime](len(service.Endpoints)),
+	}
+	for _, endpoint := range service.Endpoints {
+		rtEndpoint, err := compileEndpoint(service.Name, endpoint)
+		if err != nil {
+			return nil, err
+		}
+		rtService.Endpoints.Add(rtEndpoint)
+	}
+	rtService.BuildSlots()
+	return rtService, nil
+}
+
+func compileEndpoint(serviceName string, endpoint config.Endpoint) (*runtime.EndpointRuntime, error) {
+	parsedURL, err := url.Parse(endpoint.URL)
+	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return nil, fmt.Errorf("service %q endpoint %q is invalid", serviceName, endpoint.URL)
+	}
+	weight := endpoint.Weight
+	if weight <= 0 {
+		weight = 1
+	}
+	rtEndpoint := &runtime.EndpointRuntime{
+		URL:    parsedURL,
+		Weight: weight,
+		Proxy:  proxy.Build(parsedURL),
+	}
+	rtEndpoint.Healthy.Store(true)
+	return rtEndpoint, nil
+}
+
+func compileEntrypoints(entrypoints []config.Entrypoint) (*mapping.Map[string, string], *mapping.Map[string, runtime.EntrypointRuntime]) {
+	entrypointMap := mapping.NewMapWithCapacity[string, string](len(entrypoints))
+	entrypointConfigMap := mapping.NewMapWithCapacity[string, runtime.EntrypointRuntime](len(entrypoints))
+	for _, entrypoint := range entrypoints {
+		entrypointMap.Set(entrypoint.Name, entrypoint.Address)
+		entrypointConfigMap.Set(entrypoint.Name, compileEntrypoint(entrypoint))
+	}
+	return entrypointMap, entrypointConfigMap
+}
+
+func compileRoutes(
+	routes []config.Route,
+	serviceMap *mapping.Map[string, *runtime.ServiceRuntime],
+	middlewareMap *mapping.Map[string, runtime.MiddlewareRuntime],
+) *mapping.MultiMap[string, *runtime.CompiledRoute] {
+	routesByEntrypoint := mapping.NewMultiMap[string, *runtime.CompiledRoute]()
+	for index := range routes {
+		route := &routes[index]
+		service, _ := serviceMap.Get(route.Service)
+		routesByEntrypoint.Put(route.Entrypoint, compileRoute(route, service, middlewareMap))
+	}
+	return routesByEntrypoint
+}
+
+func compileRoute(
+	route *config.Route,
+	service *runtime.ServiceRuntime,
+	middlewareMap *mapping.Map[string, runtime.MiddlewareRuntime],
+) *runtime.CompiledRoute {
+	return &runtime.CompiledRoute{
+		Name:        route.Name,
+		Entrypoint:  route.Entrypoint,
+		Host:        strings.ToLower(strings.TrimSpace(route.Host)),
+		PathPrefix:  strings.TrimSpace(route.PathPrefix),
+		Method:      strings.ToUpper(strings.TrimSpace(route.Method)),
+		Headers:     normalizeHeaders(route.Headers),
+		Service:     service,
+		Predicates:  compileRoutePredicates(*route),
+		Middlewares: compileRouteMiddlewares(route.Middlewares, middlewareMap),
+	}
+}
+
+func compileEntrypointMatchers(
+	routesByEntrypoint *mapping.MultiMap[string, *runtime.CompiledRoute],
+) *mapping.Map[string, *runtime.EntrypointMatcher] {
+	matcherMap := mapping.NewMapWithCapacity[string, *runtime.EntrypointMatcher](routesByEntrypoint.Len())
+	routesByEntrypoint.Range(func(entrypoint string, entrypointRoutes []*runtime.CompiledRoute) bool {
+		matcherMap.Set(entrypoint, runtime.BuildEntrypointMatcher(entrypointRoutes))
+		return true
+	})
+	return matcherMap
+}
+
 func normalizeHeaders(headers map[string]string) *mapping.Map[string, string] {
 	headerMap := mapping.NewMapWithCapacity[string, string](len(headers))
 	for key, value := range headers {
 		headerMap.Set(strings.ToLower(strings.TrimSpace(key)), strings.TrimSpace(value))
 	}
 	return headerMap
-}
-
-func compileRouteMiddlewares(names []string, middlewares *mapping.Map[string, runtime.MiddlewareRuntime]) *collectionlist.List[runtime.MiddlewareRuntime] {
-	compiled := collectionlist.NewListWithCapacity[runtime.MiddlewareRuntime](len(names))
-	if len(names) == 0 || middlewares == nil {
-		return compiled
-	}
-	for _, name := range names {
-		middleware, ok := middlewares.Get(name)
-		if ok {
-			compiled.Add(middleware)
-		}
-	}
-	return compiled
 }
 
 func compileEntrypoint(entrypoint config.Entrypoint) runtime.EntrypointRuntime {
@@ -175,14 +192,6 @@ func compileTLS(entrypoint config.Entrypoint) runtime.TLSRuntime {
 		}
 	}
 	return tlsRuntime
-}
-
-func normalizeMiddlewareType(middlewareType string) string {
-	middlewareType = strings.ToLower(strings.TrimSpace(middlewareType))
-	if middlewareType == "" {
-		return runtime.MiddlewareTypeBuiltin
-	}
-	return middlewareType
 }
 
 func compileRoutePredicates(route config.Route) *bitset.BitSet {

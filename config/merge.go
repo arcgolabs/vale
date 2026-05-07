@@ -13,38 +13,8 @@ func Merge(configs ...*Config) *Config {
 		if cfg == nil {
 			continue
 		}
-
-		for _, entrypoint := range cfg.Entrypoints {
-			entrypoints.Set(entrypoint.Name, entrypoint)
-		}
-
-		for _, service := range cfg.Services {
-			services.Set(service.Name, service)
-		}
-
-		for _, middleware := range cfg.Middlewares {
-			middlewares.Set(middleware.Name, middleware)
-		}
-
-		for _, route := range cfg.Routes {
-			routes.Set(route.Name, route)
-		}
-		if cfg.Admin != nil {
-			admin := *cfg.Admin
-			merged.Admin = &admin
-		}
-		if cfg.Observability != nil {
-			observability := *cfg.Observability
-			merged.Observability = &observability
-		}
-		if cfg.Health != nil {
-			health := *cfg.Health
-			merged.Health = &health
-		}
-		if cfg.Security != nil {
-			security := *cfg.Security
-			merged.Security = &security
-		}
+		mergeConfigResources(cfg, entrypoints, services, middlewares, routes)
+		mergeConfigBlocks(merged, cfg)
 	}
 
 	merged.Entrypoints = entrypoints.Values()
@@ -52,4 +22,46 @@ func Merge(configs ...*Config) *Config {
 	merged.Middlewares = middlewares.Values()
 	merged.Routes = routes.Values()
 	return merged
+}
+
+func mergeConfigResources(
+	cfg *Config,
+	entrypoints *mapping.OrderedMap[string, Entrypoint],
+	services *mapping.OrderedMap[string, Service],
+	middlewares *mapping.OrderedMap[string, Middleware],
+	routes *mapping.OrderedMap[string, Route],
+) {
+	for _, entrypoint := range cfg.Entrypoints {
+		entrypoints.Set(entrypoint.Name, entrypoint)
+	}
+	for _, service := range cfg.Services {
+		services.Set(service.Name, service)
+	}
+	for index := range cfg.Middlewares {
+		middleware := cfg.Middlewares[index]
+		middlewares.Set(middleware.Name, middleware)
+	}
+	for index := range cfg.Routes {
+		route := cfg.Routes[index]
+		routes.Set(route.Name, route)
+	}
+}
+
+func mergeConfigBlocks(merged, cfg *Config) {
+	if cfg.Admin != nil {
+		admin := *cfg.Admin
+		merged.Admin = &admin
+	}
+	if cfg.Observability != nil {
+		observability := *cfg.Observability
+		merged.Observability = &observability
+	}
+	if cfg.Health != nil {
+		health := *cfg.Health
+		merged.Health = &health
+	}
+	if cfg.Security != nil {
+		security := *cfg.Security
+		merged.Security = &security
+	}
 }

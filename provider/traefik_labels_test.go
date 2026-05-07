@@ -21,6 +21,15 @@ func TestParseTraefikLabelsProjectsHTTPResources(t *testing.T) {
 		"traefik.http.middlewares.strip.stripprefix.prefixes":                         "/api,/v1",
 		"traefik.http.middlewares.headers.headers.customrequestheaders.x-request-id":  "from-label",
 		"traefik.http.middlewares.headers.headers.customresponseheaders.x-powered-by": "vela",
+		"traefik.http.middlewares.rewrite.replacepathregex.regex":                     "^/old/(.*)$",
+		"traefik.http.middlewares.rewrite.replacepathregex.replacement":               "/new/${1}",
+		"traefik.http.middlewares.redirect.redirectscheme.scheme":                     "https",
+		"traefik.http.middlewares.redirect.redirectscheme.port":                       "443",
+		"traefik.http.middlewares.redirect.redirectscheme.permanent":                  "true",
+		"traefik.http.middlewares.chain.chain.middlewares":                            "strip@docker,headers,redirect",
+		"traefik.http.middlewares.security.headers.framedeny":                         "true",
+		"traefik.http.middlewares.security.headers.contenttypenosniff":                "true",
+		"traefik.http.middlewares.security.headers.stsseconds":                        "31536000",
 	})
 
 	assertTraefikRouter(t, labels)
@@ -65,13 +74,61 @@ func assertTraefikService(t *testing.T, labels provider.TraefikLabels) {
 
 func assertTraefikMiddlewares(t *testing.T, labels provider.TraefikLabels) {
 	t.Helper()
-	strip, _ := labels.Middlewares.Get("strip")
-	if strip.StripPrefix != "/api" {
-		t.Fatalf("strip prefix = %q, want /api", strip.StripPrefix)
+	assertTraefikStripMiddleware(t, labels)
+	assertTraefikHeaderMiddleware(t, labels)
+	assertTraefikRewriteMiddleware(t, labels)
+	assertTraefikRedirectMiddleware(t, labels)
+	assertTraefikChainMiddleware(t, labels)
+	assertTraefikSecurityMiddleware(t, labels)
+}
+
+func assertTraefikStripMiddleware(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	middleware, _ := labels.Middlewares.Get("strip")
+	if middleware.StripPrefix != "/api" || len(middleware.StripPrefixes) != 2 {
+		t.Fatalf("strip middleware = %#v", middleware)
 	}
-	headers, _ := labels.Middlewares.Get("headers")
-	if headers.RequestHeaders["x-request-id"] != "from-label" || headers.ResponseHeaders["x-powered-by"] != "vela" {
-		t.Fatalf("headers = %#v", headers)
+}
+
+func assertTraefikHeaderMiddleware(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	middleware, _ := labels.Middlewares.Get("headers")
+	if middleware.RequestHeaders["x-request-id"] != "from-label" || middleware.ResponseHeaders["x-powered-by"] != "vela" {
+		t.Fatalf("headers = %#v", middleware)
+	}
+}
+
+func assertTraefikRewriteMiddleware(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	middleware, _ := labels.Middlewares.Get("rewrite")
+	if middleware.ReplacePathRegex != "^/old/(.*)$" || middleware.ReplacePathReplacement != "/new/${1}" {
+		t.Fatalf("rewrite = %#v", middleware)
+	}
+}
+
+func assertTraefikRedirectMiddleware(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	middleware, _ := labels.Middlewares.Get("redirect")
+	if middleware.RedirectScheme != "https" || middleware.RedirectPort != "443" || !middleware.RedirectPermanent {
+		t.Fatalf("redirect = %#v", middleware)
+	}
+}
+
+func assertTraefikChainMiddleware(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	middleware, _ := labels.Middlewares.Get("chain")
+	if len(middleware.Chain) != 3 || middleware.Chain[0] != "strip" || middleware.Chain[2] != "redirect" {
+		t.Fatalf("chain = %#v", middleware.Chain)
+	}
+}
+
+func assertTraefikSecurityMiddleware(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	security, _ := labels.Middlewares.Get("security")
+	if security.ResponseHeaders["x-frame-options"] != "DENY" ||
+		security.ResponseHeaders["x-content-type-options"] != "nosniff" ||
+		security.ResponseHeaders["strict-transport-security"] != "max-age=31536000" {
+		t.Fatalf("security headers = %#v", security.ResponseHeaders)
 	}
 }
 

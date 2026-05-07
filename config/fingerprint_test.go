@@ -1,17 +1,21 @@
-package config
+package config_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/arcgolabs/vela/config"
+)
 
 func TestFingerprintStableForSameConfig(t *testing.T) {
 	t.Parallel()
 
-	left := Default()
-	right := Default()
-	leftHash, err := Fingerprint(left)
+	left := config.Default()
+	right := config.Default()
+	leftHash, err := config.Fingerprint(left)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rightHash, err := Fingerprint(right)
+	rightHash, err := config.Fingerprint(right)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +24,7 @@ func TestFingerprintStableForSameConfig(t *testing.T) {
 	}
 
 	right.Admin.Address = ":19091"
-	changedHash, err := Fingerprint(right)
+	changedHash, err := config.Fingerprint(right)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,127 +1,85 @@
-package merged
+package merged_test
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider/memoryconfig"
+	"github.com/arcgolabs/vela/provider/merged"
 	"github.com/arcgolabs/vela/runtime"
 )
 
 func TestWatchSkipsUnchangedFingerprint(t *testing.T) {
 	t.Parallel()
 
-	initial := config.Default()
-	source, err := memoryconfig.New("memory", initial)
-	if err != nil {
-		t.Fatal(err)
-	}
-	p := New(nil, Source{Name: "memory", Provider: source})
-	p.reloadDebounce = 10 * time.Millisecond
-	if _, err := p.Load(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	source := newMemorySource(t, config.Default())
+	provider := newLoadedProvider(t, source, 10*time.Millisecond)
+	reloads, closer := watchProvider(t, provider, 2)
+	defer closeProvider(t, closer)
 
-	reloads := make(chan *runtime.CompiledSnapshot, 2)
-	closer, err := p.Watch(context.Background(), func(snapshot *runtime.CompiledSnapshot) {
-		reloads <- snapshot
-	}, func(err error) {
-		t.Errorf("watch error: %v", err)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer closer.Close()
+	updateSource(t, source, config.Default())
+	assertNoReload(t, reloads, 50*time.Millisecond, "unchanged config triggered reload")
 
-	if err := source.Update(config.Default()); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-reloads:
-		t.Fatal("unchanged config triggered reload")
-	case <-time.After(50 * time.Millisecond):
-	}
-
-	changed := config.Default()
-	changed.Admin.Address = ":19091"
-	if err := source.Update(changed); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-reloads:
-	case <-time.After(200 * time.Millisecond):
-		t.Fatal("changed config did not trigger reload")
-	}
+	updateSource(t, source, configWithAdmin(":19091"))
+	assertReload(t, reloads, 200*time.Millisecond)
 }
 
 func TestWatchCoalescesRapidChanges(t *testing.T) {
 	t.Parallel()
 
-	source, err := memoryconfig.New("memory", config.Default())
-	if err != nil {
-		t.Fatal(err)
-	}
-	p := New(nil, Source{Name: "memory", Provider: source})
-	p.reloadDebounce = 20 * time.Millisecond
-	if _, err := p.Load(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	source := newMemorySource(t, config.Default())
+	provider := newLoadedProvider(t, source, 20*time.Millisecond)
+	reloads, closer := watchProvider(t, provider, 4)
+	defer closeProvider(t, closer)
 
-	reloads := make(chan *runtime.CompiledSnapshot, 4)
-	closer, err := p.Watch(context.Background(), func(snapshot *runtime.CompiledSnapshot) {
-		reloads <- snapshot
-	}, func(err error) {
-		t.Errorf("watch error: %v", err)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer closer.Close()
+	updateSource(t, source, configWithAdmin(":19091"))
+	updateSource(t, source, configWithAdmin(":19092"))
 
-	first := config.Default()
-	first.Admin.Address = ":19091"
-	if err := source.Update(first); err != nil {
-		t.Fatal(err)
+	snapshot := assertReload(t, reloads, 250*time.Millisecond)
+	if snapshot.AdminAddress != ":19092" {
+		t.Fatalf("reloaded admin address = %q, want latest :19092", snapshot.AdminAddress)
 	}
-	second := config.Default()
-	second.Admin.Address = ":19092"
-	if err := source.Update(second); err != nil {
-		t.Fatal(err)
-	}
-
-	select {
-	case snapshot := <-reloads:
-		if snapshot.AdminAddress != ":19092" {
-			t.Fatalf("reloaded admin address = %q, want latest :19092", snapshot.AdminAddress)
-		}
-	case <-time.After(250 * time.Millisecond):
-		t.Fatal("coalesced reload did not fire")
-	}
-
-	select {
-	case snapshot := <-reloads:
-		t.Fatalf("unexpected second reload: %#v", snapshot)
-	case <-time.After(80 * time.Millisecond):
-	}
+	assertNoReload(t, reloads, 80*time.Millisecond, "unexpected second reload")
 }
 
 func TestWatchCloseStopsReload(t *testing.T) {
 	t.Parallel()
 
-	source, err := memoryconfig.New("memory", config.Default())
+	source := newMemorySource(t, config.Default())
+	provider := newLoadedProvider(t, source, 10*time.Millisecond)
+	reloads, closer := watchProvider(t, provider, 1)
+	closeProvider(t, closer)
+
+	updateSource(t, source, configWithAdmin(":19091"))
+	assertNoReload(t, reloads, 50*time.Millisecond, "closed watcher received reload")
+}
+
+func newMemorySource(t *testing.T, cfg *config.Config) *memoryconfig.Provider {
+	t.Helper()
+	source, err := memoryconfig.New("memory", cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := New(nil, Source{Name: "memory", Provider: source})
-	p.reloadDebounce = 10 * time.Millisecond
-	if _, err := p.Load(context.Background()); err != nil {
+	return source
+}
+
+func newLoadedProvider(t *testing.T, source *memoryconfig.Provider, debounce time.Duration) *merged.Provider {
+	t.Helper()
+	provider := merged.New(nil, merged.Source{Name: "memory", Provider: source})
+	provider.SetReloadDebounce(debounce)
+	if _, err := provider.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	return provider
+}
 
-	reloads := make(chan *runtime.CompiledSnapshot, 1)
-	closer, err := p.Watch(context.Background(), func(snapshot *runtime.CompiledSnapshot) {
+func watchProvider(t *testing.T, provider *merged.Provider, buffer int) (chan *runtime.CompiledSnapshot, io.Closer) {
+	t.Helper()
+	reloads := make(chan *runtime.CompiledSnapshot, buffer)
+	closer, err := provider.Watch(context.Background(), func(snapshot *runtime.CompiledSnapshot) {
 		reloads <- snapshot
 	}, func(err error) {
 		t.Errorf("watch error: %v", err)
@@ -129,18 +87,54 @@ func TestWatchCloseStopsReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return reloads, closer
+}
+
+func closeProvider(t *testing.T, closer io.Closer) {
+	t.Helper()
 	if err := closer.Close(); err != nil {
 		t.Fatal(err)
 	}
+}
 
-	changed := config.Default()
-	changed.Admin.Address = ":19091"
-	if err := source.Update(changed); err != nil {
+func updateSource(t *testing.T, source *memoryconfig.Provider, cfg *config.Config) {
+	t.Helper()
+	if err := source.Update(cfg); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func assertReload(
+	t *testing.T,
+	reloads <-chan *runtime.CompiledSnapshot,
+	timeout time.Duration,
+) *runtime.CompiledSnapshot {
+	t.Helper()
 	select {
-	case <-reloads:
-		t.Fatal("closed watcher received reload")
-	case <-time.After(50 * time.Millisecond):
+	case snapshot := <-reloads:
+		return snapshot
+	case <-time.After(timeout):
+		t.Fatal("changed config did not trigger reload")
 	}
+	return nil
+}
+
+func assertNoReload(
+	t *testing.T,
+	reloads <-chan *runtime.CompiledSnapshot,
+	timeout time.Duration,
+	message string,
+) {
+	t.Helper()
+	select {
+	case snapshot := <-reloads:
+		t.Fatalf("%s: %#v", message, snapshot)
+	case <-time.After(timeout):
+	}
+}
+
+func configWithAdmin(address string) *config.Config {
+	cfg := config.Default()
+	cfg.Admin.Address = address
+	return cfg
 }

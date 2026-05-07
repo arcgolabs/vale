@@ -1,12 +1,14 @@
 package provider
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
+	"github.com/arcgolabs/vela/config"
 	"github.com/samber/mo"
 )
 
@@ -120,12 +122,35 @@ func setHeader(headers map[string]string, key, value string) {
 	}
 }
 
-func parseTraefikBool(value string, fallback bool) bool {
+func applyTraefikSecurityHeader(middleware *config.Middleware, option, value string) {
+	switch option {
+	case "headers.framedeny":
+		if parseTraefikBool(value) {
+			middleware.ResponseHeaders["x-frame-options"] = "DENY"
+		}
+	case "headers.contenttypenosniff":
+		if parseTraefikBool(value) {
+			middleware.ResponseHeaders["x-content-type-options"] = "nosniff"
+		}
+	case "headers.browserxssfilter":
+		if parseTraefikBool(value) {
+			middleware.ResponseHeaders["x-xss-protection"] = "1; mode=block"
+		}
+	case "headers.stsseconds":
+		if seconds := parseTraefikInt(value, 0); seconds > 0 {
+			middleware.ResponseHeaders["strict-transport-security"] = fmt.Sprintf("max-age=%d", seconds)
+		}
+	case "headers.referrerpolicy":
+		setHeader(middleware.ResponseHeaders, "referrer-policy", value)
+	}
+}
+
+func parseTraefikBool(value string) bool {
 	if strings.TrimSpace(value) == "" {
-		return fallback
+		return false
 	}
 	parsed, err := strconv.ParseBool(value)
-	return mo.TupleToOption(parsed, err == nil).OrElse(fallback)
+	return mo.TupleToOption(parsed, err == nil).OrElse(false)
 }
 
 func parseTraefikInt(value string, fallback int) int {

@@ -1,10 +1,12 @@
-package compiler
+package compiler_test
 
 import (
 	"strings"
 	"testing"
 
+	"github.com/arcgolabs/vela/compiler"
 	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vela/runtime"
 )
 
 func TestCompileTLSMiddlewareAndSecurity(t *testing.T) {
@@ -50,15 +52,26 @@ func TestCompileTLSMiddlewareAndSecurity(t *testing.T) {
 		},
 	}
 
-	snapshot, err := Compile(cfg)
+	snapshot, err := compiler.Compile(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	assertCompiledTLS(t, snapshot)
+	assertCompiledMiddleware(t, snapshot)
+	assertCompiledSecurity(t, snapshot)
+}
+
+func assertCompiledTLS(t *testing.T, snapshot *runtime.CompiledSnapshot) {
+	t.Helper()
 	entrypoint, _ := snapshot.EntrypointConfigs.Get("websecure")
 	if !entrypoint.TLS.Enabled || entrypoint.TLS.CertFile != "cert.pem" || !entrypoint.TLS.ACME.Enabled {
 		t.Fatalf("unexpected tls runtime: %#v", entrypoint.TLS)
 	}
+}
+
+func assertCompiledMiddleware(t *testing.T, snapshot *runtime.CompiledSnapshot) {
+	t.Helper()
 	routes := snapshot.RoutesByEntrypoint.Get("websecure")
 	if len(routes) != 1 || routes[0].Middlewares.Len() != 1 {
 		t.Fatalf("compiled middlewares = %#v", routes)
@@ -67,6 +80,10 @@ func TestCompileTLSMiddlewareAndSecurity(t *testing.T) {
 	if middleware.StripPrefix != "/api" {
 		t.Fatalf("middleware = %#v", middleware)
 	}
+}
+
+func assertCompiledSecurity(t *testing.T, snapshot *runtime.CompiledSnapshot) {
+	t.Helper()
 	if snapshot.Security.ReadHeaderTimeout != "3s" || snapshot.Security.MaxHeaderBytes != 2048 || snapshot.Security.MaxBodyBytes != 4096 {
 		t.Fatalf("security = %#v", snapshot.Security)
 	}
@@ -96,13 +113,13 @@ func TestCompileACMEAppliesDefaultCacheDir(t *testing.T) {
 		}},
 	}
 
-	snapshot, err := Compile(cfg)
+	snapshot, err := compiler.Compile(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	entrypoint, _ := snapshot.EntrypointConfigs.Get("websecure")
-	if entrypoint.TLS.ACME.CacheDir != DefaultACMECacheDir {
-		t.Fatalf("acme cache dir = %q, want %q", entrypoint.TLS.ACME.CacheDir, DefaultACMECacheDir)
+	if entrypoint.TLS.ACME.CacheDir != compiler.DefaultACMECacheDir {
+		t.Fatalf("acme cache dir = %q, want %q", entrypoint.TLS.ACME.CacheDir, compiler.DefaultACMECacheDir)
 	}
 }
 
@@ -127,8 +144,62 @@ func TestCompileRejectsUnknownMiddlewareType(t *testing.T) {
 		}},
 	}
 
-	_, err := Compile(cfg)
+	_, err := compiler.Compile(cfg)
 	if err == nil || !strings.Contains(err.Error(), `unsupported type "custom"`) {
 		t.Fatalf("Compile error = %v, want unsupported middleware type", err)
+	}
+}
+
+func TestCompileMiddlewareChainExpandsBuiltins(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Entrypoints: []config.Entrypoint{{Name: "web", Address: ":8080"}},
+		Services: []config.Service{{
+			Name:      "api",
+			Endpoints: []config.Endpoint{{URL: "http://127.0.0.1:8081"}},
+		}},
+		Middlewares: []config.Middleware{
+			{
+				Name:          "strip",
+				Type:          "strip_prefix",
+				StripPrefixes: []string{"/api", " /v1 "},
+			},
+			{
+				Name:              "redirect",
+				Type:              "redirect_scheme",
+				RedirectScheme:    "https",
+				RedirectPort:      "443",
+				RedirectPermanent: true,
+			},
+			{
+				Name:  "chain",
+				Type:  "chain",
+				Chain: []string{"strip", "redirect"},
+			},
+		},
+		Routes: []config.Route{{
+			Name:        "api",
+			Entrypoint:  "web",
+			Service:     "api",
+			Middlewares: []string{"chain"},
+		}},
+	}
+
+	snapshot, err := compiler.Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes := snapshot.RoutesByEntrypoint.Get("web")
+	if len(routes) != 1 || routes[0].Middlewares.Len() != 2 {
+		t.Fatalf("compiled middlewares = %#v", routes)
+	}
+	strip, _ := routes[0].Middlewares.Get(0)
+	if strip.Type != "builtin" || strip.StripPrefixes.Len() != 2 {
+		t.Fatalf("strip middleware = %#v", strip)
+	}
+	redirect, _ := routes[0].Middlewares.Get(1)
+	if redirect.Type != "builtin" || redirect.RedirectScheme != "https" || !redirect.RedirectPermanent {
+		t.Fatalf("redirect middleware = %#v", redirect)
 	}
 }

@@ -1,7 +1,9 @@
 package runtime
 
 import (
+	"net"
 	"net/http"
+	"regexp"
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
@@ -70,29 +72,137 @@ func WrapMiddlewaresWithRegistry(handler http.Handler, middlewares *collectionli
 }
 
 func wrapBuiltinMiddleware(next http.Handler, middleware MiddlewareRuntime) http.Handler {
+	replacePathRegex := compileMiddlewareRegex(middleware.ReplacePathRegex)
+	redirectRegex := compileMiddlewareRegex(middleware.RedirectRegex)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if middleware.MaxBodyBytes > 0 {
 			r.Body = http.MaxBytesReader(w, r.Body, middleware.MaxBodyBytes)
 		}
-		middleware.RequestHeaders.Range(func(key string, value string) bool {
-			r.Header.Set(key, value)
-			return true
-		})
-		if middleware.StripPrefix != "" && strings.HasPrefix(r.URL.Path, middleware.StripPrefix) {
-			r.URL.Path = strings.TrimPrefix(r.URL.Path, middleware.StripPrefix)
-			if r.URL.Path == "" {
-				r.URL.Path = "/"
-			}
+		applyHeaders(r.Header, middleware.RequestHeaders)
+		applyPathMiddleware(r, middleware, replacePathRegex)
+		if target, ok := redirectTarget(r, middleware, redirectRegex); ok {
+			http.Redirect(w, r, target, redirectStatus(middleware.RedirectPermanent))
+			return
 		}
-		if middleware.AddPrefix != "" {
-			r.URL.Path = joinPathPrefix(middleware.AddPrefix, r.URL.Path)
-		}
-		middleware.ResponseHeaders.Range(func(key string, value string) bool {
-			w.Header().Set(key, value)
-			return true
-		})
+		applyHeaders(w.Header(), middleware.ResponseHeaders)
 		next.ServeHTTP(w, r)
 	})
+}
+
+func applyPathMiddleware(r *http.Request, middleware MiddlewareRuntime, replacePathRegex *regexp.Regexp) {
+	stripPrefixes(r, middleware)
+	if middleware.ReplacePath != "" {
+		r.URL.Path = ensurePath(middleware.ReplacePath)
+	}
+	if replacePathRegex != nil {
+		replacement := middleware.ReplacePathReplacement
+		r.URL.Path = ensurePath(replacePathRegex.ReplaceAllString(r.URL.Path, replacement))
+	}
+	if middleware.AddPrefix != "" {
+		r.URL.Path = joinPathPrefix(middleware.AddPrefix, r.URL.Path)
+	}
+}
+
+func stripPrefixes(r *http.Request, middleware MiddlewareRuntime) {
+	if middleware.StripPrefix != "" {
+		stripPrefix(r, middleware.StripPrefix)
+	}
+	if middleware.StripPrefixes == nil {
+		return
+	}
+	middleware.StripPrefixes.Range(func(_ int, prefix string) bool {
+		stripPrefix(r, prefix)
+		return true
+	})
+}
+
+func stripPrefix(r *http.Request, prefix string) {
+	if prefix == "" || !strings.HasPrefix(r.URL.Path, prefix) {
+		return
+	}
+	r.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
+	r.URL.Path = ensurePath(r.URL.Path)
+}
+
+func applyHeaders(headers http.Header, values *mapping.Map[string, string]) {
+	if values == nil {
+		return
+	}
+	values.Range(func(key string, value string) bool {
+		headers.Set(key, value)
+		return true
+	})
+}
+
+func redirectTarget(r *http.Request, middleware MiddlewareRuntime, redirectRegex *regexp.Regexp) (string, bool) {
+	if middleware.RedirectScheme != "" {
+		return schemeRedirectTarget(r, middleware), true
+	}
+	if redirectRegex == nil {
+		return "", false
+	}
+	current := requestAbsoluteURL(r)
+	if !redirectRegex.MatchString(current) {
+		return "", false
+	}
+	return redirectRegex.ReplaceAllString(current, middleware.RedirectReplacement), true
+}
+
+func schemeRedirectTarget(r *http.Request, middleware MiddlewareRuntime) string {
+	target := *r.URL
+	target.Scheme = middleware.RedirectScheme
+	target.Host = redirectHost(r.Host, middleware.RedirectPort)
+	return target.String()
+}
+
+func redirectHost(host, port string) string {
+	if strings.TrimSpace(port) == "" {
+		return host
+	}
+	name, _, err := net.SplitHostPort(host)
+	if err != nil {
+		name = host
+	}
+	return net.JoinHostPort(name, port)
+}
+
+func requestAbsoluteURL(r *http.Request) string {
+	target := *r.URL
+	if target.Scheme == "" {
+		target.Scheme = requestScheme(r)
+	}
+	if target.Host == "" {
+		target.Host = r.Host
+	}
+	return target.String()
+}
+
+func requestScheme(r *http.Request) string {
+	if scheme := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); scheme != "" {
+		return scheme
+	}
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
+func redirectStatus(permanent bool) int {
+	if permanent {
+		return http.StatusMovedPermanently
+	}
+	return http.StatusFound
+}
+
+func compileMiddlewareRegex(pattern string) *regexp.Regexp {
+	if strings.TrimSpace(pattern) == "" {
+		return nil
+	}
+	compiled, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil
+	}
+	return compiled
 }
 
 func normalizeMiddlewareType(middlewareType string) string {
@@ -113,4 +223,14 @@ func joinPathPrefix(prefix, path string) string {
 		return prefix
 	}
 	return prefix + path
+}
+
+func ensurePath(path string) string {
+	if path == "" {
+		return "/"
+	}
+	if strings.HasPrefix(path, "/") {
+		return path
+	}
+	return "/" + path
 }

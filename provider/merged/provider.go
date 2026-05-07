@@ -2,8 +2,8 @@ package merged
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 	"sync"
@@ -11,11 +11,11 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
-	collectionset "github.com/arcgolabs/collectionx/set"
 	"github.com/arcgolabs/vela/compiler"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
 	"github.com/arcgolabs/vela/runtime"
+	"github.com/samber/oops"
 )
 
 type Source struct {
@@ -60,6 +60,10 @@ func (p *Provider) SetLogger(logger *slog.Logger) {
 	p.logger = logger
 }
 
+func (p *Provider) SetReloadDebounce(duration time.Duration) {
+	p.reloadDebounce = duration
+}
+
 func (p *Provider) Load(ctx context.Context) (*runtime.CompiledSnapshot, error) {
 	sourceCount := p.sourceCount()
 	if p.logger != nil {
@@ -90,61 +94,6 @@ func (p *Provider) Load(ctx context.Context) (*runtime.CompiledSnapshot, error) 
 	return snapshot, nil
 }
 
-func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSnapshot), onError func(error)) (io.Closer, error) {
-	if p.sources == nil || p.sources.Len() == 0 {
-		return nil, fmt.Errorf("merged provider has no config providers")
-	}
-
-	watchCtx, cancel := context.WithCancel(ctx)
-	changes := make(chan string, 32)
-	sourceClosers := collectionlist.NewListWithCapacity[io.Closer](p.sources.Len())
-	setupFailed := false
-	go p.runReloadLoop(watchCtx, changes, onReload, onError)
-
-	p.sources.Range(func(sourceName string, configProvider provider.ConfigProvider) bool {
-		if p.logger != nil {
-			p.logger.Info("watching config source", "source", sourceName)
-		}
-		closer, err := configProvider.Watch(watchCtx, func() {
-			select {
-			case changes <- sourceName:
-			case <-watchCtx.Done():
-			}
-		}, func(err error) {
-			onError(fmt.Errorf("config provider[%s] watch error: %w", sourceName, err))
-		})
-		if err != nil {
-			if p.logger != nil {
-				p.logger.Error("config source watch setup failed", "source", sourceName, "error", err)
-			}
-			p.publish(ctx, provider.WatchSetupFailedEvent{
-				Source: sourceName,
-				Error:  err.Error(),
-			})
-			sourceClosers.Range(func(_ int, c io.Closer) bool {
-				_ = c.Close()
-				return true
-			})
-			cancel()
-			onError(fmt.Errorf("config provider[%s] watch setup failed: %w", sourceName, err))
-			setupFailed = true
-			return false
-		}
-		if p.logger != nil {
-			p.logger.Info("config source watcher ready", "source", sourceName)
-		}
-		sourceClosers.Add(closer)
-		return true
-	})
-	if setupFailed || sourceClosers.IsEmpty() {
-		return nil, fmt.Errorf("merged provider failed to setup any watcher")
-	}
-	return provider.NewOnceCloser(func() {
-		cancel()
-		_ = provider.MultiCloser(sourceClosers.Values()).Close()
-	}), nil
-}
-
 func (p *Provider) loadSnapshot(ctx context.Context) (*runtime.CompiledSnapshot, string, error) {
 	cfg, err := p.loadMergedConfig(ctx)
 	if err != nil {
@@ -152,52 +101,25 @@ func (p *Provider) loadSnapshot(ctx context.Context) (*runtime.CompiledSnapshot,
 	}
 	fingerprint, err := config.Fingerprint(cfg)
 	if err != nil {
-		return nil, "", err
+		return nil, "", oops.In("provider.merged").Wrapf(err, "fingerprint merged config")
 	}
 	snapshot, err := compiler.Compile(cfg)
 	if err != nil {
-		return nil, "", err
+		return nil, "", oops.In("provider.merged").Wrapf(err, "compile merged config")
 	}
 	return snapshot, fingerprint, nil
 }
 
 func (p *Provider) loadMergedConfig(ctx context.Context) (*config.Config, error) {
 	if p.sources == nil || p.sources.Len() == 0 {
-		return nil, fmt.Errorf("merged provider has no config providers")
+		return nil, errors.New("merged provider has no config providers")
 	}
 
 	loadedConfigs := collectionlist.NewListWithCapacity[*config.Config](p.sources.Len())
 	messages := collectionlist.NewList[string]()
 
 	p.sources.Range(func(sourceName string, configProvider provider.ConfigProvider) bool {
-		start := time.Now()
-		cfg, err := configProvider.Load(ctx)
-		if err != nil {
-			messages.Add(fmt.Sprintf("config provider[%s] load failed: %v", sourceName, err))
-			if p.logger != nil {
-				p.logger.Error("config source load failed", "source", sourceName, "error", err)
-			}
-			p.publish(ctx, provider.ConfigSourceFailedEvent{
-				Source: sourceName,
-				Error:  err.Error(),
-			})
-			return true
-		}
-		p.publish(ctx, provider.ConfigSourceLoadedEvent{
-			Source:     sourceName,
-			Duration:   time.Since(start),
-			ConfigSize: len(cfg.Entrypoints) + len(cfg.Services) + len(cfg.Routes),
-		})
-		if p.logger != nil {
-			p.logger.Info("config source loaded",
-				"source", sourceName,
-				"duration", time.Since(start),
-				"entrypoints", len(cfg.Entrypoints),
-				"services", len(cfg.Services),
-				"routes", len(cfg.Routes),
-			)
-		}
-		loadedConfigs.Add(cfg)
+		p.loadSourceConfig(ctx, sourceName, configProvider, loadedConfigs, messages)
 		return true
 	})
 
@@ -207,38 +129,50 @@ func (p *Provider) loadMergedConfig(ctx context.Context) (*config.Config, error)
 
 	merged := config.Merge(loadedConfigs.Values()...)
 	if err := config.Validate(merged); err != nil {
-		return nil, err
+		return nil, oops.In("provider.merged").Wrapf(err, "validate merged config")
 	}
 	return merged, nil
 }
 
-func (p *Provider) runReloadLoop(ctx context.Context, changes <-chan string, onReload func(*runtime.CompiledSnapshot), onError func(error)) {
-	pending := collectionset.NewSet[string]()
-	timer := time.NewTimer(time.Hour)
-	if !timer.Stop() {
-		<-timer.C
+func (p *Provider) loadSourceConfig(
+	ctx context.Context,
+	sourceName string,
+	configProvider provider.ConfigProvider,
+	loadedConfigs *collectionlist.List[*config.Config],
+	messages *collectionlist.List[string],
+) {
+	start := time.Now()
+	cfg, err := configProvider.Load(ctx)
+	if err != nil {
+		p.handleSourceLoadError(ctx, sourceName, err, messages)
+		return
 	}
-	timerActive := false
-	for {
-		select {
-		case <-ctx.Done():
-			if timerActive {
-				timer.Stop()
-			}
-			return
-		case sourceName := <-changes:
-			pending.Add(sourceName)
-			if !timerActive {
-				timer.Reset(p.reloadDebounce)
-				timerActive = true
-			}
-		case <-timer.C:
-			timerActive = false
-			sourceNames := provider.SortedStrings(pending.Values())
-			pending.Clear()
-			p.reloadNow(ctx, strings.Join(sourceNames, ","), onReload, onError)
-		}
+	p.publish(ctx, provider.ConfigSourceLoadedEvent{
+		Source:     sourceName,
+		Duration:   time.Since(start),
+		ConfigSize: len(cfg.Entrypoints) + len(cfg.Services) + len(cfg.Routes),
+	})
+	if p.logger != nil {
+		p.logger.Info("config source loaded",
+			"source", sourceName,
+			"duration", time.Since(start),
+			"entrypoints", len(cfg.Entrypoints),
+			"services", len(cfg.Services),
+			"routes", len(cfg.Routes),
+		)
 	}
+	loadedConfigs.Add(cfg)
+}
+
+func (p *Provider) handleSourceLoadError(ctx context.Context, sourceName string, err error, messages *collectionlist.List[string]) {
+	messages.Add(fmt.Sprintf("config provider[%s] load failed: %v", sourceName, err))
+	if p.logger != nil {
+		p.logger.Error("config source load failed", "source", sourceName, "error", err)
+	}
+	p.publish(ctx, provider.ConfigSourceFailedEvent{
+		Source: sourceName,
+		Error:  err.Error(),
+	})
 }
 
 func (p *Provider) reloadNow(ctx context.Context, sourceName string, onReload func(*runtime.CompiledSnapshot), onError func(error)) {
@@ -290,7 +224,9 @@ func (p *Provider) publish(ctx context.Context, event provider.Event) {
 	if p.bus == nil || event == nil {
 		return
 	}
-	_ = p.bus.Publish(ctx, event)
+	if err := p.bus.Publish(ctx, event); err != nil && p.logger != nil {
+		p.logger.Error("publish provider event failed", "error", err)
+	}
 }
 
 func (p *Provider) sourceCount() int {

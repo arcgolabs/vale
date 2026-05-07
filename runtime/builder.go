@@ -207,7 +207,9 @@ func NewMiddleware(name string) MiddlewareRuntime {
 	return MiddlewareRuntime{
 		Name:            strings.TrimSpace(name),
 		Type:            MiddlewareTypeBuiltin,
+		StripPrefixes:   collectionlist.NewList[string](),
 		RequestHeaders:  mapping.NewMap[string, string](),
 		ResponseHeaders: mapping.NewMap[string, string](),
+		Chain:           collectionlist.NewList[string](),
 	}
 }

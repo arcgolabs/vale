@@ -54,13 +54,23 @@ type Route struct {
 }
 
 type Middleware struct {
-	Name            string            `hcl:",label"`
-	Type            string            `hcl:"type,optional"`
-	StripPrefix     string            `hcl:"strip_prefix,optional"`
-	AddPrefix       string            `hcl:"add_prefix,optional"`
-	RequestHeaders  map[string]string `hcl:"request_headers,optional"`
-	ResponseHeaders map[string]string `hcl:"response_headers,optional"`
-	MaxBodyBytes    int64             `hcl:"max_body_bytes,optional"`
+	Name                   string            `hcl:",label"`
+	Type                   string            `hcl:"type,optional"`
+	StripPrefix            string            `hcl:"strip_prefix,optional"`
+	StripPrefixes          []string          `hcl:"strip_prefixes,optional"`
+	AddPrefix              string            `hcl:"add_prefix,optional"`
+	ReplacePath            string            `hcl:"replace_path,optional"`
+	ReplacePathRegex       string            `hcl:"replace_path_regex,optional"`
+	ReplacePathReplacement string            `hcl:"replace_path_replacement,optional"`
+	RedirectScheme         string            `hcl:"redirect_scheme,optional"`
+	RedirectPort           string            `hcl:"redirect_port,optional"`
+	RedirectRegex          string            `hcl:"redirect_regex,optional"`
+	RedirectReplacement    string            `hcl:"redirect_replacement,optional"`
+	RedirectPermanent      bool              `hcl:"redirect_permanent,optional"`
+	RequestHeaders         map[string]string `hcl:"request_headers,optional"`
+	ResponseHeaders        map[string]string `hcl:"response_headers,optional"`
+	MaxBodyBytes           int64             `hcl:"max_body_bytes,optional"`
+	Chain                  []string          `hcl:"chain,optional"`
 }
 
 type Admin struct {

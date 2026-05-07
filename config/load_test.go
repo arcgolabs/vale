@@ -1,36 +1,38 @@
-package config
+package config_test
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/arcgolabs/vela/config"
 )
 
 func TestValidateReportsUnknownRouteReferences(t *testing.T) {
 	t.Parallel()
 
-	cfg := &Config{
-		Entrypoints: []Entrypoint{{Name: "web", Address: ":8080"}},
-		Services: []Service{{
+	cfg := &config.Config{
+		Entrypoints: []config.Entrypoint{{Name: "web", Address: ":8080"}},
+		Services: []config.Service{{
 			Name: "api",
-			Endpoints: []Endpoint{
+			Endpoints: []config.Endpoint{
 				{URL: "http://127.0.0.1:8081"},
 			},
 		}},
-		Routes: []Route{{
+		Routes: []config.Route{{
 			Name:       "missing-service",
 			Entrypoint: "web",
 			Service:    "unknown",
 		}},
 	}
 
-	err := Validate(cfg)
+	err := config.Validate(cfg)
 	if err == nil || !strings.Contains(err.Error(), `unknown service "unknown"`) {
 		t.Fatalf("Validate error = %v, want unknown service", err)
 	}
 
 	cfg.Routes[0].Entrypoint = "unknown"
 	cfg.Routes[0].Service = "api"
-	err = Validate(cfg)
+	err = config.Validate(cfg)
 	if err == nil || !strings.Contains(err.Error(), `unknown entrypoint "unknown"`) {
 		t.Fatalf("Validate error = %v, want unknown entrypoint", err)
 	}
@@ -39,15 +41,15 @@ func TestValidateReportsUnknownRouteReferences(t *testing.T) {
 func TestValidateReportsUnknownMiddleware(t *testing.T) {
 	t.Parallel()
 
-	cfg := &Config{
-		Entrypoints: []Entrypoint{{Name: "web", Address: ":8080"}},
-		Services: []Service{{
+	cfg := &config.Config{
+		Entrypoints: []config.Entrypoint{{Name: "web", Address: ":8080"}},
+		Services: []config.Service{{
 			Name: "api",
-			Endpoints: []Endpoint{
+			Endpoints: []config.Endpoint{
 				{URL: "http://127.0.0.1:8081"},
 			},
 		}},
-		Routes: []Route{{
+		Routes: []config.Route{{
 			Name:        "api",
 			Entrypoint:  "web",
 			Service:     "api",
@@ -55,7 +57,7 @@ func TestValidateReportsUnknownMiddleware(t *testing.T) {
 		}},
 	}
 
-	err := Validate(cfg)
+	err := config.Validate(cfg)
 	if err == nil || !strings.Contains(err.Error(), `unknown middleware "missing"`) {
 		t.Fatalf("Validate error = %v, want unknown middleware", err)
 	}
@@ -64,42 +66,42 @@ func TestValidateReportsUnknownMiddleware(t *testing.T) {
 func TestValidateEntrypointTLSAndACME(t *testing.T) {
 	t.Parallel()
 
-	cfg := &Config{
-		Entrypoints: []Entrypoint{{
+	cfg := &config.Config{
+		Entrypoints: []config.Entrypoint{{
 			Name:    "websecure",
 			Address: ":8443",
-			TLS: &EntrypointTLS{
+			TLS: &config.EntrypointTLS{
 				Enabled:  true,
 				CertFile: "cert.pem",
 			},
 		}},
-		Services: []Service{{
+		Services: []config.Service{{
 			Name: "api",
-			Endpoints: []Endpoint{
+			Endpoints: []config.Endpoint{
 				{URL: "http://127.0.0.1:8081"},
 			},
 		}},
-		Routes: []Route{{
+		Routes: []config.Route{{
 			Name:       "api",
 			Entrypoint: "websecure",
 			Service:    "api",
 		}},
 	}
 
-	err := Validate(cfg)
+	err := config.Validate(cfg)
 	if err == nil || !strings.Contains(err.Error(), "tls requires both") {
 		t.Fatalf("Validate error = %v, want tls pair error", err)
 	}
 
 	cfg.Entrypoints[0].TLS.KeyFile = "key.pem"
-	cfg.Entrypoints[0].ACME = &EntrypointACME{Enabled: true}
-	err = Validate(cfg)
+	cfg.Entrypoints[0].ACME = &config.EntrypointACME{Enabled: true}
+	err = config.Validate(cfg)
 	if err == nil || !strings.Contains(err.Error(), "acme requires at least one domain") {
 		t.Fatalf("Validate error = %v, want acme domains error", err)
 	}
 
 	cfg.Entrypoints[0].ACME.Domains = []string{"example.com"}
-	err = Validate(cfg)
+	err = config.Validate(cfg)
 	if err == nil || !strings.Contains(err.Error(), "acme requires email") {
 		t.Fatalf("Validate error = %v, want acme email error", err)
 	}

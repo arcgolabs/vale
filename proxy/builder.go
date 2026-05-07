@@ -27,7 +27,7 @@ func (OxyEngine) Build(target *url.URL) http.Handler {
 	fwd := oxyforward.New(true)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		proxyReq := r.Clone(r.Context())
-		proxyReq.URL = rewriteTargetURL(target, r.URL)
+		proxyReq.URL = RewriteTargetURL(target, r.URL)
 		proxyReq.Host = target.Host
 		fwd.ServeHTTP(w, proxyReq)
 	})
@@ -37,14 +37,14 @@ func Build(target *url.URL) http.Handler {
 	return DefaultEngine.Build(target)
 }
 
-func rewriteTargetURL(target *url.URL, requestURL *url.URL) *url.URL {
+func RewriteTargetURL(target, requestURL *url.URL) *url.URL {
 	rewritten := *target
 	rewritten.Path = joinURLPath(target.Path, requestURL.Path)
 	rewritten.RawQuery = joinRawQuery(target.RawQuery, requestURL.RawQuery)
 	return &rewritten
 }
 
-func joinURLPath(base string, requestPath string) string {
+func joinURLPath(base, requestPath string) string {
 	if base == "" {
 		if requestPath == "" {
 			return "/"
@@ -67,7 +67,7 @@ func joinURLPath(base string, requestPath string) string {
 	}
 }
 
-func joinRawQuery(base string, requestQuery string) string {
+func joinRawQuery(base, requestQuery string) string {
 	switch {
 	case base == "":
 		return requestQuery
