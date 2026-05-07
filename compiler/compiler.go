@@ -149,7 +149,7 @@ func compileEntrypointMatchers(
 ) *mapping.Map[string, *runtime.EntrypointMatcher] {
 	matcherMap := mapping.NewMapWithCapacity[string, *runtime.EntrypointMatcher](routesByEntrypoint.Len())
 	routesByEntrypoint.Range(func(entrypoint string, entrypointRoutes []*runtime.CompiledRoute) bool {
-		matcherMap.Set(entrypoint, runtime.BuildEntrypointMatcher(entrypointRoutes))
+		matcherMap.Set(entrypoint, runtime.BuildEntrypointMatcher(collectionlist.NewList(entrypointRoutes...)))
 		return true
 	})
 	return matcherMap

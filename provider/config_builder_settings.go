@@ -61,7 +61,7 @@ func AppendSortedServices(cfg *config.Config, services *mapping.Map[string, *con
 	if cfg == nil || services == nil {
 		return
 	}
-	sortedServices := collectionlist.FilterMapList(collectionlist.NewList(SortedStrings(services.Keys())...), func(_ int, serviceName string) (config.Service, bool) {
+	sortedServices := collectionlist.FilterMapList(SortedStrings(collectionlist.NewList(services.Keys()...)), func(_ int, serviceName string) (config.Service, bool) {
 		service, _ := services.Get(serviceName)
 		if service != nil {
 			return *service, true
@@ -75,7 +75,7 @@ func AppendSortedRoutes(cfg *config.Config, routes *mapping.Map[string, config.R
 	if cfg == nil || routes == nil {
 		return
 	}
-	sortedRoutes := collectionlist.MapList(collectionlist.NewList(SortedStrings(routes.Keys())...), func(_ int, routeName string) config.Route {
+	sortedRoutes := collectionlist.MapList(SortedStrings(collectionlist.NewList(routes.Keys()...)), func(_ int, routeName string) config.Route {
 		route, _ := routes.Get(routeName)
 		return route
 	})

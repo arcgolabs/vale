@@ -4,13 +4,14 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/provider"
 )
 
 func TestParseTraefikLabelsProjectsHTTPResources(t *testing.T) {
 	t.Parallel()
 
-	labels := provider.ParseTraefikLabels(map[string]string{
+	labels := provider.ParseTraefikLabels(mapping.NewMapFrom(map[string]string{
 		"Traefik.Enable":                                                              "true",
 		"traefik.http.routers.api.rule":                                               "Host(`api.example.com`) && PathPrefix(`/api`) && Method(`" + http.MethodGet + "`) && Headers(`X-Tenant`, `acme`)",
 		"traefik.http.routers.api.entrypoints":                                        "web,websecure",
@@ -30,7 +31,7 @@ func TestParseTraefikLabelsProjectsHTTPResources(t *testing.T) {
 		"traefik.http.middlewares.security.headers.framedeny":                         "true",
 		"traefik.http.middlewares.security.headers.contenttypenosniff":                "true",
 		"traefik.http.middlewares.security.headers.stsseconds":                        "31536000",
-	})
+	}))
 
 	assertTraefikRouter(t, labels)
 	assertTraefikService(t, labels)
@@ -135,9 +136,9 @@ func assertTraefikSecurityMiddleware(t *testing.T, labels provider.TraefikLabels
 func TestParseTraefikLabelsRecognizesHTTPConfigWithoutEnable(t *testing.T) {
 	t.Parallel()
 
-	labels := provider.ParseTraefikLabels(map[string]string{
+	labels := provider.ParseTraefikLabels(mapping.NewMapFrom(map[string]string{
 		"traefik.http.routers.web.rule": "Path(`/`)",
-	})
+	}))
 	if !labels.HasHTTPConfig() {
 		t.Fatal("HasHTTPConfig = false, want true")
 	}

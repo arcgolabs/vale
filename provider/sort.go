@@ -7,6 +7,6 @@ import (
 )
 
 // SortedStrings returns a sorted copy of values.
-func SortedStrings(values []string) []string {
-	return collectionlist.NewList[string](values...).Sort(strings.Compare).Values()
+func SortedStrings(values *collectionlist.List[string]) *collectionlist.List[string] {
+	return values.Clone().Sort(strings.Compare)
 }

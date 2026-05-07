@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
 	"github.com/samber/mo"
@@ -12,7 +13,7 @@ import (
 
 func newDockerConfig(options Options) *config.Config {
 	cfg := provider.NewEntrypointConfig(options.DefaultEntrypointName, options.DefaultEntrypointAddr)
-	entrypoints := collectionlist.FilterMapList(collectionlist.NewList(provider.SortedStrings(options.EntrypointAddresses.Keys())...), func(_ int, name string) (config.Entrypoint, bool) {
+	entrypoints := collectionlist.FilterMapList(provider.SortedStrings(collectionlist.NewList(options.EntrypointAddresses.Keys()...)), func(_ int, name string) (config.Entrypoint, bool) {
 		if name == options.DefaultEntrypointName {
 			return config.Entrypoint{}, false
 		}
@@ -53,24 +54,29 @@ func sanitizeName(input, fallback string) string {
 	return replacer.Replace(input)
 }
 
-func middlewareFromLabels(name string, labels map[string]string) (config.Middleware, bool) {
+func labelValue(labels *mapping.Map[string, string], key string) string {
+	value, _ := labels.Get(key)
+	return value
+}
+
+func middlewareFromLabels(name string, labels *mapping.Map[string, string]) (config.Middleware, bool) {
 	middleware := config.Middleware{
 		Name:         name,
-		StripPrefix:  strings.TrimSpace(labels["vela.middleware.strip_prefix"]),
-		AddPrefix:    strings.TrimSpace(labels["vela.middleware.add_prefix"]),
-		MaxBodyBytes: int64(parseInt(labels["vela.middleware.max_body_bytes"], 0)),
+		StripPrefix:  strings.TrimSpace(labelValue(labels, "vela.middleware.strip_prefix")),
+		AddPrefix:    strings.TrimSpace(labelValue(labels, "vela.middleware.add_prefix")),
+		MaxBodyBytes: int64(parseInt(labelValue(labels, "vela.middleware.max_body_bytes"), 0)),
 	}
 	return middleware, middleware.StripPrefix != "" || middleware.AddPrefix != "" || middleware.MaxBodyBytes > 0
 }
 
-func applyEntrypointTLSLabels(cfg *config.Config, labels map[string]string) {
+func applyEntrypointTLSLabels(cfg *config.Config, labels *mapping.Map[string, string]) {
 	if cfg == nil || len(cfg.Entrypoints) == 0 {
 		return
 	}
-	tlsEnabled := parseBool(labels["vela.entrypoint.tls.enabled"], false)
-	certFile := strings.TrimSpace(labels["vela.entrypoint.tls.cert_file"])
-	keyFile := strings.TrimSpace(labels["vela.entrypoint.tls.key_file"])
-	acmeEnabled := parseBool(labels["vela.entrypoint.acme.enabled"], false)
+	tlsEnabled := parseBool(labelValue(labels, "vela.entrypoint.tls.enabled"), false)
+	certFile := strings.TrimSpace(labelValue(labels, "vela.entrypoint.tls.cert_file"))
+	keyFile := strings.TrimSpace(labelValue(labels, "vela.entrypoint.tls.key_file"))
+	acmeEnabled := parseBool(labelValue(labels, "vela.entrypoint.acme.enabled"), false)
 	if tlsEnabled || certFile != "" || keyFile != "" {
 		cfg.Entrypoints[0].TLS = &config.EntrypointTLS{
 			Enabled:  tlsEnabled,
@@ -81,9 +87,9 @@ func applyEntrypointTLSLabels(cfg *config.Config, labels map[string]string) {
 	if acmeEnabled {
 		cfg.Entrypoints[0].ACME = &config.EntrypointACME{
 			Enabled:  true,
-			Email:    strings.TrimSpace(labels["vela.entrypoint.acme.email"]),
-			CacheDir: strings.TrimSpace(labels["vela.entrypoint.acme.cache_dir"]),
-			Domains:  provider.SplitCSV(labels["vela.entrypoint.acme.domains"]),
+			Email:    strings.TrimSpace(labelValue(labels, "vela.entrypoint.acme.email")),
+			CacheDir: strings.TrimSpace(labelValue(labels, "vela.entrypoint.acme.cache_dir")),
+			Domains:  provider.SplitCSV(labelValue(labels, "vela.entrypoint.acme.domains")).Values(),
 		}
 	}
 }

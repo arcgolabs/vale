@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	collectionlist "github.com/arcgolabs/collectionx/list"
 )
 
 func NewGateway(snapshot *CompiledSnapshot, logger *slog.Logger, accessEnabled bool, metrics MetricsRecorder) *Gateway {
@@ -50,7 +52,7 @@ func (g *Gateway) Handler(entrypoint string) http.Handler {
 		}
 
 		matcher, _ := snapshot.EntrypointMatchers.Get(entrypoint)
-		routes := snapshot.RoutesByEntrypoint.Get(entrypoint)
+		routes := collectionlist.NewList(snapshot.RoutesByEntrypoint.Get(entrypoint)...)
 		route := MatchRoute(matcher, routes, r)
 		if route == nil {
 			http.NotFound(w, r)

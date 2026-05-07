@@ -6,34 +6,35 @@ import (
 	"testing"
 
 	"github.com/arcgolabs/collectionx/bitset"
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	velaruntime "github.com/arcgolabs/vela/runtime"
 )
 
 func TestMatchRoutePrioritizesHostAndPredicates(t *testing.T) {
 	t.Parallel()
 
-	routes := []*velaruntime.CompiledRoute{
-		{
+	routes := collectionlist.NewList(
+		&velaruntime.CompiledRoute{
 			Name:       "fallback",
 			PathPrefix: "/",
 		},
-		{
+		&velaruntime.CompiledRoute{
 			Name:       "host-short",
 			Host:       "api.example.com",
 			PathPrefix: "/api",
 		},
-		{
+		&velaruntime.CompiledRoute{
 			Name:       "host-long-method",
 			Host:       "api.example.com",
 			PathPrefix: "/api/v1",
 			Method:     http.MethodPost,
 		},
-		{
+		&velaruntime.CompiledRoute{
 			Name:       "wildcard",
 			Host:       "*.example.com",
 			PathPrefix: "/api/v1",
 		},
-	}
+	)
 	matcher := velaruntime.BuildEntrypointMatcher(routes)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://api.example.com/api/v1/users", http.NoBody)
@@ -58,12 +59,12 @@ func TestMatchRoutePrioritizesHostAndPredicates(t *testing.T) {
 func TestMatchRouteStripsPortFromHost(t *testing.T) {
 	t.Parallel()
 
-	routes := []*velaruntime.CompiledRoute{
-		{
+	routes := collectionlist.NewList(
+		&velaruntime.CompiledRoute{
 			Name: "api",
 			Host: "api.example.com",
 		},
-	}
+	)
 	matcher := velaruntime.BuildEntrypointMatcher(routes)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://api.example.com:8080/", http.NoBody)
 
@@ -76,7 +77,7 @@ func TestMatchRouteStripsPortFromHost(t *testing.T) {
 func TestMatchRouteFallsBackToShorterPrefixWhenLongerPredicateMisses(t *testing.T) {
 	t.Parallel()
 
-	routes := []*velaruntime.CompiledRoute{
+	routes := collectionlist.NewList(
 		routeWithPredicates(&velaruntime.CompiledRoute{
 			Name:       "api-short",
 			Host:       "api.example.com",
@@ -88,7 +89,7 @@ func TestMatchRouteFallsBackToShorterPrefixWhenLongerPredicateMisses(t *testing.
 			PathPrefix: "/api/v1",
 			Method:     http.MethodPost,
 		}),
-	}
+	)
 	matcher := velaruntime.BuildEntrypointMatcher(routes)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://api.example.com/api/v1/users", http.NoBody)
 

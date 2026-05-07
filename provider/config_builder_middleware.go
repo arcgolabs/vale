@@ -61,7 +61,7 @@ func MiddlewareStripPrefixes(pathPrefixes ...string) MiddlewareOption {
 		if middleware == nil {
 			return
 		}
-		middleware.StripPrefixes = cleanStrings(pathPrefixes)
+		middleware.StripPrefixes = cleanStrings(collectionlist.NewList(pathPrefixes...)).Values()
 	}
 }
 
@@ -116,7 +116,7 @@ func MiddlewareRedirectRegex(pattern, replacement string, permanent bool) Middle
 func MiddlewareChain(names ...string) MiddlewareOption {
 	return func(middleware *config.Middleware) {
 		if middleware != nil {
-			middleware.Chain = cleanStrings(names)
+			middleware.Chain = cleanStrings(collectionlist.NewList(names...)).Values()
 		}
 	}
 }
@@ -153,9 +153,9 @@ func MiddlewareMaxBodyBytes(maxBodyBytes int64) MiddlewareOption {
 	}
 }
 
-func cleanStrings(values []string) []string {
-	return collectionlist.FilterMapList(collectionlist.NewList(values...), func(_ int, value string) (string, bool) {
+func cleanStrings(values *collectionlist.List[string]) *collectionlist.List[string] {
+	return collectionlist.FilterMapList(values, func(_ int, value string) (string, bool) {
 		trimmed := strings.TrimSpace(value)
 		return trimmed, trimmed != ""
-	}).Values()
+	})
 }

@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/provider"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
@@ -29,7 +31,7 @@ func NewDockerSourceFromEnv() (*DockerSource, error) {
 	return &DockerSource{client: cli}, nil
 }
 
-func (s *DockerSource) ListContainers(ctx context.Context) ([]Container, error) {
+func (s *DockerSource) ListContainers(ctx context.Context) (*collectionlist.List[Container], error) {
 	list, err := s.client.ContainerList(ctx, container.ListOptions{
 		All: false,
 	})
@@ -37,18 +39,18 @@ func (s *DockerSource) ListContainers(ctx context.Context) ([]Container, error) 
 		return nil, oops.In("docker_source").Wrapf(err, "list docker containers")
 	}
 
-	result := make([]Container, 0, len(list))
+	result := collectionlist.NewListWithCapacity[Container](len(list))
 	for index := range list {
 		item := &list[index]
 		address, port := dockerAddressPort(item)
 		if address == "" || port == 0 {
 			continue
 		}
-		result = append(result, Container{
+		result.Add(Container{
 			Name:    sanitizeContainerName(item.Names),
 			Address: address,
 			Port:    port,
-			Labels:  item.Labels,
+			Labels:  mapping.NewMapFrom(item.Labels),
 		})
 	}
 	return result, nil

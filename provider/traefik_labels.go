@@ -44,7 +44,7 @@ type TraefikService struct {
 }
 
 // ParseTraefikLabels parses Traefik-compatible HTTP labels.
-func ParseTraefikLabels(labels map[string]string) TraefikLabels {
+func ParseTraefikLabels(labels *mapping.Map[string, string]) TraefikLabels {
 	result := NewTraefikLabels()
 	normalizeTraefikLabels(labels).Range(func(key string, value string) bool {
 		switch {
@@ -154,7 +154,7 @@ func applyTraefikPathMiddleware(middleware *config.Middleware, option, value str
 		middleware.AddPrefix = strings.TrimSpace(value)
 	case "stripprefix.prefixes":
 		middleware.Type = "strip_prefix"
-		middleware.StripPrefixes = SplitCSV(value)
+		middleware.StripPrefixes = SplitCSV(value).Values()
 		middleware.StripPrefix = firstTraefikCSV(value)
 	case "replacepath.path":
 		middleware.ReplacePath = strings.TrimSpace(value)

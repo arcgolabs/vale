@@ -33,7 +33,7 @@ type routeBucket struct {
 	fallback   *collectionlist.List[*CompiledRoute]
 }
 
-func BuildEntrypointMatcher(routes []*CompiledRoute) *EntrypointMatcher {
+func BuildEntrypointMatcher(routes *collectionlist.List[*CompiledRoute]) *EntrypointMatcher {
 	matcher := &EntrypointMatcher{
 		exactHosts: mapping.NewMap[string, *routeBucket](),
 		wildcards:  collectionlist.NewList[wildcardBucket](),
@@ -41,7 +41,7 @@ func BuildEntrypointMatcher(routes []*CompiledRoute) *EntrypointMatcher {
 	}
 
 	wildcardMap := mapping.NewMap[string, *routeBucket]()
-	for _, route := range routes {
+	routes.Range(func(_ int, route *CompiledRoute) bool {
 		host := strings.TrimSpace(strings.ToLower(route.Host))
 		switch {
 		case host == "":
@@ -54,7 +54,8 @@ func BuildEntrypointMatcher(routes []*CompiledRoute) *EntrypointMatcher {
 			bucket, _ := matcher.exactHosts.GetOrCompute(host, newRouteBucket)
 			bucket.Add(route)
 		}
-	}
+		return true
+	})
 
 	matcher.exactHosts.Range(func(_ string, bucket *routeBucket) bool {
 		bucket.Sort()
@@ -75,7 +76,7 @@ func BuildEntrypointMatcher(routes []*CompiledRoute) *EntrypointMatcher {
 	return matcher
 }
 
-func MatchRoute(matcher *EntrypointMatcher, routes []*CompiledRoute, request *http.Request) *CompiledRoute {
+func MatchRoute(matcher *EntrypointMatcher, routes *collectionlist.List[*CompiledRoute], request *http.Request) *CompiledRoute {
 	// Backward-compatible path for old snapshots.
 	if matcher == nil {
 		return linearMatch(routes, request)
@@ -107,15 +108,16 @@ func MatchRoute(matcher *EntrypointMatcher, routes []*CompiledRoute, request *ht
 	return matcher.fallback.Match(request.URL.Path, method, request.Header)
 }
 
-func linearMatch(routes []*CompiledRoute, request *http.Request) *CompiledRoute {
+func linearMatch(routes *collectionlist.List[*CompiledRoute], request *http.Request) *CompiledRoute {
 	host := strings.ToLower(request.Host)
 	method := strings.ToUpper(request.Method)
-	for _, route := range routes {
-		if linearRouteMatches(route, request, host, method) {
-			return route
-		}
+	matched, ok := collectionlist.FindList(routes, func(_ int, route *CompiledRoute) bool {
+		return linearRouteMatches(route, request, host, method)
+	})
+	if !ok {
+		return nil
 	}
-	return nil
+	return matched
 }
 
 func linearRouteMatches(route *CompiledRoute, request *http.Request, host, method string) bool {
@@ -274,25 +276,4 @@ func trimLastRune(value string) string {
 		return ""
 	}
 	return string(runes[:len(runes)-1])
-}
-
-func hasPredicate(route *CompiledRoute, predicate int) bool {
-	if route == nil {
-		return false
-	}
-	if route.Predicates != nil {
-		return route.Predicates.Contains(predicate)
-	}
-	switch predicate {
-	case PredicateHost:
-		return route.Host != ""
-	case PredicatePathPrefix:
-		return route.PathPrefix != ""
-	case PredicateMethod:
-		return route.Method != ""
-	case PredicateHeaders:
-		return route.Headers.Len() > 0
-	default:
-		return false
-	}
 }

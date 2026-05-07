@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/arcgolabs/collectionx/bitset"
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	velaruntime "github.com/arcgolabs/vela/runtime"
 )
@@ -31,8 +32,8 @@ func BenchmarkMatchRouteByRouteCount(b *testing.B) {
 	}
 }
 
-func benchmarkRoutes(count int) []*velaruntime.CompiledRoute {
-	routes := make([]*velaruntime.CompiledRoute, 0, count)
+func benchmarkRoutes(count int) *collectionlist.List[*velaruntime.CompiledRoute] {
+	routes := collectionlist.NewListWithCapacity[*velaruntime.CompiledRoute](count)
 	for i := range count {
 		route := &velaruntime.CompiledRoute{
 			Name:       fmt.Sprintf("api-%04d", i),
@@ -46,7 +47,7 @@ func benchmarkRoutes(count int) []*velaruntime.CompiledRoute {
 		route.Predicates.Set(velaruntime.PredicateHost)
 		route.Predicates.Set(velaruntime.PredicatePathPrefix)
 		route.Predicates.Set(velaruntime.PredicateMethod)
-		routes = append(routes, route)
+		routes.Add(route)
 	}
 	return routes
 }

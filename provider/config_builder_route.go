@@ -80,7 +80,7 @@ func RouteMiddlewares(names ...string) RouteOption {
 		if route == nil {
 			return
 		}
-		route.Middlewares = cleanStrings(names)
+		route.Middlewares = cleanStrings(collectionlist.NewList(names...)).Values()
 	}
 }
 

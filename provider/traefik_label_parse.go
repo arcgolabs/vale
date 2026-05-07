@@ -15,32 +15,37 @@ import (
 var traefikRuleCallPattern = regexp.MustCompile(`(?i)(Host|PathPrefix|Path|Method|Headers?)\s*\(([^)]*)\)`)
 
 func applyTraefikRule(router *TraefikRouter, rule string) {
-	for _, match := range traefikRuleCallPattern.FindAllStringSubmatch(rule, -1) {
+	collectionlist.NewList(traefikRuleCallPattern.FindAllStringSubmatch(rule, -1)...).Range(func(_ int, match []string) bool {
 		args := traefikRuleArgs(match[2])
-		if len(args) == 0 {
-			continue
+		if args.IsEmpty() {
+			return true
 		}
+		firstArg, _ := args.GetFirst()
 		switch strings.ToLower(match[1]) {
 		case "host":
-			router.Host = args[0]
+			router.Host = firstArg
 		case "path", "pathprefix":
-			router.PathPrefix = args[0]
+			router.PathPrefix = firstArg
 		case "method":
-			router.Method = strings.ToUpper(args[0])
+			router.Method = strings.ToUpper(firstArg)
 		case "header", "headers":
-			for idx := 0; idx+1 < len(args); idx += 2 {
-				router.Headers.Set(args[idx], args[idx+1])
+			for idx := 0; idx+1 < args.Len(); idx += 2 {
+				key, _ := args.Get(idx)
+				value, _ := args.Get(idx + 1)
+				router.Headers.Set(key, value)
 			}
 		}
-	}
+		return true
+	})
 }
 
-func traefikRuleArgs(input string) []string {
+func traefikRuleArgs(input string) *collectionlist.List[string] {
 	scanner := traefikRuleArgScanner{args: collectionlist.NewList[string]()}
-	for _, current := range input {
+	collectionlist.NewList([]rune(input)...).Range(func(_ int, current rune) bool {
 		scanner.consume(current)
-	}
-	return scanner.args.Values()
+		return true
+	})
+	return scanner.args
 }
 
 type traefikRuleArgScanner struct {
@@ -88,16 +93,17 @@ func splitTraefikResourceLabel(rest string) (string, string, bool) {
 	return name, option, name != "" && option != ""
 }
 
-func normalizeTraefikLabels(labels map[string]string) *mapping.Map[string, string] {
+func normalizeTraefikLabels(labels *mapping.Map[string, string]) *mapping.Map[string, string] {
 	normalized := mapping.NewMap[string, string]()
-	for key, value := range labels {
+	labels.Range(func(key string, value string) bool {
 		normalized.Set(strings.ToLower(strings.TrimSpace(key)), strings.TrimSpace(value))
-	}
+		return true
+	})
 	return normalized
 }
 
 func traefikCSVList(value string, stripNamespace bool) *collectionlist.List[string] {
-	return collectionlist.FilterMapList(collectionlist.NewList(SplitCSV(value)...), func(_ int, item string) (string, bool) {
+	return collectionlist.FilterMapList(SplitCSV(value), func(_ int, item string) (string, bool) {
 		if stripNamespace {
 			item = StripTraefikProviderNamespace(item)
 		}
@@ -106,9 +112,7 @@ func traefikCSVList(value string, stripNamespace bool) *collectionlist.List[stri
 }
 
 func firstTraefikCSV(value string) string {
-	return collectionlist.NewList(SplitCSV(value)...).
-		FirstWhere(func(_ int, _ string) bool { return true }).
-		OrElse("")
+	return SplitCSV(value).GetFirstOption().OrElse("")
 }
 
 func setHeader(headers map[string]string, key, value string) {

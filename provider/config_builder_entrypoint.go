@@ -57,7 +57,7 @@ func EntrypointACME(email, cacheDir string, domains ...string) EntrypointOption 
 			Enabled:  true,
 			Email:    strings.TrimSpace(email),
 			CacheDir: strings.TrimSpace(cacheDir),
-			Domains:  cleanStrings(domains),
+			Domains:  cleanStrings(collectionlist.NewList(domains...)).Values(),
 		}
 	}
 }

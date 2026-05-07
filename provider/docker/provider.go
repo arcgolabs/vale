@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
 	"github.com/samber/oops"
@@ -16,11 +17,11 @@ type Container struct {
 	Name    string
 	Address string
 	Port    int
-	Labels  map[string]string
+	Labels  *mapping.Map[string, string]
 }
 
 type Source interface {
-	ListContainers(context.Context) ([]Container, error)
+	ListContainers(context.Context) (*collectionlist.List[Container], error)
 	Watch(context.Context, func(), func(error)) (io.Closer, error)
 }
 
@@ -125,19 +126,19 @@ func normalizeOptions(options Options) Options {
 	return options
 }
 
-func (p *Provider) logContainersListed(containers []Container) {
+func (p *Provider) logContainersListed(containers *collectionlist.List[Container]) {
 	if p.logger != nil {
-		p.logger.Info("docker containers listed", "provider", p.name, "containers", len(containers))
+		p.logger.Info("docker containers listed", "provider", p.name, "containers", containers.Len())
 	}
 }
 
-func (p *Provider) logConfigBuilt(containers []Container, result configBuildResult) {
+func (p *Provider) logConfigBuilt(containers *collectionlist.List[Container], result configBuildResult) {
 	if p.logger == nil {
 		return
 	}
 	p.logger.Info("docker config built",
 		"provider", p.name,
-		"containers", len(containers),
+		"containers", containers.Len(),
 		"disabled", result.DisabledCount,
 		"invalid_endpoints", result.InvalidEndpointCount,
 		"middlewares", len(result.Config.Middlewares),

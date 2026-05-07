@@ -143,9 +143,9 @@ func (p *Provider) reloadPending(
 	onReload func(*runtime.CompiledSnapshot),
 	onError func(error),
 ) {
-	sourceNames := provider.SortedStrings(pending.Values())
+	sourceNames := provider.SortedStrings(collectionlist.NewList(pending.Values()...))
 	pending.Clear()
-	p.reloadNow(ctx, strings.Join(sourceNames, ","), onReload, onError)
+	p.reloadNow(ctx, strings.Join(sourceNames.Values(), ","), onReload, onError)
 }
 
 func stopTimer(timer *time.Timer) bool {

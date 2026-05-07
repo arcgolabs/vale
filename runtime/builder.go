@@ -29,7 +29,7 @@ func (s *CompiledSnapshot) BuildMatchers() *CompiledSnapshot {
 		s.EntrypointMatchers = mapping.NewMap[string, *EntrypointMatcher]()
 	}
 	s.RoutesByEntrypoint.Range(func(entrypoint string, routes []*CompiledRoute) bool {
-		s.EntrypointMatchers.Set(entrypoint, BuildEntrypointMatcher(routes))
+		s.EntrypointMatchers.Set(entrypoint, BuildEntrypointMatcher(collectionlist.NewList(routes...)))
 		return true
 	})
 	s.BuildCatalog()

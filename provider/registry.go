@@ -95,7 +95,7 @@ func (r *ConfigProviderRegistry) Names() *collectionlist.List[string] {
 	if r == nil || r.factories == nil {
 		return collectionlist.NewList[string]()
 	}
-	return collectionlist.NewList(SortedStrings(r.factories.Keys())...)
+	return SortedStrings(collectionlist.NewList(r.factories.Keys()...))
 }
 
 func (r *ConfigProviderRegistry) Clone() *ConfigProviderRegistry {
@@ -147,7 +147,7 @@ func (r *SnapshotProviderRegistry) Names() *collectionlist.List[string] {
 	if r == nil || r.factories == nil {
 		return collectionlist.NewList[string]()
 	}
-	return collectionlist.NewList(SortedStrings(r.factories.Keys())...)
+	return SortedStrings(collectionlist.NewList(r.factories.Keys()...))
 }
 
 func (r *SnapshotProviderRegistry) Clone() *SnapshotProviderRegistry {

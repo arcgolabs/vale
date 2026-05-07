@@ -14,7 +14,7 @@ func TestProviderLoadsTraefikLabels(t *testing.T) {
 		Name:    "api",
 		Address: "10.0.0.2",
 		Port:    80,
-		Labels: map[string]string{
+		Labels: mapping.NewMapFrom(map[string]string{
 			"traefik.http.routers.api.rule":                                "Host(`api.example.com`) && PathPrefix(`/api`)",
 			"traefik.http.routers.api.entrypoints":                         "web,websecure",
 			"traefik.http.routers.api.middlewares":                         "strip@docker",
@@ -22,7 +22,7 @@ func TestProviderLoadsTraefikLabels(t *testing.T) {
 			"traefik.http.services.api-service.loadbalancer.server.port":   "8081",
 			"traefik.http.services.api-service.loadbalancer.server.scheme": "https",
 			"traefik.http.middlewares.strip.stripprefix.prefixes":          "/api,/v1",
-		},
+		}),
 	})
 	provider := providerdocker.New("docker", source, providerdocker.Options{
 		DefaultEntrypointName: "web",
@@ -58,12 +58,12 @@ func TestProviderFallsBackToVelaLabels(t *testing.T) {
 		Name:    "api",
 		Address: "10.0.0.2",
 		Port:    8080,
-		Labels: map[string]string{
+		Labels: mapping.NewMapFrom(map[string]string{
 			"vela.enable":          "true",
 			"vela.service":         "api",
 			"vela.route":           "api-route",
 			"vela.rule.pathprefix": "/api",
-		},
+		}),
 	})
 	provider := providerdocker.New("docker", source, providerdocker.DefaultOptions())
 
@@ -83,10 +83,10 @@ func TestProviderDisablesExplicitTraefikFalse(t *testing.T) {
 		Name:    "api",
 		Address: "10.0.0.2",
 		Port:    8080,
-		Labels: map[string]string{
+		Labels: mapping.NewMapFrom(map[string]string{
 			"traefik.enable":                "false",
 			"traefik.http.routers.api.rule": "PathPrefix(`/api`)",
-		},
+		}),
 	})
 	provider := providerdocker.New("docker", source, providerdocker.DefaultOptions())
 

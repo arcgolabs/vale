@@ -10,8 +10,8 @@ import (
 	velaprovider "github.com/arcgolabs/vela/provider"
 )
 
-func labelsEnabled(labels map[string]string, traefikLabels velaprovider.TraefikLabels) bool {
-	return traefikLabels.Enabled.OrElse(parseBool(labels["vela.enable"], false) || traefikLabels.HasHTTPConfig())
+func labelsEnabled(labels *mapping.Map[string, string], traefikLabels velaprovider.TraefikLabels) bool {
+	return traefikLabels.Enabled.OrElse(parseBool(labelValue(labels, "vela.enable"), false) || traefikLabels.HasHTTPConfig())
 }
 
 func applyTraefikContainerConfig(
@@ -131,7 +131,8 @@ func traefikRouterServiceName(container Container, router velaprovider.TraefikRo
 
 func defaultTraefikServiceName(container Container, labels velaprovider.TraefikLabels) string {
 	if labels.Services.Len() == 1 {
-		return velaprovider.SortedStrings(labels.Services.Keys())[0]
+		serviceName, _ := velaprovider.SortedStrings(collectionlist.NewList(labels.Services.Keys()...)).GetFirst()
+		return serviceName
 	}
 	return sanitizeName(container.Name, "service")
 }
