@@ -31,7 +31,11 @@ func TestStartReturnsEntrypointListenError(t *testing.T) {
 	t.Parallel()
 
 	occupied := listenOnLocalhost(t)
-	defer occupied.Close()
+	defer func() {
+		if err := occupied.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	g, err := New(
 		WithStaticSnapshot(&runtime.CompiledSnapshot{
@@ -58,7 +62,11 @@ func TestStartReturnsAdminListenError(t *testing.T) {
 	t.Parallel()
 
 	occupied := listenOnLocalhost(t)
-	defer occupied.Close()
+	defer func() {
+		if err := occupied.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	g, err := New(
 		WithStaticSnapshot(&runtime.CompiledSnapshot{
@@ -205,13 +213,16 @@ func TestBuildTLSConfigLoadsStaticCertificate(t *testing.T) {
 	t.Parallel()
 
 	certFile, keyFile := writeTestCertificate(t)
-	tlsConfig, err := (&Gateway{}).buildTLSConfig(runtime.TLSRuntime{
+	tlsConfig, tlsEnabled, err := (&Gateway{}).buildTLSConfig(runtime.TLSRuntime{
 		Enabled:  true,
 		CertFile: certFile,
 		KeyFile:  keyFile,
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !tlsEnabled {
+		t.Fatal("tls was not enabled")
 	}
 	if tlsConfig.MinVersion != tls.VersionTLS12 {
 		t.Fatalf("min tls version = %d, want TLS 1.2", tlsConfig.MinVersion)
@@ -224,7 +235,7 @@ func TestBuildTLSConfigLoadsStaticCertificate(t *testing.T) {
 func TestBuildTLSConfigReportsMissingStaticCertificate(t *testing.T) {
 	t.Parallel()
 
-	_, err := (&Gateway{}).buildTLSConfig(runtime.TLSRuntime{
+	_, _, err := (&Gateway{}).buildTLSConfig(runtime.TLSRuntime{
 		Enabled:  true,
 		CertFile: "missing-cert.pem",
 		KeyFile:  "missing-key.pem",

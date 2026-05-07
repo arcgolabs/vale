@@ -62,7 +62,7 @@ func TestFSMApplyLegacyPayloadAsRawState(t *testing.T) {
 	t.Parallel()
 
 	store := newFSM(nil)
-	store.Apply(&raft.Log{
+	mustApply(t, store, &raft.Log{
 		Index: 3,
 		Data:  []byte(`{"routes":1}`),
 	})
@@ -82,15 +82,19 @@ func TestFSMPersistsRouteStateWithStorxBboltx(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer stateStore.Close()
+	defer func() {
+		if closeErr := stateStore.Close(); closeErr != nil {
+			t.Fatal(closeErr)
+		}
+	}()
 
 	store := newFSM(stateStore)
 	result := store.Apply(&raft.Log{
 		Index: 15,
 		Data:  []byte(`{"type":"route_sync","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":1,"routes":2,"proxy_engine":"oxy"},"routes":[{"name":"api","entrypoint":"web","path_prefix":"/api","service":"svc"},{"name":"admin","entrypoint":"web","path_prefix":"/admin","service":"admin"}]}`),
 	})
-	if err, ok := result.(error); ok {
-		t.Fatal(err)
+	if applyErr, ok := result.(error); ok {
+		t.Fatal(applyErr)
 	}
 
 	persisted, ok, err := stateStore.LoadState(context.Background())
@@ -116,7 +120,7 @@ func TestFSMSnapshotRestoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	store := newFSM(nil)
-	store.Apply(&raft.Log{
+	mustApply(t, store, &raft.Log{
 		Index: 11,
 		Data:  []byte(`{"type":"snapshot_update","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":5,"routes":8,"proxy_engine":"oxy"}}`),
 	})
@@ -139,6 +143,14 @@ func TestFSMSnapshotRestoreRoundTrip(t *testing.T) {
 	}
 	if state.Snapshot == nil || state.Snapshot.Routes != 8 {
 		t.Fatalf("restored snapshot = %#v", state.Snapshot)
+	}
+}
+
+func mustApply(t *testing.T, store *fsm, log *raft.Log) {
+	t.Helper()
+	result := store.Apply(log)
+	if err, ok := result.(error); ok {
+		t.Fatal(err)
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/arcgolabs/vela/provider"
 	staticconfigprovider "github.com/arcgolabs/vela/provider/staticconfig"
 	"github.com/arcgolabs/vela/runtime"
+	"github.com/samber/oops"
 )
 
 type (
@@ -31,16 +32,30 @@ func New(options ...Option) (*Gateway, error) {
 			continue
 		}
 		if err := option(&cfg); err != nil {
-			return nil, err
+			return nil, oops.
+				In("vela").
+				Wrapf(err, "apply vela option")
 		}
 	}
 	applyDefaultConfigSource(&cfg)
-	return gateway.NewFromConfig(cfg)
+	gw, err := gateway.NewFromConfig(cfg)
+	if err != nil {
+		return nil, oops.
+			In("vela").
+			Wrapf(err, "create gateway")
+	}
+	return gw, nil
 }
 
 func NewFromConfig(cfg Config) (*Gateway, error) {
 	applyDefaultConfigSource(&cfg)
-	return gateway.NewFromConfig(cfg)
+	gw, err := gateway.NewFromConfig(cfg)
+	if err != nil {
+		return nil, oops.
+			In("vela").
+			Wrapf(err, "create gateway from config")
+	}
+	return gw, nil
 }
 
 func NewDefault() (*Gateway, error) {
@@ -48,11 +63,11 @@ func NewDefault() (*Gateway, error) {
 }
 
 func MustNew(options ...Option) *Gateway {
-	gateway, err := New(options...)
+	gw, err := New(options...)
 	if err != nil {
 		panic(err)
 	}
-	return gateway
+	return gw
 }
 
 func DefaultConfig() Config {

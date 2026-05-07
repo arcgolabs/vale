@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"log/slog"
 	"testing"
 
@@ -12,7 +11,7 @@ func TestVeladDefaultOptionsCreateGatewayWithoutConfigFile(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultVeladConfig()
-	gateway, err := vela.New(cfg.gatewayOptions(slog.New(slog.NewTextHandler(io.Discard, nil)))...)
+	gateway, err := vela.New(cfg.gatewayOptions(slog.New(slog.DiscardHandler))...)
 	if err != nil {
 		t.Fatal(err)
 	}

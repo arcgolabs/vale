@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -9,6 +8,7 @@ import (
 	"github.com/arcgolabs/collectionx/bitset"
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
+	"github.com/samber/oops"
 )
 
 func NewSnapshot() *CompiledSnapshot {
@@ -99,10 +99,16 @@ func NewService(name string, strategy string, endpoints ...*EndpointRuntime) *Se
 func NewEndpoint(rawURL string, weight int, proxy http.Handler) (*EndpointRuntime, error) {
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, err
+		return nil, oops.
+			In("runtime").
+			With("url", rawURL).
+			Wrapf(err, "parse endpoint url")
 	}
 	if parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return nil, fmt.Errorf("endpoint url %q must include scheme and host", rawURL)
+		return nil, oops.
+			In("runtime").
+			With("url", rawURL).
+			Errorf("endpoint url %q must include scheme and host", rawURL)
 	}
 	if weight <= 0 {
 		weight = 1

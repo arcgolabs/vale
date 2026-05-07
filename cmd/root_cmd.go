@@ -13,6 +13,7 @@ import (
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/logx"
 	"github.com/arcgolabs/vela"
+	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 )
 
@@ -80,7 +81,9 @@ func runVelad(cmd *cobra.Command, _ []string) error {
 	}
 	logger.Info("velad stopped")
 	if err := logx.Close(logger); err != nil {
-		return err
+		return oops.
+			In("cmd").
+			Wrapf(err, "close logger")
 	}
 	return nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/arcgolabs/vela"
 	prometheusmetrics "github.com/arcgolabs/vela/observability/prometheus"
 	"github.com/samber/lo"
+	"github.com/samber/oops"
 	"github.com/spf13/pflag"
 
 	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
@@ -71,7 +72,10 @@ func veladStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
 					logx.WithGlobalLogger(),
 				)
 				if err != nil {
-					return nil, err
+					return nil, oops.
+						In("cmd").
+						With("log_level", cfg.LogLevel).
+						Wrapf(err, "create logger")
 				}
 				logx.SetDefault(logger)
 				logger.Info("logger configured", "level", cfg.LogLevel)
@@ -80,7 +84,13 @@ func veladStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
 			dix.Provider0(func() eventx.BusRuntime { return eventx.New() }),
 			dix.ProviderErr3(func(cfg veladConfig, logger *slog.Logger, bus eventx.BusRuntime) (*vela.Gateway, error) {
 				opts := append(cfg.gatewayOptions(logger), vela.WithEventBus(bus))
-				return vela.New(opts...)
+				gateway, err := vela.New(opts...)
+				if err != nil {
+					return nil, oops.
+						In("cmd").
+						Wrapf(err, "create gateway")
+				}
+				return gateway, nil
 			}),
 		),
 	))
@@ -130,5 +140,10 @@ func parseCSV(input string) []string {
 }
 
 func execute() error {
-	return rootCmd.Execute()
+	if err := rootCmd.Execute(); err != nil {
+		return oops.
+			In("cmd").
+			Wrapf(err, "execute root command")
+	}
+	return nil
 }

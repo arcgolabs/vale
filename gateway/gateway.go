@@ -22,6 +22,7 @@ import (
 	staticconfigprovider "github.com/arcgolabs/vela/provider/staticconfig"
 	"github.com/arcgolabs/vela/runtime"
 	"github.com/samber/mo"
+	"github.com/samber/oops"
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -75,7 +76,9 @@ func New(options ...Option) (*Gateway, error) {
 			continue
 		}
 		if err := option(&cfg); err != nil {
-			return nil, err
+			return nil, oops.
+				In("gateway").
+				Wrapf(err, "apply gateway option")
 		}
 	}
 	return NewFromConfig(cfg)
@@ -109,7 +112,9 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 	}
 
 	if cfg.Provider != nil && !cfg.ConfigSource.IsEmpty() {
-		return nil, errors.New("cannot set both snapshot provider and config source providers")
+		return nil, oops.
+			In("gateway").
+			New("cannot set both snapshot provider and config source providers")
 	}
 	if cfg.Provider != nil {
 		provider.ApplyLogger(cfg.Provider, cfg.Logger)
@@ -157,14 +162,18 @@ func (g *Gateway) Start(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.started {
-		return errors.New("gateway already started")
+		return oops.
+			In("gateway").
+			New("gateway already started")
 	}
 	g.logger.Info("gateway starting", "watch", g.config.Watch)
 
 	if g.config.Cluster != nil {
 		cluster, err := g.config.Cluster(g.logger)
 		if err != nil {
-			return err
+			return oops.
+				In("gateway").
+				Wrapf(err, "initialize cluster")
 		}
 		g.cluster = cluster
 		if g.cluster != nil {
@@ -175,11 +184,15 @@ func (g *Gateway) Start(ctx context.Context) error {
 	snapshot, err := g.provider.Load(ctx)
 	if err != nil {
 		if g.cluster != nil {
-			_ = g.cluster.Shutdown()
+			if shutdownErr := g.cluster.Shutdown(); shutdownErr != nil {
+				g.logger.Error("cluster shutdown after initial load failure failed", "error", shutdownErr)
+			}
 			g.cluster = nil
 		}
 		g.logger.Error("initial snapshot load failed", "error", err)
-		return err
+		return oops.
+			In("gateway").
+			Wrapf(err, "load initial snapshot")
 	}
 	g.logger.Info("initial snapshot loaded",
 		"built_at", snapshot.BuiltAt,
@@ -200,18 +213,24 @@ func (g *Gateway) Start(ctx context.Context) error {
 	snapshot.Entrypoints.Range(func(entrypoint string, address string) bool {
 		entrypointConfig, _ := snapshot.EntrypointConfigs.Get(entrypoint)
 		server := g.buildHTTPServer(address, g.runtime.Handler(entrypoint), snapshot.Security)
-		if tlsConfig, tlsErr := g.buildTLSConfig(entrypointConfig.TLS); tlsErr != nil {
+		if tlsConfig, tlsEnabled, tlsErr := g.buildTLSConfig(entrypointConfig.TLS); tlsErr != nil {
 			g.cleanupStartFailure(listeners)
-			startErr = fmt.Errorf("build tls config for entrypoint %q: %w", entrypoint, tlsErr)
+			startErr = oops.
+				In("gateway").
+				With("entrypoint", entrypoint, "address", address).
+				Wrapf(tlsErr, "build entrypoint tls config")
 			return false
-		} else {
+		} else if tlsEnabled {
 			server.TLSConfig = tlsConfig
 		}
 		listener, listenErr := net.Listen("tcp", address)
 		if listenErr != nil {
 			g.cleanupStartFailure(listeners)
 			g.logger.Error("entrypoint listen failed", "entrypoint", entrypoint, "addr", address, "error", listenErr)
-			startErr = fmt.Errorf("listen entrypoint %q on %s: %w", entrypoint, address, listenErr)
+			startErr = oops.
+				In("gateway").
+				With("entrypoint", entrypoint, "address", address).
+				Wrapf(listenErr, "listen entrypoint")
 			return false
 		}
 		if server.TLSConfig != nil {
@@ -231,7 +250,10 @@ func (g *Gateway) Start(ctx context.Context) error {
 	if listenErr != nil {
 		g.cleanupStartFailure(listeners)
 		g.logger.Error("admin listen failed", "addr", snapshot.AdminAddress, "error", listenErr)
-		return fmt.Errorf("listen admin on %s: %w", snapshot.AdminAddress, listenErr)
+		return oops.
+			In("gateway").
+			With("address", snapshot.AdminAddress).
+			Wrapf(listenErr, "listen admin")
 	}
 	servers.Add(adminServer)
 	listeners.Add(adminListener)
@@ -245,7 +267,9 @@ func (g *Gateway) Start(ctx context.Context) error {
 		if watchErr != nil {
 			g.cleanupStartFailure(listeners)
 			g.logger.Error("watch setup failed", "error", watchErr)
-			return watchErr
+			return oops.
+				In("gateway").
+				Wrapf(watchErr, "setup snapshot watcher")
 		}
 		g.watcher = watcher
 		g.logger.Info("watcher started")
@@ -283,7 +307,9 @@ func (g *Gateway) Stop(ctx context.Context) error {
 	g.logger.Info("gateway stopping")
 
 	if g.watcher != nil {
-		_ = g.watcher.Close()
+		if err := g.watcher.Close(); err != nil {
+			g.logger.Error("watcher close failed", "error", err)
+		}
 		g.watcher = nil
 		g.logger.Info("watcher stopped")
 	}
@@ -293,7 +319,9 @@ func (g *Gateway) Stop(ctx context.Context) error {
 		g.logger.Info("health checker stopped")
 	}
 	g.servers.Range(func(_ int, server *http.Server) bool {
-		_ = server.Shutdown(ctx)
+		if err := server.Shutdown(ctx); err != nil {
+			g.logger.Error("server shutdown failed", "addr", server.Addr, "error", err)
+		}
 		g.logger.Info("server stopped", "addr", server.Addr)
 		return true
 	})
@@ -302,12 +330,16 @@ func (g *Gateway) Stop(ctx context.Context) error {
 	g.runtime = nil
 	g.started = false
 	if g.cluster != nil {
-		_ = g.cluster.Shutdown()
+		if err := g.cluster.Shutdown(); err != nil {
+			g.logger.Error("cluster shutdown failed", "error", err)
+		}
 		g.cluster = nil
 		g.logger.Info("cluster stopped")
 	}
 	if g.ownsBus && g.events != nil {
-		_ = g.events.Close()
+		if err := g.events.Close(); err != nil {
+			g.logger.Error("event bus close failed", "error", err)
+		}
 		g.logger.Info("event bus closed")
 	}
 	g.logger.Info("gateway stopped")
@@ -367,30 +399,33 @@ func (g *Gateway) buildHTTPServer(address string, handler http.Handler, security
 	}
 }
 
-func (g *Gateway) buildTLSConfig(config runtime.TLSRuntime) (*tls.Config, error) {
-	if !config.Enabled {
-		return nil, nil
+func (g *Gateway) buildTLSConfig(tlsRuntime runtime.TLSRuntime) (*tls.Config, bool, error) {
+	if !tlsRuntime.Enabled {
+		return nil, false, nil
 	}
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 	}
-	if config.CertFile != "" || config.KeyFile != "" {
-		certificate, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
+	if tlsRuntime.CertFile != "" || tlsRuntime.KeyFile != "" {
+		certificate, err := tls.LoadX509KeyPair(tlsRuntime.CertFile, tlsRuntime.KeyFile)
 		if err != nil {
-			return nil, err
+			return nil, false, oops.
+				In("gateway").
+				With("cert_file", tlsRuntime.CertFile, "key_file", tlsRuntime.KeyFile).
+				Wrapf(err, "load static tls certificate")
 		}
 		tlsConfig.Certificates = []tls.Certificate{certificate}
 	}
-	if config.ACME.Enabled {
+	if tlsRuntime.ACME.Enabled {
 		manager := &autocert.Manager{
 			Prompt: autocert.AcceptTOS,
-			Email:  config.ACME.Email,
+			Email:  tlsRuntime.ACME.Email,
 		}
-		if !config.ACME.Domains.IsEmpty() {
-			manager.HostPolicy = autocert.HostWhitelist(config.ACME.Domains.Values()...)
+		if !tlsRuntime.ACME.Domains.IsEmpty() {
+			manager.HostPolicy = autocert.HostWhitelist(tlsRuntime.ACME.Domains.Values()...)
 		}
-		if config.ACME.CacheDir != "" {
-			manager.Cache = autocert.DirCache(config.ACME.CacheDir)
+		if tlsRuntime.ACME.CacheDir != "" {
+			manager.Cache = autocert.DirCache(tlsRuntime.ACME.CacheDir)
 		}
 		acmeConfig := manager.TLSConfig()
 		if len(tlsConfig.Certificates) == 0 {
@@ -398,18 +433,22 @@ func (g *Gateway) buildTLSConfig(config runtime.TLSRuntime) (*tls.Config, error)
 		}
 		tlsConfig.NextProtos = acmeConfig.NextProtos
 	}
-	return tlsConfig, nil
+	return tlsConfig, true, nil
 }
 
 func (g *Gateway) cleanupStartFailure(listeners *collectionlist.List[net.Listener]) {
 	listeners.Range(func(_ int, listener net.Listener) bool {
 		if listener != nil {
-			_ = listener.Close()
+			if err := listener.Close(); err != nil && g.logger != nil {
+				g.logger.Error("listener close after start failure failed", "error", err)
+			}
 		}
 		return true
 	})
 	if g.watcher != nil {
-		_ = g.watcher.Close()
+		if err := g.watcher.Close(); err != nil && g.logger != nil {
+			g.logger.Error("watcher close after start failure failed", "error", err)
+		}
 		g.watcher = nil
 	}
 	if g.health != nil {
@@ -417,7 +456,9 @@ func (g *Gateway) cleanupStartFailure(listeners *collectionlist.List[net.Listene
 		g.health = nil
 	}
 	if g.cluster != nil {
-		_ = g.cluster.Shutdown()
+		if err := g.cluster.Shutdown(); err != nil && g.logger != nil {
+			g.logger.Error("cluster shutdown after start failure failed", "error", err)
+		}
 		g.cluster = nil
 	}
 	g.runtime = nil
@@ -436,9 +477,11 @@ func (g *Gateway) applyReloadSnapshot(snapshot *runtime.CompiledSnapshot) {
 			"fields", changed,
 		)
 		if g.events != nil {
-			_ = g.events.Publish(context.Background(), StaticRuntimeConfigChangedEvent{
+			if err := g.events.Publish(context.Background(), StaticRuntimeConfigChangedEvent{
 				Fields: changed,
-			})
+			}); err != nil {
+				g.logger.Error("publish static runtime change event failed", "error", err)
+			}
 		}
 		if err := g.restartServersLocked(snapshot); err != nil {
 			g.logger.Error("static runtime reload failed", "fields", changed, "error", err)
@@ -466,7 +509,9 @@ func (g *Gateway) restartServersLocked(snapshot *runtime.CompiledSnapshot) error
 		g.health = nil
 	}
 	g.servers.Range(func(_ int, server *http.Server) bool {
-		_ = server.Shutdown(ctx)
+		if err := server.Shutdown(ctx); err != nil {
+			g.logger.Error("server shutdown before restart failed", "addr", server.Addr, "error", err)
+		}
 		return true
 	})
 	g.servers = nil
@@ -476,7 +521,9 @@ func (g *Gateway) restartServersLocked(snapshot *runtime.CompiledSnapshot) error
 	if err != nil {
 		g.runtime.ObserveReload("failed")
 		g.runtime = nil
-		return err
+		return oops.
+			In("gateway").
+			Wrapf(err, "build replacement servers")
 	}
 	g.servers = servers
 
@@ -508,17 +555,23 @@ func (g *Gateway) buildServers(snapshot *runtime.CompiledSnapshot) (*collectionl
 	snapshot.Entrypoints.Range(func(entrypoint string, address string) bool {
 		entrypointConfig, _ := snapshot.EntrypointConfigs.Get(entrypoint)
 		server := g.buildHTTPServer(address, g.runtime.Handler(entrypoint), snapshot.Security)
-		if tlsConfig, tlsErr := g.buildTLSConfig(entrypointConfig.TLS); tlsErr != nil {
+		if tlsConfig, tlsEnabled, tlsErr := g.buildTLSConfig(entrypointConfig.TLS); tlsErr != nil {
 			closeListeners(listeners)
-			buildErr = fmt.Errorf("build tls config for entrypoint %q: %w", entrypoint, tlsErr)
+			buildErr = oops.
+				In("gateway").
+				With("entrypoint", entrypoint, "address", address).
+				Wrapf(tlsErr, "build entrypoint tls config")
 			return false
-		} else {
+		} else if tlsEnabled {
 			server.TLSConfig = tlsConfig
 		}
 		listener, listenErr := net.Listen("tcp", address)
 		if listenErr != nil {
 			closeListeners(listeners)
-			buildErr = fmt.Errorf("listen entrypoint %q on %s: %w", entrypoint, address, listenErr)
+			buildErr = oops.
+				In("gateway").
+				With("entrypoint", entrypoint, "address", address).
+				Wrapf(listenErr, "listen entrypoint")
 			return false
 		}
 		if server.TLSConfig != nil {
@@ -537,7 +590,10 @@ func (g *Gateway) buildServers(snapshot *runtime.CompiledSnapshot) (*collectionl
 	adminListener, listenErr := net.Listen("tcp", snapshot.AdminAddress)
 	if listenErr != nil {
 		closeListeners(listeners)
-		return nil, nil, nil, fmt.Errorf("listen admin on %s: %w", snapshot.AdminAddress, listenErr)
+		return nil, nil, nil, oops.
+			In("gateway").
+			With("address", snapshot.AdminAddress).
+			Wrapf(listenErr, "listen admin")
 	}
 	servers.Add(adminServer)
 	listeners.Add(adminListener)
@@ -547,7 +603,9 @@ func (g *Gateway) buildServers(snapshot *runtime.CompiledSnapshot) (*collectionl
 func closeListeners(listeners *collectionlist.List[net.Listener]) {
 	listeners.Range(func(_ int, listener net.Listener) bool {
 		if listener != nil {
-			_ = listener.Close()
+			if err := listener.Close(); err != nil {
+				slog.Default().Error("listener close failed", "error", err)
+			}
 		}
 		return true
 	})
@@ -672,7 +730,9 @@ func writeJSON(w http.ResponseWriter, statusCode int, payload any) {
 	w.WriteHeader(statusCode)
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
-	_ = encoder.Encode(payload)
+	if err := encoder.Encode(payload); err != nil {
+		slog.Default().Error("json response encode failed", "error", err)
+	}
 }
 
 func parseDurationDefault(value string, fallback time.Duration) time.Duration {

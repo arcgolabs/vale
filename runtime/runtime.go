@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -15,6 +14,7 @@ import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/observabilityx"
+	"github.com/samber/oops"
 )
 
 type CompiledSnapshot struct {
@@ -106,7 +106,7 @@ func (s *ServiceRuntime) BuildSlots() {
 		if weight <= 0 {
 			weight = 1
 		}
-		for i := 0; i < weight; i++ {
+		for range weight {
 			s.weightedSlots.Add(idx)
 		}
 		return true
@@ -124,28 +124,36 @@ type EndpointRuntime struct {
 func (s *ServiceRuntime) Pick() (*EndpointRuntime, error) {
 	endpointCount := s.Endpoints.Len()
 	if endpointCount == 0 {
-		return nil, errors.New("service has no endpoints")
+		return nil, oops.
+			In("runtime").
+			With("service", s.Name).
+			New("service has no endpoints")
 	}
 	if s.Strategy == "weighted_round_robin" && !s.weightedSlots.IsEmpty() {
-		start := s.rrCounter.Add(1)
 		slotCount := s.weightedSlots.Len()
+		//nolint:gosec // The modulo result is strictly smaller than slotCount before converting to int.
+		start := int(s.rrCounter.Add(1) % uint64(slotCount))
 		for offset := range slotCount {
-			slot, _ := s.weightedSlots.Get((int(start) + offset) % slotCount)
+			slot, _ := s.weightedSlots.Get((start + offset) % slotCount)
 			ep, _ := s.Endpoints.Get(slot)
 			if ep.Healthy.Load() {
 				return ep, nil
 			}
 		}
 	} else {
-		start := s.rrCounter.Add(1)
+		//nolint:gosec // The modulo result is strictly smaller than endpointCount before converting to int.
+		start := int(s.rrCounter.Add(1) % uint64(endpointCount))
 		for offset := range endpointCount {
-			ep, _ := s.Endpoints.Get((int(start) + offset) % endpointCount)
+			ep, _ := s.Endpoints.Get((start + offset) % endpointCount)
 			if ep.Healthy.Load() {
 				return ep, nil
 			}
 		}
 	}
-	return nil, errors.New("no healthy endpoint")
+	return nil, oops.
+		In("runtime").
+		With("service", s.Name, "endpoints", endpointCount, "strategy", s.Strategy).
+		New("no healthy endpoint")
 }
 
 type Gateway struct {

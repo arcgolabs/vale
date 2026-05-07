@@ -6,6 +6,7 @@ import (
 	"github.com/arcgolabs/vela/config"
 	"github.com/arcgolabs/vela/provider"
 	"github.com/arcgolabs/vela/runtime"
+	"github.com/samber/oops"
 )
 
 type (
@@ -42,7 +43,14 @@ func NewService(name string, strategy string, endpoints ...*RuntimeEndpoint) *Ru
 }
 
 func NewEndpoint(rawURL string, weight int, proxy http.Handler) (*RuntimeEndpoint, error) {
-	return runtime.NewEndpoint(rawURL, weight, proxy)
+	endpoint, err := runtime.NewEndpoint(rawURL, weight, proxy)
+	if err != nil {
+		return nil, oops.
+			In("vela").
+			With("url", rawURL, "weight", weight).
+			Wrapf(err, "create runtime endpoint")
+	}
+	return endpoint, nil
 }
 
 func NewRoute(name string, entrypoint string, service *RuntimeService) *RuntimeRoute {

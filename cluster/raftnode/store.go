@@ -2,12 +2,12 @@ package raftnode
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/arcgolabs/storx/bboltx"
 	"github.com/arcgolabs/storx/codec"
 	"github.com/arcgolabs/storx/keycodec"
+	"github.com/samber/oops"
 )
 
 const (
@@ -25,7 +25,10 @@ type stateStore struct {
 func openStateStore(path string, logger *slog.Logger) (*stateStore, error) {
 	db, err := bboltx.Open(path, 0o600, nil, bboltx.WithDBLogger(logger))
 	if err != nil {
-		return nil, fmt.Errorf("open raft state store: %w", err)
+		return nil, oops.
+			In("raftnode").
+			With("path", path).
+			Wrapf(err, "open raft state store")
 	}
 	return newStateStore(db), nil
 }
@@ -53,7 +56,13 @@ func (s *stateStore) LoadState(ctx context.Context) (State, bool, error) {
 		return State{}, false, nil
 	}
 	state, ok, err := s.state.Get(ctx, currentStateKey)
-	return cloneState(state), ok, err
+	if err != nil {
+		return State{}, false, oops.
+			In("raftnode").
+			With("bucket", stateBucketName, "key", currentStateKey).
+			Wrapf(err, "load raft state")
+	}
+	return cloneState(state), ok, nil
 }
 
 func (s *stateStore) SaveState(ctx context.Context, state State) error {
@@ -62,7 +71,10 @@ func (s *stateStore) SaveState(ctx context.Context, state State) error {
 	}
 	state = cloneState(state)
 	if err := s.state.Put(ctx, currentStateKey, state); err != nil {
-		return err
+		return oops.
+			In("raftnode").
+			With("bucket", stateBucketName, "key", currentStateKey, "version", state.Version).
+			Wrapf(err, "save raft state")
 	}
 	return s.replaceRoutes(ctx, state.Routes)
 }
@@ -79,7 +91,10 @@ func (s *stateStore) LoadRoutes(ctx context.Context) ([]RouteRecord, error) {
 		})
 	})
 	if err != nil {
-		return nil, err
+		return nil, oops.
+			In("raftnode").
+			With("bucket", routeBucketName).
+			Wrapf(err, "load raft routes")
 	}
 	return routes, nil
 }
@@ -88,32 +103,52 @@ func (s *stateStore) Close() error {
 	if s == nil || s.db == nil {
 		return nil
 	}
-	return s.db.Close()
+	if err := s.db.Close(); err != nil {
+		return oops.
+			In("raftnode").
+			Wrapf(err, "close raft state store")
+	}
+	return nil
 }
 
 func (s *stateStore) replaceRoutes(ctx context.Context, routes []RouteRecord) error {
 	if s == nil || s.routes == nil {
 		return nil
 	}
-	return s.routes.Update(ctx, func(tx bboltx.UpdateTx[string, RouteRecord]) error {
+	if err := s.routes.Update(ctx, func(tx bboltx.UpdateTx[string, RouteRecord]) error {
 		existingKeys := make([]string, 0)
 		if err := tx.ForEach(func(key string, _ RouteRecord) error {
 			existingKeys = append(existingKeys, key)
 			return nil
 		}); err != nil {
-			return err
+			return oops.
+				In("raftnode").
+				With("bucket", routeBucketName).
+				Wrapf(err, "scan existing raft route keys")
 		}
 		if err := tx.DeleteMany(existingKeys...); err != nil {
-			return err
+			return oops.
+				In("raftnode").
+				With("bucket", routeBucketName, "keys", len(existingKeys)).
+				Wrapf(err, "delete existing raft routes")
 		}
 		for _, route := range routes {
 			if route.Name == "" {
 				continue
 			}
 			if err := tx.Put(route.Name, route); err != nil {
-				return err
+				return oops.
+					In("raftnode").
+					With("bucket", routeBucketName, "route", route.Name).
+					Wrapf(err, "save raft route")
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return oops.
+			In("raftnode").
+			With("bucket", routeBucketName, "routes", len(routes)).
+			Wrapf(err, "replace raft routes")
+	}
+	return nil
 }

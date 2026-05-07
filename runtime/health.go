@@ -7,6 +7,7 @@ import (
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/samber/oops"
 )
 
 type HealthChecker struct {
@@ -69,19 +70,30 @@ func (h *HealthChecker) check(gateway *Gateway) {
 			ctx, cancel := context.WithTimeout(context.Background(), h.client.Timeout)
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.URL.String(), nil)
 			if err != nil {
-				h.setEndpointHealth(endpoint, false, "request_build_failed", err)
+				h.setEndpointHealth(endpoint, false, "request_build_failed", oops.
+					In("runtime").
+					With("url", endpoint.URL.String()).
+					Wrapf(err, "build health check request"))
 				gateway.ObserveHealth(endpoint, false)
 				cancel()
 				return true
 			}
 			resp, err := h.client.Do(req)
 			if err != nil {
-				h.setEndpointHealth(endpoint, false, "request_failed", err)
+				h.setEndpointHealth(endpoint, false, "request_failed", oops.
+					In("runtime").
+					With("url", endpoint.URL.String()).
+					Wrapf(err, "execute health check request"))
 				gateway.ObserveHealth(endpoint, false)
 				cancel()
 				return true
 			}
-			_ = resp.Body.Close()
+			if err := resp.Body.Close(); err != nil && h.logger != nil {
+				h.logger.Error("health response body close failed", "url", endpoint.URL.String(), "error", oops.
+					In("runtime").
+					With("url", endpoint.URL.String()).
+					Wrapf(err, "close health check response body"))
+			}
 			healthy := resp.StatusCode < http.StatusInternalServerError
 			h.setEndpointHealth(endpoint, healthy, "status_checked", nil)
 			gateway.ObserveHealth(endpoint, healthy)

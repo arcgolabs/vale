@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"fmt"
 	"log/slog"
 
 	"github.com/arcgolabs/vela/config"
@@ -12,6 +11,7 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/observabilityx"
+	"github.com/samber/oops"
 )
 
 // Option configures [Config] when passed to [New]. Return a non-nil error from a custom
@@ -28,7 +28,9 @@ func WithWatch(enabled bool) Option {
 func WithClusterFactory(factory ClusterFactory) Option {
 	return func(cfg *Config) error {
 		if factory == nil {
-			return fmt.Errorf("cluster factory cannot be nil")
+			return oops.
+				In("gateway").
+				New("cluster factory cannot be nil")
 		}
 		cfg.Cluster = factory
 		return nil
@@ -38,7 +40,9 @@ func WithClusterFactory(factory ClusterFactory) Option {
 func WithMetricsFactory(factory MetricsFactory) Option {
 	return func(cfg *Config) error {
 		if factory == nil {
-			return fmt.Errorf("metrics factory cannot be nil")
+			return oops.
+				In("gateway").
+				New("metrics factory cannot be nil")
 		}
 		cfg.Metrics = factory
 		return nil
@@ -48,7 +52,9 @@ func WithMetricsFactory(factory MetricsFactory) Option {
 func WithMiddlewareRegistry(registry *runtime.MiddlewareRegistry) Option {
 	return func(cfg *Config) error {
 		if registry == nil {
-			return fmt.Errorf("middleware registry cannot be nil")
+			return oops.
+				In("gateway").
+				New("middleware registry cannot be nil")
 		}
 		cfg.Middleware = registry
 		return nil
@@ -58,7 +64,9 @@ func WithMiddlewareRegistry(registry *runtime.MiddlewareRegistry) Option {
 func WithObservability(obs observabilityx.Observability) Option {
 	return func(cfg *Config) error {
 		if obs == nil {
-			return fmt.Errorf("observability cannot be nil")
+			return oops.
+				In("gateway").
+				New("observability cannot be nil")
 		}
 		cfg.Observability = obs
 		return nil
@@ -75,7 +83,9 @@ func WithLogger(logger *slog.Logger) Option {
 func WithEventBus(bus provider.EventBus) Option {
 	return func(cfg *Config) error {
 		if bus == nil {
-			return fmt.Errorf("event bus cannot be nil")
+			return oops.
+				In("gateway").
+				New("event bus cannot be nil")
 		}
 		cfg.EventBus = bus
 		return nil
@@ -85,7 +95,9 @@ func WithEventBus(bus provider.EventBus) Option {
 func WithSnapshotProvider(snapshotProvider provider.SnapshotProvider) Option {
 	return func(cfg *Config) error {
 		if snapshotProvider == nil {
-			return fmt.Errorf("snapshot provider cannot be nil")
+			return oops.
+				In("gateway").
+				New("snapshot provider cannot be nil")
 		}
 		cfg.Provider = snapshotProvider
 		cfg.ConfigSource = collectionlist.NewList[provider.ConfigProvider]()
@@ -102,7 +114,10 @@ func WithConfigSourceProviders(configProviders ...provider.ConfigProvider) Optio
 			}
 		}
 		if nonNil.IsEmpty() {
-			return fmt.Errorf("config source providers cannot be empty")
+			return oops.
+				In("gateway").
+				With("providers", len(configProviders)).
+				New("config source providers cannot be empty")
 		}
 		cfg.ConfigSource = nonNil
 		cfg.Provider = nil
@@ -113,10 +128,14 @@ func WithConfigSourceProviders(configProviders ...provider.ConfigProvider) Optio
 func WithStaticConfig(cfgData *config.Config) Option {
 	return func(cfg *Config) error {
 		if cfgData == nil {
-			return fmt.Errorf("static config cannot be nil")
+			return oops.
+				In("gateway").
+				New("static config cannot be nil")
 		}
 		if err := config.Validate(cfgData); err != nil {
-			return err
+			return oops.
+				In("gateway").
+				Wrapf(err, "validate static config option")
 		}
 		cfg.ConfigSource = collectionlist.NewList[provider.ConfigProvider](staticconfigprovider.New(cfgData))
 		cfg.Provider = nil
@@ -134,7 +153,10 @@ func WithFallbackProviders(providers ...provider.SnapshotProvider) Option {
 			}
 		}
 		if nonNil.IsEmpty() {
-			return fmt.Errorf("fallback providers cannot be empty")
+			return oops.
+				In("gateway").
+				With("providers", len(providers)).
+				New("fallback providers cannot be empty")
 		}
 		cfg.Provider = provider.Fallback(nonNil.Values()...)
 		cfg.ConfigSource = collectionlist.NewList[provider.ConfigProvider]()
@@ -145,7 +167,9 @@ func WithFallbackProviders(providers ...provider.SnapshotProvider) Option {
 func WithStaticSnapshot(snapshot *runtime.CompiledSnapshot) Option {
 	return func(cfg *Config) error {
 		if snapshot == nil {
-			return fmt.Errorf("static snapshot cannot be nil")
+			return oops.
+				In("gateway").
+				New("static snapshot cannot be nil")
 		}
 		cfg.Provider = staticprovider.New(snapshot)
 		cfg.ConfigSource = collectionlist.NewList[provider.ConfigProvider]()

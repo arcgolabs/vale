@@ -1,12 +1,12 @@
 package runtime
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
+	"github.com/samber/oops"
 )
 
 const MiddlewareTypeBuiltin = "builtin"
@@ -23,16 +23,21 @@ func NewMiddlewareRegistry() *MiddlewareRegistry {
 
 func DefaultMiddlewareRegistry() *MiddlewareRegistry {
 	registry := NewMiddlewareRegistry()
-	_ = registry.Register(MiddlewareTypeBuiltin, wrapBuiltinMiddleware)
+	registry.factories.Set(MiddlewareTypeBuiltin, wrapBuiltinMiddleware)
 	return registry
 }
 
 func (r *MiddlewareRegistry) Register(middlewareType string, factory MiddlewareFactory) error {
 	if r == nil {
-		return fmt.Errorf("middleware registry cannot be nil")
+		return oops.
+			In("runtime").
+			New("middleware registry cannot be nil")
 	}
 	if factory == nil {
-		return fmt.Errorf("middleware factory cannot be nil")
+		return oops.
+			In("runtime").
+			With("middleware_type", middlewareType).
+			New("middleware factory cannot be nil")
 	}
 	if r.factories == nil {
 		r.factories = mapping.NewMap[string, MiddlewareFactory]()

@@ -7,6 +7,7 @@ import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/hashicorp/go-memdb"
+	"github.com/samber/oops"
 )
 
 const (
@@ -58,7 +59,9 @@ type MiddlewareRecord struct {
 func BuildCatalog(snapshot *CompiledSnapshot) (*Catalog, error) {
 	db, err := memdb.NewMemDB(catalogSchema())
 	if err != nil {
-		return nil, err
+		return nil, oops.
+			In("runtime").
+			Wrapf(err, "create runtime catalog database")
 	}
 	txn := db.Txn(true)
 	committed := false
@@ -70,10 +73,14 @@ func BuildCatalog(snapshot *CompiledSnapshot) (*Catalog, error) {
 
 	if snapshot != nil {
 		if err := insertCatalogServices(txn, snapshot); err != nil {
-			return nil, err
+			return nil, oops.
+				In("runtime").
+				Wrapf(err, "insert runtime catalog services")
 		}
 		if err := insertCatalogRoutes(txn, snapshot); err != nil {
-			return nil, err
+			return nil, oops.
+				In("runtime").
+				Wrapf(err, "insert runtime catalog routes")
 		}
 	}
 	txn.Commit()
@@ -108,7 +115,10 @@ func (s *CompiledSnapshot) QueryRoutes(filter RouteFilter) *collectionlist.List[
 func (c *Catalog) RouteViews(filter RouteFilter) (*collectionlist.List[RouteView], error) {
 	records, err := c.Routes(filter)
 	if err != nil {
-		return nil, err
+		return nil, oops.
+			In("runtime").
+			With("entrypoint", filter.Entrypoint, "service", filter.Service, "host", filter.Host, "path_prefix", filter.PathPrefix).
+			Wrapf(err, "query runtime route views")
 	}
 	views := collectionlist.NewListWithCapacity[RouteView](records.Len())
 	records.Range(func(_ int, route RouteRecord) bool {
@@ -136,12 +146,18 @@ func (c *Catalog) Routes(filter RouteFilter) (*collectionlist.List[RouteRecord],
 	defer txn.Abort()
 	it, err := txn.Get(catalogTableRoute, index, args...)
 	if err != nil {
-		return nil, err
+		return nil, oops.
+			In("runtime").
+			With("table", catalogTableRoute, "index", index).
+			Wrapf(err, "query runtime route catalog")
 	}
 	for item := it.Next(); item != nil; item = it.Next() {
 		route, ok := item.(RouteRecord)
 		if !ok {
-			return nil, fmt.Errorf("catalog route record has unexpected type %T", item)
+			return nil, oops.
+				In("runtime").
+				With("table", catalogTableRoute, "index", index, "type", fmt.Sprintf("%T", item)).
+				New("catalog route record has unexpected type")
 		}
 		if routeMatchesFilter(route, filter) {
 			routes.Add(route)
@@ -206,7 +222,10 @@ func insertCatalogServices(txn *memdb.Txn, snapshot *CompiledSnapshot) error {
 			Name:     service.Name,
 			Strategy: service.Strategy,
 		}); err != nil {
-			insertErr = err
+			insertErr = oops.
+				In("runtime").
+				With("table", catalogTableService, "service", service.Name).
+				Wrapf(err, "insert runtime catalog service")
 			return false
 		}
 		service.Endpoints.Range(func(index int, endpoint *EndpointRuntime) bool {
@@ -219,7 +238,10 @@ func insertCatalogServices(txn *memdb.Txn, snapshot *CompiledSnapshot) error {
 				URL:     endpoint.URL.String(),
 				Weight:  endpoint.Weight,
 			}); err != nil {
-				insertErr = err
+				insertErr = oops.
+					In("runtime").
+					With("table", catalogTableEndpoint, "service", service.Name, "endpoint", endpoint.URL.String()).
+					Wrapf(err, "insert runtime catalog endpoint")
 				return false
 			}
 			return true
@@ -252,7 +274,10 @@ func insertCatalogRoutes(txn *memdb.Txn, snapshot *CompiledSnapshot) error {
 				Method:     route.Method,
 				Service:    serviceName,
 			}); err != nil {
-				insertErr = err
+				insertErr = oops.
+					In("runtime").
+					With("table", catalogTableRoute, "route", route.Name, "entrypoint", entrypoint).
+					Wrapf(err, "insert runtime catalog route")
 				return false
 			}
 			if route.Middlewares != nil {
@@ -273,7 +298,10 @@ func insertCatalogRoutes(txn *memdb.Txn, snapshot *CompiledSnapshot) error {
 	var middlewareErr error
 	middlewares.Range(func(_ string, middleware MiddlewareRecord) bool {
 		if err := txn.Insert(catalogTableMiddleware, middleware); err != nil {
-			middlewareErr = err
+			middlewareErr = oops.
+				In("runtime").
+				With("table", catalogTableMiddleware, "middleware", middleware.Name, "type", middleware.Type).
+				Wrapf(err, "insert runtime catalog middleware")
 			return false
 		}
 		return true
