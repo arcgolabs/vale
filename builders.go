@@ -38,7 +38,7 @@ func NewSnapshot() *RuntimeSnapshot {
 	return runtime.NewSnapshot()
 }
 
-func NewService(name string, strategy string, endpoints ...*RuntimeEndpoint) *RuntimeService {
+func NewService(name, strategy string, endpoints ...*RuntimeEndpoint) *RuntimeService {
 	return runtime.NewService(name, strategy, endpoints...)
 }
 
@@ -53,7 +53,7 @@ func NewEndpoint(rawURL string, weight int, proxy http.Handler) (*RuntimeEndpoin
 	return endpoint, nil
 }
 
-func NewRoute(name string, entrypoint string, service *RuntimeService) *RuntimeRoute {
+func NewRoute(name, entrypoint string, service *RuntimeService) *RuntimeRoute {
 	return runtime.NewRoute(name, entrypoint, service)
 }
 
@@ -77,11 +77,11 @@ func NewConfigEndpoint(rawURL string, weight int) ConfigEndpoint {
 	return provider.ConfigEndpoint(rawURL, weight)
 }
 
-func EntrypointTLS(certFile string, keyFile string) EntrypointOption {
+func EntrypointTLS(certFile, keyFile string) EntrypointOption {
 	return provider.EntrypointTLS(certFile, keyFile)
 }
 
-func EntrypointACME(email string, cacheDir string, domains ...string) EntrypointOption {
+func EntrypointACME(email, cacheDir string, domains ...string) EntrypointOption {
 	return provider.EntrypointACME(email, cacheDir, domains...)
 }
 
@@ -97,7 +97,7 @@ func RouteMethod(method string) RouteOption {
 	return provider.RouteMethod(method)
 }
 
-func RouteHeader(key string, value string) RouteOption {
+func RouteHeader(key, value string) RouteOption {
 	return provider.RouteHeader(key, value)
 }
 
@@ -117,11 +117,11 @@ func MiddlewareAddPrefix(pathPrefix string) MiddlewareOption {
 	return provider.MiddlewareAddPrefix(pathPrefix)
 }
 
-func MiddlewareRequestHeader(key string, value string) MiddlewareOption {
+func MiddlewareRequestHeader(key, value string) MiddlewareOption {
 	return provider.MiddlewareRequestHeader(key, value)
 }
 
-func MiddlewareResponseHeader(key string, value string) MiddlewareOption {
+func MiddlewareResponseHeader(key, value string) MiddlewareOption {
 	return provider.MiddlewareResponseHeader(key, value)
 }
 

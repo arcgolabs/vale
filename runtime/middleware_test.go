@@ -31,7 +31,7 @@ func TestWrapMiddlewares(t *testing.T) {
 		},
 	))
 
-	req := httptest.NewRequest(http.MethodGet, "http://example.com/api/users", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/api/users", http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -67,5 +67,5 @@ func TestMiddlewareRegistryUsesCustomFactory(t *testing.T) {
 		MiddlewareRuntime{Name: "custom", Type: "mark"},
 	), registry)
 
-	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "http://example.com/", nil))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/", http.NoBody))
 }

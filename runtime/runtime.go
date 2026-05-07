@@ -130,30 +130,42 @@ func (s *ServiceRuntime) Pick() (*EndpointRuntime, error) {
 			New("service has no endpoints")
 	}
 	if s.Strategy == "weighted_round_robin" && !s.weightedSlots.IsEmpty() {
-		slotCount := s.weightedSlots.Len()
-		//nolint:gosec // The modulo result is strictly smaller than slotCount before converting to int.
-		start := int(s.rrCounter.Add(1) % uint64(slotCount))
-		for offset := range slotCount {
-			slot, _ := s.weightedSlots.Get((start + offset) % slotCount)
-			ep, _ := s.Endpoints.Get(slot)
-			if ep.Healthy.Load() {
-				return ep, nil
-			}
+		if endpoint := s.pickWeightedEndpoint(); endpoint != nil {
+			return endpoint, nil
 		}
-	} else {
-		//nolint:gosec // The modulo result is strictly smaller than endpointCount before converting to int.
-		start := int(s.rrCounter.Add(1) % uint64(endpointCount))
-		for offset := range endpointCount {
-			ep, _ := s.Endpoints.Get((start + offset) % endpointCount)
-			if ep.Healthy.Load() {
-				return ep, nil
-			}
-		}
+	} else if endpoint := s.pickRoundRobinEndpoint(endpointCount); endpoint != nil {
+		return endpoint, nil
 	}
 	return nil, oops.
 		In("runtime").
 		With("service", s.Name, "endpoints", endpointCount, "strategy", s.Strategy).
 		New("no healthy endpoint")
+}
+
+func (s *ServiceRuntime) pickWeightedEndpoint() *EndpointRuntime {
+	slotCount := s.weightedSlots.Len()
+	//nolint:gosec // The modulo result is strictly smaller than slotCount before converting to int.
+	start := int(s.rrCounter.Add(1) % uint64(slotCount))
+	for offset := range slotCount {
+		slot, _ := s.weightedSlots.Get((start + offset) % slotCount)
+		endpoint, _ := s.Endpoints.Get(slot)
+		if endpoint.Healthy.Load() {
+			return endpoint
+		}
+	}
+	return nil
+}
+
+func (s *ServiceRuntime) pickRoundRobinEndpoint(endpointCount int) *EndpointRuntime {
+	//nolint:gosec // The modulo result is strictly smaller than endpointCount before converting to int.
+	start := int(s.rrCounter.Add(1) % uint64(endpointCount))
+	for offset := range endpointCount {
+		endpoint, _ := s.Endpoints.Get((start + offset) % endpointCount)
+		if endpoint.Healthy.Load() {
+			return endpoint
+		}
+	}
+	return nil
 }
 
 type Gateway struct {

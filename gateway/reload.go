@@ -8,36 +8,26 @@ import (
 	"github.com/arcgolabs/vela/runtime"
 )
 
-func staticRuntimeChanges(current *runtime.CompiledSnapshot, next *runtime.CompiledSnapshot) *collectionlist.List[string] {
+func staticRuntimeChanges(current, next *runtime.CompiledSnapshot) *collectionlist.List[string] {
 	if current == nil || next == nil {
 		return nil
 	}
 
 	changes := collectionlist.NewListWithCapacity[string](8)
-	if !reflect.DeepEqual(current.Entrypoints.All(), next.Entrypoints.All()) {
-		changes.Add("entrypoints")
-	}
-	if !reflect.DeepEqual(current.EntrypointConfigs.All(), next.EntrypointConfigs.All()) {
-		changes.Add("entrypoint_configs")
-	}
-	if current.AdminAddress != next.AdminAddress {
-		changes.Add("admin_address")
-	}
-	if current.AccessLogEnabled != next.AccessLogEnabled {
-		changes.Add("access_log_enabled")
-	}
-	if current.MetricsEnabled != next.MetricsEnabled {
-		changes.Add("metrics_enabled")
-	}
-	if current.HealthInterval != next.HealthInterval {
-		changes.Add("health_interval")
-	}
-	if current.HealthTimeout != next.HealthTimeout {
-		changes.Add("health_timeout")
-	}
-	if current.Security != next.Security {
-		changes.Add("security")
-	}
+	addRuntimeChange(changes, !reflect.DeepEqual(current.Entrypoints.All(), next.Entrypoints.All()), "entrypoints")
+	addRuntimeChange(changes, !reflect.DeepEqual(current.EntrypointConfigs.All(), next.EntrypointConfigs.All()), "entrypoint_configs")
+	addRuntimeChange(changes, current.AdminAddress != next.AdminAddress, "admin_address")
+	addRuntimeChange(changes, current.AccessLogEnabled != next.AccessLogEnabled, "access_log_enabled")
+	addRuntimeChange(changes, current.MetricsEnabled != next.MetricsEnabled, "metrics_enabled")
+	addRuntimeChange(changes, current.HealthInterval != next.HealthInterval, "health_interval")
+	addRuntimeChange(changes, current.HealthTimeout != next.HealthTimeout, "health_timeout")
+	addRuntimeChange(changes, current.Security != next.Security, "security")
 	changes.Sort(strings.Compare)
 	return changes
+}
+
+func addRuntimeChange(changes *collectionlist.List[string], changed bool, name string) {
+	if changed {
+		changes.Add(name)
+	}
 }

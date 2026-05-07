@@ -36,7 +36,7 @@ func (s *CompiledSnapshot) BuildMatchers() *CompiledSnapshot {
 	return s
 }
 
-func (s *CompiledSnapshot) AddEntrypoint(name string, address string, entrypoint EntrypointRuntime) *CompiledSnapshot {
+func (s *CompiledSnapshot) AddEntrypoint(name, address string, entrypoint EntrypointRuntime) *CompiledSnapshot {
 	if s == nil {
 		return nil
 	}
@@ -83,7 +83,7 @@ func (s *CompiledSnapshot) AddRoute(route *CompiledRoute) *CompiledSnapshot {
 	return s
 }
 
-func NewService(name string, strategy string, endpoints ...*EndpointRuntime) *ServiceRuntime {
+func NewService(name, strategy string, endpoints ...*EndpointRuntime) *ServiceRuntime {
 	if strategy == "" {
 		strategy = "round_robin"
 	}
@@ -122,7 +122,7 @@ func NewEndpoint(rawURL string, weight int, proxy http.Handler) (*EndpointRuntim
 	return endpoint, nil
 }
 
-func NewRoute(name string, entrypoint string, service *ServiceRuntime) *CompiledRoute {
+func NewRoute(name, entrypoint string, service *ServiceRuntime) *CompiledRoute {
 	return &CompiledRoute{
 		Name:        strings.TrimSpace(name),
 		Entrypoint:  strings.TrimSpace(entrypoint),
@@ -175,7 +175,7 @@ func (r *CompiledRoute) WithMethod(method string) *CompiledRoute {
 	return r
 }
 
-func (r *CompiledRoute) WithHeader(key string, value string) *CompiledRoute {
+func (r *CompiledRoute) WithHeader(key, value string) *CompiledRoute {
 	if r == nil {
 		return nil
 	}

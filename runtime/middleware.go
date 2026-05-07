@@ -103,7 +103,7 @@ func normalizeMiddlewareType(middlewareType string) string {
 	return middlewareType
 }
 
-func joinPathPrefix(prefix string, path string) string {
+func joinPathPrefix(prefix, path string) string {
 	prefix = "/" + strings.Trim(prefix, "/")
 	path = "/" + strings.TrimLeft(path, "/")
 	if prefix == "/" {

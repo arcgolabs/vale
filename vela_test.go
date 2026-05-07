@@ -1,7 +1,6 @@
 package vela
 
 import (
-	"io"
 	"log/slog"
 	"net/http"
 	"testing"
@@ -12,7 +11,7 @@ import (
 func TestNewUsesDefaultConfigWhenNoSourceIsConfigured(t *testing.T) {
 	t.Parallel()
 
-	gateway, err := New(WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
+	gateway, err := New(WithLogger(slog.New(slog.DiscardHandler)))
 	if err != nil {
 		t.Fatal(err)
 	}

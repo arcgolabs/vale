@@ -34,7 +34,7 @@ func TestServiceRuntimePickSkipsUnhealthyEndpoints(t *testing.T) {
 	unhealthy.Healthy.Store(false)
 	healthy.Healthy.Store(true)
 
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		got, err := service.Pick()
 		if err != nil {
 			t.Fatal(err)
@@ -72,7 +72,7 @@ func TestServiceRuntimeWeightedRoundRobinUsesWeights(t *testing.T) {
 	service.BuildSlots()
 
 	counts := map[string]int{}
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		got, err := service.Pick()
 		if err != nil {
 			t.Fatal(err)

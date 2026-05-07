@@ -116,39 +116,55 @@ func (s *stateStore) replaceRoutes(ctx context.Context, routes []RouteRecord) er
 		return nil
 	}
 	if err := s.routes.Update(ctx, func(tx bboltx.UpdateTx[string, RouteRecord]) error {
-		existingKeys := make([]string, 0)
-		if err := tx.ForEach(func(key string, _ RouteRecord) error {
-			existingKeys = append(existingKeys, key)
-			return nil
-		}); err != nil {
-			return oops.
-				In("raftnode").
-				With("bucket", routeBucketName).
-				Wrapf(err, "scan existing raft route keys")
-		}
-		if err := tx.DeleteMany(existingKeys...); err != nil {
-			return oops.
-				In("raftnode").
-				With("bucket", routeBucketName, "keys", len(existingKeys)).
-				Wrapf(err, "delete existing raft routes")
-		}
-		for _, route := range routes {
-			if route.Name == "" {
-				continue
-			}
-			if err := tx.Put(route.Name, route); err != nil {
-				return oops.
-					In("raftnode").
-					With("bucket", routeBucketName, "route", route.Name).
-					Wrapf(err, "save raft route")
-			}
-		}
-		return nil
+		return replaceRouteRecords(tx, routes)
 	}); err != nil {
 		return oops.
 			In("raftnode").
 			With("bucket", routeBucketName, "routes", len(routes)).
 			Wrapf(err, "replace raft routes")
+	}
+	return nil
+}
+
+func replaceRouteRecords(tx bboltx.UpdateTx[string, RouteRecord], routes []RouteRecord) error {
+	existingKeys, err := routeRecordKeys(tx)
+	if err != nil {
+		return err
+	}
+	if err := tx.DeleteMany(existingKeys...); err != nil {
+		return oops.
+			In("raftnode").
+			With("bucket", routeBucketName, "keys", len(existingKeys)).
+			Wrapf(err, "delete existing raft routes")
+	}
+	return putRouteRecords(tx, routes)
+}
+
+func routeRecordKeys(tx bboltx.UpdateTx[string, RouteRecord]) ([]string, error) {
+	existingKeys := make([]string, 0)
+	if err := tx.ForEach(func(key string, _ RouteRecord) error {
+		existingKeys = append(existingKeys, key)
+		return nil
+	}); err != nil {
+		return nil, oops.
+			In("raftnode").
+			With("bucket", routeBucketName).
+			Wrapf(err, "scan existing raft route keys")
+	}
+	return existingKeys, nil
+}
+
+func putRouteRecords(tx bboltx.UpdateTx[string, RouteRecord], routes []RouteRecord) error {
+	for _, route := range routes {
+		if route.Name == "" {
+			continue
+		}
+		if err := tx.Put(route.Name, route); err != nil {
+			return oops.
+				In("raftnode").
+				With("bucket", routeBucketName, "route", route.Name).
+				Wrapf(err, "save raft route")
+		}
 	}
 	return nil
 }

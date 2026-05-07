@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -9,7 +8,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
-	"io"
 	"log/slog"
 	"math/big"
 	"net"
@@ -49,7 +47,7 @@ func TestStartReturnsEntrypointListenError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = g.Start(context.Background())
+	err = g.Start(t.Context())
 	if err == nil {
 		t.Fatal("Start returned nil error, want listen error")
 	}
@@ -80,7 +78,7 @@ func TestStartReturnsAdminListenError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = g.Start(context.Background())
+	err = g.Start(t.Context())
 	if err == nil {
 		t.Fatal("Start returned nil error, want listen error")
 	}
@@ -168,45 +166,28 @@ func TestAdminAPIWritesPlainJSONViews(t *testing.T) {
 	}
 	mux := gateway.buildAdminMux()
 
-	routeRecorder := httptest.NewRecorder()
-	mux.ServeHTTP(routeRecorder, httptest.NewRequest(http.MethodGet, "/admin/routes", nil))
-	var routes []runtime.RouteView
-	if err := json.Unmarshal(routeRecorder.Body.Bytes(), &routes); err != nil {
-		t.Fatalf("routes json decode failed: %v; body=%s", err, routeRecorder.Body.String())
-	}
-	if len(routes) != 1 {
-		t.Fatalf("routes len = %d, want 1", len(routes))
-	}
-
-	filterRecorder := httptest.NewRecorder()
-	mux.ServeHTTP(filterRecorder, httptest.NewRequest(http.MethodGet, "/admin/routes?service=missing", nil))
-	var filteredRoutes []runtime.RouteView
-	if err := json.Unmarshal(filterRecorder.Body.Bytes(), &filteredRoutes); err != nil {
-		t.Fatalf("filtered routes json decode failed: %v; body=%s", err, filterRecorder.Body.String())
-	}
-	if len(filteredRoutes) != 0 {
-		t.Fatalf("filtered routes len = %d, want 0", len(filteredRoutes))
-	}
-
-	serviceRecorder := httptest.NewRecorder()
-	mux.ServeHTTP(serviceRecorder, httptest.NewRequest(http.MethodGet, "/admin/services", nil))
-	var services []adminServiceView
-	if err := json.Unmarshal(serviceRecorder.Body.Bytes(), &services); err != nil {
-		t.Fatalf("services json decode failed: %v; body=%s", err, serviceRecorder.Body.String())
-	}
+	assertAdminJSONLen[runtime.RouteView](t, mux, "/admin/routes", 1)
+	assertAdminJSONLen[runtime.RouteView](t, mux, "/admin/routes?service=missing", 0)
+	services := assertAdminJSONLen[adminServiceView](t, mux, "/admin/services", 1)
 	if len(services) != 1 || len(services[0].Endpoints) != 1 {
 		t.Fatalf("services = %#v, want one service with one endpoint", services)
 	}
+	assertAdminJSONLen[runtime.EndpointView](t, mux, "/admin/endpoints", 1)
+}
 
-	endpointRecorder := httptest.NewRecorder()
-	mux.ServeHTTP(endpointRecorder, httptest.NewRequest(http.MethodGet, "/admin/endpoints", nil))
-	var endpoints []runtime.EndpointView
-	if err := json.Unmarshal(endpointRecorder.Body.Bytes(), &endpoints); err != nil {
-		t.Fatalf("endpoints json decode failed: %v; body=%s", err, endpointRecorder.Body.String())
+func assertAdminJSONLen[T any](t *testing.T, handler http.Handler, path string, want int) []T {
+	t.Helper()
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, http.NoBody))
+	var rows []T
+	if err := json.Unmarshal(recorder.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("%s json decode failed: %v; body=%s", path, err, recorder.Body.String())
 	}
-	if len(endpoints) != 1 {
-		t.Fatalf("endpoints len = %d, want 1", len(endpoints))
+	if len(rows) != want {
+		t.Fatalf("%s len = %d, want %d", path, len(rows), want)
 	}
+	return rows
 }
 
 func TestBuildTLSConfigLoadsStaticCertificate(t *testing.T) {
@@ -248,7 +229,8 @@ func TestBuildTLSConfigReportsMissingStaticCertificate(t *testing.T) {
 func listenOnLocalhost(t *testing.T) net.Listener {
 	t.Helper()
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +238,7 @@ func listenOnLocalhost(t *testing.T) net.Listener {
 }
 
 func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func writeTestCertificate(t *testing.T) (string, string) {

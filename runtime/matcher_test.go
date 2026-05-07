@@ -35,19 +35,19 @@ func TestMatchRoutePrioritizesHostAndPredicates(t *testing.T) {
 	}
 	matcher := BuildEntrypointMatcher(routes)
 
-	req := httptest.NewRequest(http.MethodPost, "http://api.example.com/api/v1/users", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://api.example.com/api/v1/users", http.NoBody)
 	got := MatchRoute(matcher, routes, req)
 	if got == nil || got.Name != "host-long-method" {
 		t.Fatalf("matched route = %v, want host-long-method", routeName(got))
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "http://shop.example.com/api/v1/users", nil)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://shop.example.com/api/v1/users", http.NoBody)
 	got = MatchRoute(matcher, routes, req)
 	if got == nil || got.Name != "wildcard" {
 		t.Fatalf("matched route = %v, want wildcard", routeName(got))
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "http://other.test/anything", nil)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://other.test/anything", http.NoBody)
 	got = MatchRoute(matcher, routes, req)
 	if got == nil || got.Name != "fallback" {
 		t.Fatalf("matched route = %v, want fallback", routeName(got))
@@ -64,7 +64,7 @@ func TestMatchRouteStripsPortFromHost(t *testing.T) {
 		},
 	}
 	matcher := BuildEntrypointMatcher(routes)
-	req := httptest.NewRequest(http.MethodGet, "http://api.example.com:8080/", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://api.example.com:8080/", http.NoBody)
 
 	got := MatchRoute(matcher, routes, req)
 	if got == nil || got.Name != "api" {
@@ -89,7 +89,7 @@ func TestMatchRouteFallsBackToShorterPrefixWhenLongerPredicateMisses(t *testing.
 		}),
 	}
 	matcher := BuildEntrypointMatcher(routes)
-	req := httptest.NewRequest(http.MethodGet, "http://api.example.com/api/v1/users", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://api.example.com/api/v1/users", http.NoBody)
 
 	got := MatchRoute(matcher, routes, req)
 	if got == nil || got.Name != "api-short" {

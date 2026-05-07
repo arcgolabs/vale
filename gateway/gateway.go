@@ -62,10 +62,11 @@ type Gateway struct {
 	mu      sync.Mutex
 	started bool
 
-	runtime *runtime.Gateway
-	health  *runtime.HealthChecker
-	watcher io.Closer
-	servers *collectionlist.List[*http.Server]
+	runtime     *runtime.Gateway
+	health      *runtime.HealthChecker
+	watcher     io.Closer
+	watchCancel context.CancelFunc
+	servers     *collectionlist.List[*http.Server]
 }
 
 // New applies options onto DefaultConfig then NewFromConfig.
@@ -168,29 +169,65 @@ func (g *Gateway) Start(ctx context.Context) error {
 	}
 	g.logger.Info("gateway starting", "watch", g.config.Watch)
 
-	if g.config.Cluster != nil {
-		cluster, err := g.config.Cluster(g.logger)
-		if err != nil {
-			return oops.
-				In("gateway").
-				Wrapf(err, "initialize cluster")
-		}
-		g.cluster = cluster
-		if g.cluster != nil {
-			g.logger.Info("cluster initialized", "status", g.cluster.Status())
+	if err := g.initializeCluster(); err != nil {
+		return err
+	}
+
+	snapshot, err := g.loadInitialSnapshot(ctx)
+	if err != nil {
+		return err
+	}
+	g.runtime = runtime.NewGatewayWithMiddlewareRegistry(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled), g.config.Middleware)
+	g.publishClusterUpdate(snapshot)
+
+	servers, listeners, entrypointNames, err := g.buildServers(ctx, snapshot)
+	if err != nil {
+		g.cleanupStartFailure(listeners)
+		return oops.
+			In("gateway").
+			Wrapf(err, "build initial servers")
+	}
+
+	if g.config.Watch {
+		if err := g.startWatcher(ctx); err != nil {
+			g.cleanupStartFailure(listeners)
+			return err
 		}
 	}
 
+	g.startHealthChecker(ctx, snapshot)
+
+	g.servers = servers
+	g.serveServers(servers, listeners, entrypointNames)
+
+	g.started = true
+	g.logger.Info("gateway started", "entrypoints", snapshot.Entrypoints.Len(), "admin_addr", snapshot.AdminAddress)
+	return nil
+}
+
+func (g *Gateway) initializeCluster() error {
+	if g.config.Cluster == nil {
+		return nil
+	}
+	cluster, err := g.config.Cluster(g.logger)
+	if err != nil {
+		return oops.
+			In("gateway").
+			Wrapf(err, "initialize cluster")
+	}
+	g.cluster = cluster
+	if g.cluster != nil {
+		g.logger.Info("cluster initialized", "status", g.cluster.Status())
+	}
+	return nil
+}
+
+func (g *Gateway) loadInitialSnapshot(ctx context.Context) (*runtime.CompiledSnapshot, error) {
 	snapshot, err := g.provider.Load(ctx)
 	if err != nil {
-		if g.cluster != nil {
-			if shutdownErr := g.cluster.Shutdown(); shutdownErr != nil {
-				g.logger.Error("cluster shutdown after initial load failure failed", "error", shutdownErr)
-			}
-			g.cluster = nil
-		}
+		g.shutdownClusterAfterInitialLoadFailure()
 		g.logger.Error("initial snapshot load failed", "error", err)
-		return oops.
+		return nil, oops.
 			In("gateway").
 			Wrapf(err, "load initial snapshot")
 	}
@@ -202,98 +239,17 @@ func (g *Gateway) Start(ctx context.Context) error {
 		"admin_addr", snapshot.AdminAddress,
 		"proxy_engine", snapshot.ProxyEngine,
 	)
+	return snapshot, nil
+}
 
-	g.runtime = runtime.NewGatewayWithMiddlewareRegistry(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled), g.config.Middleware)
-	g.publishClusterUpdate(snapshot)
-
-	servers := collectionlist.NewListWithCapacity[*http.Server](snapshot.Entrypoints.Len() + 1)
-	listeners := collectionlist.NewListWithCapacity[net.Listener](snapshot.Entrypoints.Len() + 1)
-	entrypointNames := collectionlist.NewListWithCapacity[string](snapshot.Entrypoints.Len())
-	var startErr error
-	snapshot.Entrypoints.Range(func(entrypoint string, address string) bool {
-		entrypointConfig, _ := snapshot.EntrypointConfigs.Get(entrypoint)
-		server := g.buildHTTPServer(address, g.runtime.Handler(entrypoint), snapshot.Security)
-		if tlsConfig, tlsEnabled, tlsErr := g.buildTLSConfig(entrypointConfig.TLS); tlsErr != nil {
-			g.cleanupStartFailure(listeners)
-			startErr = oops.
-				In("gateway").
-				With("entrypoint", entrypoint, "address", address).
-				Wrapf(tlsErr, "build entrypoint tls config")
-			return false
-		} else if tlsEnabled {
-			server.TLSConfig = tlsConfig
-		}
-		listener, listenErr := net.Listen("tcp", address)
-		if listenErr != nil {
-			g.cleanupStartFailure(listeners)
-			g.logger.Error("entrypoint listen failed", "entrypoint", entrypoint, "addr", address, "error", listenErr)
-			startErr = oops.
-				In("gateway").
-				With("entrypoint", entrypoint, "address", address).
-				Wrapf(listenErr, "listen entrypoint")
-			return false
-		}
-		if server.TLSConfig != nil {
-			listener = tls.NewListener(listener, server.TLSConfig)
-		}
-		servers.Add(server)
-		listeners.Add(listener)
-		entrypointNames.Add(entrypoint)
-		return true
-	})
-	if startErr != nil {
-		return startErr
+func (g *Gateway) shutdownClusterAfterInitialLoadFailure() {
+	if g.cluster == nil {
+		return
 	}
-
-	adminServer := g.buildHTTPServer(snapshot.AdminAddress, g.buildAdminMux(), snapshot.Security)
-	adminListener, listenErr := net.Listen("tcp", snapshot.AdminAddress)
-	if listenErr != nil {
-		g.cleanupStartFailure(listeners)
-		g.logger.Error("admin listen failed", "addr", snapshot.AdminAddress, "error", listenErr)
-		return oops.
-			In("gateway").
-			With("address", snapshot.AdminAddress).
-			Wrapf(listenErr, "listen admin")
+	if err := g.cluster.Shutdown(); err != nil {
+		g.logger.Error("cluster shutdown after initial load failure failed", "error", err)
 	}
-	servers.Add(adminServer)
-	listeners.Add(adminListener)
-
-	if g.config.Watch {
-		watcher, watchErr := g.provider.Watch(context.Background(), func(snapshot *runtime.CompiledSnapshot) {
-			g.applyReloadSnapshot(snapshot)
-		}, func(watchErr error) {
-			g.config.OnWatchError(watchErr)
-		})
-		if watchErr != nil {
-			g.cleanupStartFailure(listeners)
-			g.logger.Error("watch setup failed", "error", watchErr)
-			return oops.
-				In("gateway").
-				Wrapf(watchErr, "setup snapshot watcher")
-		}
-		g.watcher = watcher
-		g.logger.Info("watcher started")
-	}
-
-	interval := parseDurationDefault(snapshot.HealthInterval, 5*time.Second)
-	timeout := parseDurationDefault(snapshot.HealthTimeout, 2*time.Second)
-	g.health = runtime.NewHealthCheckerWithLogger(interval, timeout, g.logger)
-	g.health.Start(g.runtime)
-	g.logger.Info("health checker started", "interval", interval, "timeout", timeout)
-
-	g.servers = servers
-	entrypointNames.Range(func(i int, entrypoint string) bool {
-		server, _ := servers.Get(i)
-		listener, _ := listeners.Get(i)
-		go g.listenEntrypoint(entrypoint, server, listener)
-		return true
-	})
-	adminListener, _ = listeners.Get(listeners.Len() - 1)
-	go g.listenAdmin(adminServer, adminListener)
-
-	g.started = true
-	g.logger.Info("gateway started", "entrypoints", snapshot.Entrypoints.Len(), "admin_addr", snapshot.AdminAddress)
-	return nil
+	g.cluster = nil
 }
 
 // Stop shuts down watchers, health checks, all HTTP servers, cluster if enabled; closes
@@ -306,6 +262,24 @@ func (g *Gateway) Stop(ctx context.Context) error {
 	}
 	g.logger.Info("gateway stopping")
 
+	g.stopWatcher()
+	g.stopHealthChecker()
+	g.stopServers(ctx)
+
+	g.servers = nil
+	g.runtime = nil
+	g.started = false
+	g.stopCluster()
+	g.closeOwnedEventBus()
+	g.logger.Info("gateway stopped")
+	return nil
+}
+
+func (g *Gateway) stopWatcher() {
+	if g.watchCancel != nil {
+		g.watchCancel()
+		g.watchCancel = nil
+	}
 	if g.watcher != nil {
 		if err := g.watcher.Close(); err != nil {
 			g.logger.Error("watcher close failed", "error", err)
@@ -313,10 +287,19 @@ func (g *Gateway) Stop(ctx context.Context) error {
 		g.watcher = nil
 		g.logger.Info("watcher stopped")
 	}
+}
+
+func (g *Gateway) stopHealthChecker() {
 	if g.health != nil {
 		g.health.Stop()
 		g.health = nil
 		g.logger.Info("health checker stopped")
+	}
+}
+
+func (g *Gateway) stopServers(ctx context.Context) {
+	if g.servers == nil {
+		return
 	}
 	g.servers.Range(func(_ int, server *http.Server) bool {
 		if err := server.Shutdown(ctx); err != nil {
@@ -325,10 +308,9 @@ func (g *Gateway) Stop(ctx context.Context) error {
 		g.logger.Info("server stopped", "addr", server.Addr)
 		return true
 	})
+}
 
-	g.servers = nil
-	g.runtime = nil
-	g.started = false
+func (g *Gateway) stopCluster() {
 	if g.cluster != nil {
 		if err := g.cluster.Shutdown(); err != nil {
 			g.logger.Error("cluster shutdown failed", "error", err)
@@ -336,14 +318,55 @@ func (g *Gateway) Stop(ctx context.Context) error {
 		g.cluster = nil
 		g.logger.Info("cluster stopped")
 	}
+}
+
+func (g *Gateway) closeOwnedEventBus() {
 	if g.ownsBus && g.events != nil {
 		if err := g.events.Close(); err != nil {
 			g.logger.Error("event bus close failed", "error", err)
 		}
 		g.logger.Info("event bus closed")
 	}
-	g.logger.Info("gateway stopped")
+}
+
+func (g *Gateway) startWatcher(ctx context.Context) error {
+	watchCtx, cancel := context.WithCancel(ctx)
+	watcher, err := g.provider.Watch(watchCtx, func(snapshot *runtime.CompiledSnapshot) {
+		g.applyReloadSnapshot(watchCtx, snapshot)
+	}, func(watchErr error) {
+		g.config.OnWatchError(watchErr)
+	})
+	if err != nil {
+		cancel()
+		g.logger.Error("watch setup failed", "error", err)
+		return oops.
+			In("gateway").
+			Wrapf(err, "setup snapshot watcher")
+	}
+	g.watchCancel = cancel
+	g.watcher = watcher
+	g.logger.Info("watcher started")
 	return nil
+}
+
+func (g *Gateway) startHealthChecker(ctx context.Context, snapshot *runtime.CompiledSnapshot) {
+	interval := parseDurationDefault(snapshot.HealthInterval, 5*time.Second)
+	timeout := parseDurationDefault(snapshot.HealthTimeout, 2*time.Second)
+	g.health = runtime.NewHealthCheckerWithLogger(interval, timeout, g.logger)
+	g.health.Start(ctx, g.runtime)
+	g.logger.Info("health checker started", "interval", interval, "timeout", timeout)
+}
+
+func (g *Gateway) serveServers(servers *collectionlist.List[*http.Server], listeners *collectionlist.List[net.Listener], entrypointNames *collectionlist.List[string]) {
+	entrypointNames.Range(func(index int, entrypoint string) bool {
+		server, _ := servers.Get(index)
+		listener, _ := listeners.Get(index)
+		go g.listenEntrypoint(entrypoint, server, listener)
+		return true
+	})
+	adminServer, _ := servers.Get(servers.Len() - 1)
+	adminListener, _ := listeners.Get(listeners.Len() - 1)
+	go g.listenAdmin(adminServer, adminListener)
 }
 
 // Events returns the event bus configured with WithEventBus or the internal instance.
@@ -407,65 +430,72 @@ func (g *Gateway) buildTLSConfig(tlsRuntime runtime.TLSRuntime) (*tls.Config, bo
 		MinVersion: tls.VersionTLS12,
 	}
 	if tlsRuntime.CertFile != "" || tlsRuntime.KeyFile != "" {
-		certificate, err := tls.LoadX509KeyPair(tlsRuntime.CertFile, tlsRuntime.KeyFile)
+		certificate, err := loadStaticTLSCertificate(tlsRuntime)
 		if err != nil {
-			return nil, false, oops.
-				In("gateway").
-				With("cert_file", tlsRuntime.CertFile, "key_file", tlsRuntime.KeyFile).
-				Wrapf(err, "load static tls certificate")
+			return nil, false, err
 		}
 		tlsConfig.Certificates = []tls.Certificate{certificate}
 	}
 	if tlsRuntime.ACME.Enabled {
-		manager := &autocert.Manager{
-			Prompt: autocert.AcceptTOS,
-			Email:  tlsRuntime.ACME.Email,
-		}
-		if !tlsRuntime.ACME.Domains.IsEmpty() {
-			manager.HostPolicy = autocert.HostWhitelist(tlsRuntime.ACME.Domains.Values()...)
-		}
-		if tlsRuntime.ACME.CacheDir != "" {
-			manager.Cache = autocert.DirCache(tlsRuntime.ACME.CacheDir)
-		}
-		acmeConfig := manager.TLSConfig()
-		if len(tlsConfig.Certificates) == 0 {
-			tlsConfig.GetCertificate = acmeConfig.GetCertificate
-		}
-		tlsConfig.NextProtos = acmeConfig.NextProtos
+		applyACMETLSConfig(tlsConfig, tlsRuntime.ACME)
 	}
 	return tlsConfig, true, nil
 }
 
+func loadStaticTLSCertificate(tlsRuntime runtime.TLSRuntime) (tls.Certificate, error) {
+	certificate, err := tls.LoadX509KeyPair(tlsRuntime.CertFile, tlsRuntime.KeyFile)
+	if err != nil {
+		return tls.Certificate{}, oops.
+			In("gateway").
+			With("cert_file", tlsRuntime.CertFile, "key_file", tlsRuntime.KeyFile).
+			Wrapf(err, "load static tls certificate")
+	}
+	return certificate, nil
+}
+
+func applyACMETLSConfig(tlsConfig *tls.Config, acmeRuntime runtime.ACMERuntime) {
+	manager := &autocert.Manager{
+		Prompt: autocert.AcceptTOS,
+		Email:  acmeRuntime.Email,
+	}
+	if acmeRuntime.Domains != nil && !acmeRuntime.Domains.IsEmpty() {
+		manager.HostPolicy = autocert.HostWhitelist(acmeRuntime.Domains.Values()...)
+	}
+	if acmeRuntime.CacheDir != "" {
+		manager.Cache = autocert.DirCache(acmeRuntime.CacheDir)
+	}
+	acmeConfig := manager.TLSConfig()
+	if len(tlsConfig.Certificates) == 0 {
+		tlsConfig.GetCertificate = acmeConfig.GetCertificate
+	}
+	tlsConfig.NextProtos = acmeConfig.NextProtos
+}
+
 func (g *Gateway) cleanupStartFailure(listeners *collectionlist.List[net.Listener]) {
-	listeners.Range(func(_ int, listener net.Listener) bool {
-		if listener != nil {
-			if err := listener.Close(); err != nil && g.logger != nil {
-				g.logger.Error("listener close after start failure failed", "error", err)
-			}
-		}
-		return true
-	})
-	if g.watcher != nil {
-		if err := g.watcher.Close(); err != nil && g.logger != nil {
-			g.logger.Error("watcher close after start failure failed", "error", err)
-		}
-		g.watcher = nil
-	}
-	if g.health != nil {
-		g.health.Stop()
-		g.health = nil
-	}
-	if g.cluster != nil {
-		if err := g.cluster.Shutdown(); err != nil && g.logger != nil {
-			g.logger.Error("cluster shutdown after start failure failed", "error", err)
-		}
-		g.cluster = nil
-	}
+	g.closeStartFailureListeners(listeners)
+	g.stopWatcher()
+	g.stopHealthChecker()
+	g.stopCluster()
 	g.runtime = nil
 	g.servers = nil
 }
 
-func (g *Gateway) applyReloadSnapshot(snapshot *runtime.CompiledSnapshot) {
+func (g *Gateway) closeStartFailureListeners(listeners *collectionlist.List[net.Listener]) {
+	if listeners == nil {
+		return
+	}
+	listeners.Range(func(_ int, listener net.Listener) bool {
+		if listener == nil {
+			return true
+		}
+		if err := listener.Close(); err != nil && g.logger != nil {
+			g.logger.Error("listener close after start failure failed", "error", err)
+		}
+		return true
+	})
+}
+
+func (g *Gateway) applyReloadSnapshot(ctx context.Context, snapshot *runtime.CompiledSnapshot) {
 	if snapshot == nil {
 		return
 	}
@@ -477,13 +507,13 @@ func (g *Gateway) applyReloadSnapshot(snapshot *runtime.CompiledSnapshot) {
 			"fields", changed,
 		)
 		if g.events != nil {
-			if err := g.events.Publish(context.Background(), StaticRuntimeConfigChangedEvent{
+			if err := g.events.Publish(ctx, StaticRuntimeConfigChangedEvent{
 				Fields: changed,
 			}); err != nil {
 				g.logger.Error("publish static runtime change event failed", "error", err)
 			}
 		}
-		if err := g.restartServersLocked(snapshot); err != nil {
+		if err := g.restartServersLocked(ctx, snapshot); err != nil {
 			g.logger.Error("static runtime reload failed", "fields", changed, "error", err)
 			g.config.OnWatchError(err)
 		}
@@ -500,8 +530,8 @@ func (g *Gateway) applyReloadSnapshot(snapshot *runtime.CompiledSnapshot) {
 	)
 }
 
-func (g *Gateway) restartServersLocked(snapshot *runtime.CompiledSnapshot) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func (g *Gateway) restartServersLocked(ctx context.Context, snapshot *runtime.CompiledSnapshot) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	if g.health != nil {
@@ -517,7 +547,7 @@ func (g *Gateway) restartServersLocked(snapshot *runtime.CompiledSnapshot) error
 	g.servers = nil
 
 	g.runtime = runtime.NewGatewayWithMiddlewareRegistry(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled), g.config.Middleware)
-	servers, listeners, entrypointNames, err := g.buildServers(snapshot)
+	servers, listeners, entrypointNames, err := g.buildServers(ctx, snapshot)
 	if err != nil {
 		g.runtime.ObserveReload("failed")
 		g.runtime = nil
@@ -530,52 +560,27 @@ func (g *Gateway) restartServersLocked(snapshot *runtime.CompiledSnapshot) error
 	interval := parseDurationDefault(snapshot.HealthInterval, 5*time.Second)
 	timeout := parseDurationDefault(snapshot.HealthTimeout, 2*time.Second)
 	g.health = runtime.NewHealthCheckerWithLogger(interval, timeout, g.logger)
-	g.health.Start(g.runtime)
+	g.health.Start(ctx, g.runtime)
 
-	entrypointNames.Range(func(index int, entrypoint string) bool {
-		server, _ := servers.Get(index)
-		listener, _ := listeners.Get(index)
-		go g.listenEntrypoint(entrypoint, server, listener)
-		return true
-	})
-	adminServer, _ := servers.Get(servers.Len() - 1)
-	adminListener, _ := listeners.Get(listeners.Len() - 1)
-	go g.listenAdmin(adminServer, adminListener)
+	g.serveServers(servers, listeners, entrypointNames)
 	g.publishClusterUpdate(snapshot)
 	g.runtime.ObserveReload("restarted")
 	g.logger.Info("servers restarted", "entrypoints", snapshot.Entrypoints.Len(), "admin_addr", snapshot.AdminAddress)
 	return nil
 }
 
-func (g *Gateway) buildServers(snapshot *runtime.CompiledSnapshot) (*collectionlist.List[*http.Server], *collectionlist.List[net.Listener], *collectionlist.List[string], error) {
+func (g *Gateway) buildServers(ctx context.Context, snapshot *runtime.CompiledSnapshot) (*collectionlist.List[*http.Server], *collectionlist.List[net.Listener], *collectionlist.List[string], error) {
 	servers := collectionlist.NewListWithCapacity[*http.Server](snapshot.Entrypoints.Len() + 1)
 	listeners := collectionlist.NewListWithCapacity[net.Listener](snapshot.Entrypoints.Len() + 1)
 	entrypointNames := collectionlist.NewListWithCapacity[string](snapshot.Entrypoints.Len())
 	var buildErr error
 	snapshot.Entrypoints.Range(func(entrypoint string, address string) bool {
 		entrypointConfig, _ := snapshot.EntrypointConfigs.Get(entrypoint)
-		server := g.buildHTTPServer(address, g.runtime.Handler(entrypoint), snapshot.Security)
-		if tlsConfig, tlsEnabled, tlsErr := g.buildTLSConfig(entrypointConfig.TLS); tlsErr != nil {
+		server, listener, err := g.buildEntrypointServer(ctx, snapshot, entrypoint, address, entrypointConfig)
+		if err != nil {
 			closeListeners(listeners)
-			buildErr = oops.
-				In("gateway").
-				With("entrypoint", entrypoint, "address", address).
-				Wrapf(tlsErr, "build entrypoint tls config")
+			buildErr = err
 			return false
-		} else if tlsEnabled {
-			server.TLSConfig = tlsConfig
-		}
-		listener, listenErr := net.Listen("tcp", address)
-		if listenErr != nil {
-			closeListeners(listeners)
-			buildErr = oops.
-				In("gateway").
-				With("entrypoint", entrypoint, "address", address).
-				Wrapf(listenErr, "listen entrypoint")
-			return false
-		}
-		if server.TLSConfig != nil {
-			listener = tls.NewListener(listener, server.TLSConfig)
 		}
 		servers.Add(server)
 		listeners.Add(listener)
@@ -586,21 +591,69 @@ func (g *Gateway) buildServers(snapshot *runtime.CompiledSnapshot) (*collectionl
 		return nil, nil, nil, buildErr
 	}
 
-	adminServer := g.buildHTTPServer(snapshot.AdminAddress, g.buildAdminMux(), snapshot.Security)
-	adminListener, listenErr := net.Listen("tcp", snapshot.AdminAddress)
-	if listenErr != nil {
+	adminServer, adminListener, err := g.buildAdminServer(ctx, snapshot)
+	if err != nil {
 		closeListeners(listeners)
-		return nil, nil, nil, oops.
-			In("gateway").
-			With("address", snapshot.AdminAddress).
-			Wrapf(listenErr, "listen admin")
+		return nil, nil, nil, err
 	}
 	servers.Add(adminServer)
 	listeners.Add(adminListener)
 	return servers, listeners, entrypointNames, nil
 }
 
+func (g *Gateway) buildEntrypointServer(ctx context.Context, snapshot *runtime.CompiledSnapshot, entrypoint, address string, entrypointConfig runtime.EntrypointRuntime) (*http.Server, net.Listener, error) {
+	server := g.buildHTTPServer(address, g.runtime.Handler(entrypoint), snapshot.Security)
+	if tlsConfig, tlsEnabled, err := g.buildTLSConfig(entrypointConfig.TLS); err != nil {
+		return nil, nil, oops.
+			In("gateway").
+			With("entrypoint", entrypoint, "address", address).
+			Wrapf(err, "build entrypoint tls config")
+	} else if tlsEnabled {
+		server.TLSConfig = tlsConfig
+	}
+	listener, err := listenTCP(ctx, address)
+	if err != nil {
+		g.logger.Error("entrypoint listen failed", "entrypoint", entrypoint, "addr", address, "error", err)
+		return nil, nil, oops.
+			In("gateway").
+			With("entrypoint", entrypoint, "address", address).
+			Wrapf(err, "listen entrypoint")
+	}
+	if server.TLSConfig != nil {
+		listener = tls.NewListener(listener, server.TLSConfig)
+	}
+	return server, listener, nil
+}
+
+func (g *Gateway) buildAdminServer(ctx context.Context, snapshot *runtime.CompiledSnapshot) (*http.Server, net.Listener, error) {
+	server := g.buildHTTPServer(snapshot.AdminAddress, g.buildAdminMux(), snapshot.Security)
+	listener, err := listenTCP(ctx, snapshot.AdminAddress)
+	if err != nil {
+		g.logger.Error("admin listen failed", "addr", snapshot.AdminAddress, "error", err)
+		return nil, nil, oops.
+			In("gateway").
+			With("address", snapshot.AdminAddress).
+			Wrapf(err, "listen admin")
+	}
+	return server, listener, nil
+}
+
+func listenTCP(ctx context.Context, address string) (net.Listener, error) {
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(ctx, "tcp", address)
+	if err != nil {
+		return nil, oops.
+			In("gateway").
+			With("address", address).
+			Wrapf(err, "listen tcp")
+	}
+	return listener, nil
+}
+
 func closeListeners(listeners *collectionlist.List[net.Listener]) {
+	if listeners == nil {
+		return
+	}
 	listeners.Range(func(_ int, listener net.Listener) bool {
 		if listener != nil {
 			if err := listener.Close(); err != nil {
@@ -609,120 +662,6 @@ func closeListeners(listeners *collectionlist.List[net.Listener]) {
 		}
 		return true
 	})
-}
-
-func (g *Gateway) buildAdminMux() http.Handler {
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", g.runtime.MetricsHandler())
-
-	mux.HandleFunc("/admin/routes", func(w http.ResponseWriter, r *http.Request) {
-		snapshot := g.runtime.Snapshot()
-		if snapshot == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "runtime not ready"})
-			return
-		}
-		query := r.URL.Query()
-		writeJSON(w, http.StatusOK, adminRoutesView(snapshot, runtime.RouteFilter{
-			Entrypoint: query.Get("entrypoint"),
-			Service:    query.Get("service"),
-			Host:       query.Get("host"),
-			PathPrefix: query.Get("path_prefix"),
-		}))
-	})
-
-	mux.HandleFunc("/admin/services", func(w http.ResponseWriter, _ *http.Request) {
-		snapshot := g.runtime.Snapshot()
-		if snapshot == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "runtime not ready"})
-			return
-		}
-		writeJSON(w, http.StatusOK, adminServicesView(snapshot))
-	})
-
-	mux.HandleFunc("/admin/endpoints", func(w http.ResponseWriter, _ *http.Request) {
-		snapshot := g.runtime.Snapshot()
-		if snapshot == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "runtime not ready"})
-			return
-		}
-
-		writeJSON(w, http.StatusOK, adminEndpointsView(snapshot))
-	})
-	mux.HandleFunc("/admin/cluster/status", func(w http.ResponseWriter, _ *http.Request) {
-		if g.cluster == nil {
-			writeJSON(w, http.StatusOK, map[string]any{
-				"enabled": false,
-			})
-			return
-		}
-		writeJSON(w, http.StatusOK, g.cluster.Status())
-	})
-	mux.HandleFunc("/admin/cluster/peers", func(w http.ResponseWriter, _ *http.Request) {
-		if g.cluster == nil {
-			writeJSON(w, http.StatusOK, []any{})
-			return
-		}
-		peers, err := g.cluster.Peers()
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, peers)
-	})
-	mux.HandleFunc("/admin/cluster/join", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-			return
-		}
-		if g.cluster == nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "raft is not enabled"})
-			return
-		}
-		if !g.cluster.IsLeader() {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "only leader can join peers"})
-			return
-		}
-		var req struct {
-			ID      string `json:"id"`
-			Address string `json:"address"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
-			return
-		}
-		if err := g.cluster.AddVoter(req.ID, req.Address, 5*time.Second); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
-	mux.HandleFunc("/admin/cluster/leave", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-			return
-		}
-		if g.cluster == nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "raft is not enabled"})
-			return
-		}
-		if !g.cluster.IsLeader() {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "only leader can remove peers"})
-			return
-		}
-		var req struct {
-			ID string `json:"id"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
-			return
-		}
-		if err := g.cluster.RemoveServer(req.ID, 5*time.Second); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
-	return mux
 }
 
 func writeJSON(w http.ResponseWriter, statusCode int, payload any) {
@@ -743,7 +682,7 @@ func parseDurationDefault(value string, fallback time.Duration) time.Duration {
 	return mo.TupleToOption(duration, err == nil).OrElse(fallback)
 }
 
-func maxInt(value int, fallback int) int {
+func maxInt(value, fallback int) int {
 	if value > 0 {
 		return value
 	}

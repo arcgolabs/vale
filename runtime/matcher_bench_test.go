@@ -16,11 +16,11 @@ func BenchmarkMatchRouteByRouteCount(b *testing.B) {
 			routes := benchmarkRoutes(routeCount)
 			matcher := BuildEntrypointMatcher(routes)
 			target := fmt.Sprintf("http://api.example.com/api/%04d/users", routeCount-1)
-			req := httptest.NewRequest(http.MethodGet, target, nil)
+			req := httptest.NewRequestWithContext(b.Context(), http.MethodGet, target, http.NoBody)
 
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				route := MatchRoute(matcher, routes, req)
 				if route == nil {
 					b.Fatal("route did not match")
@@ -32,7 +32,7 @@ func BenchmarkMatchRouteByRouteCount(b *testing.B) {
 
 func benchmarkRoutes(count int) []*CompiledRoute {
 	routes := make([]*CompiledRoute, 0, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		route := &CompiledRoute{
 			Name:       fmt.Sprintf("api-%04d", i),
 			Entrypoint: "web",

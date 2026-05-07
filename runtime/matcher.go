@@ -111,24 +111,30 @@ func linearMatch(routes []*CompiledRoute, request *http.Request) *CompiledRoute 
 	host := strings.ToLower(request.Host)
 	method := strings.ToUpper(request.Method)
 	for _, route := range routes {
-		if hasPredicate(route, PredicateHost) && route.Host != host {
-			continue
+		if linearRouteMatches(route, request, host, method) {
+			return route
 		}
-		if hasPredicate(route, PredicatePathPrefix) && !strings.HasPrefix(request.URL.Path, route.PathPrefix) {
-			continue
-		}
-		if hasPredicate(route, PredicateMethod) && route.Method != method {
-			continue
-		}
-		if hasPredicate(route, PredicateHeaders) && !matchHeaders(route.Headers, request.Header) {
-			continue
-		}
-		return route
 	}
 	return nil
 }
 
-func matchWithPredicates(routes *collectionlist.List[*CompiledRoute], path string, method string, headers http.Header) *CompiledRoute {
+func linearRouteMatches(route *CompiledRoute, request *http.Request, host, method string) bool {
+	if hasPredicate(route, PredicateHost) && route.Host != host {
+		return false
+	}
+	if hasPredicate(route, PredicatePathPrefix) && !strings.HasPrefix(request.URL.Path, route.PathPrefix) {
+		return false
+	}
+	if hasPredicate(route, PredicateMethod) && route.Method != method {
+		return false
+	}
+	if hasPredicate(route, PredicateHeaders) && !matchHeaders(route.Headers, request.Header) {
+		return false
+	}
+	return true
+}
+
+func matchWithPredicates(routes *collectionlist.List[*CompiledRoute], path, method string, headers http.Header) *CompiledRoute {
 	var matched *CompiledRoute
 	routes.Range(func(_ int, route *CompiledRoute) bool {
 		if hasPredicate(route, PredicatePathPrefix) && !strings.HasPrefix(path, route.PathPrefix) {
@@ -157,7 +163,7 @@ func sortRoutesByPriority(routes *collectionlist.List[*CompiledRoute]) *collecti
 	return collectionlist.NewList(queue.ValuesSorted()...)
 }
 
-func routePriorityLess(left *CompiledRoute, right *CompiledRoute) bool {
+func routePriorityLess(left, right *CompiledRoute) bool {
 	leftScore := routeScore(left)
 	rightScore := routeScore(right)
 	if leftScore == rightScore {
@@ -223,7 +229,7 @@ func (b *routeBucket) Sort() {
 	b.fallback = sortRoutesByPriority(b.fallback)
 }
 
-func (b *routeBucket) Match(path string, method string, headers http.Header) *CompiledRoute {
+func (b *routeBucket) Match(path, method string, headers http.Header) *CompiledRoute {
 	if b == nil {
 		return nil
 	}
