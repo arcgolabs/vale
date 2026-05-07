@@ -2,15 +2,24 @@ package gateway
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"io"
 	"log/slog"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/compiler"
@@ -182,6 +191,39 @@ func TestAdminAPIWritesPlainJSONViews(t *testing.T) {
 	}
 }
 
+func TestBuildTLSConfigLoadsStaticCertificate(t *testing.T) {
+	t.Parallel()
+
+	certFile, keyFile := writeTestCertificate(t)
+	tlsConfig, err := (&Gateway{}).buildTLSConfig(runtime.TLSRuntime{
+		Enabled:  true,
+		CertFile: certFile,
+		KeyFile:  keyFile,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tlsConfig.MinVersion != tls.VersionTLS12 {
+		t.Fatalf("min tls version = %d, want TLS 1.2", tlsConfig.MinVersion)
+	}
+	if len(tlsConfig.Certificates) != 1 {
+		t.Fatalf("certificates = %d, want 1", len(tlsConfig.Certificates))
+	}
+}
+
+func TestBuildTLSConfigReportsMissingStaticCertificate(t *testing.T) {
+	t.Parallel()
+
+	_, err := (&Gateway{}).buildTLSConfig(runtime.TLSRuntime{
+		Enabled:  true,
+		CertFile: "missing-cert.pem",
+		KeyFile:  "missing-key.pem",
+	})
+	if err == nil {
+		t.Fatal("buildTLSConfig returned nil error for missing certificate files")
+	}
+}
+
 func listenOnLocalhost(t *testing.T) net.Listener {
 	t.Helper()
 
@@ -194,4 +236,39 @@ func listenOnLocalhost(t *testing.T) net.Listener {
 
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func writeTestCertificate(t *testing.T) (string, string) {
+	t.Helper()
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "localhost"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:     []string{"localhost"},
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
+	dir := t.TempDir()
+	certFile := dir + "/cert.pem"
+	keyFile := dir + "/key.pem"
+	if err := os.WriteFile(certFile, certPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, keyPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return certFile, keyFile
 }
