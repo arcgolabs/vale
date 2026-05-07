@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
+	"github.com/samber/oops"
 )
 
 type DockerSource struct {
@@ -23,7 +24,7 @@ func NewDockerSource(cli *client.Client) *DockerSource {
 func NewDockerSourceFromEnv() (*DockerSource, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		return nil, err
+		return nil, oops.In("docker_source").Wrapf(err, "create docker client")
 	}
 	return &DockerSource{client: cli}, nil
 }
@@ -33,11 +34,12 @@ func (s *DockerSource) ListContainers(ctx context.Context) ([]Container, error) 
 		All: false,
 	})
 	if err != nil {
-		return nil, err
+		return nil, oops.In("docker_source").Wrapf(err, "list docker containers")
 	}
 
 	result := make([]Container, 0, len(list))
-	for _, item := range list {
+	for index := range list {
+		item := &list[index]
 		address, port := dockerAddressPort(item)
 		if address == "" || port == 0 {
 			continue
@@ -65,28 +67,7 @@ func (s *DockerSource) Watch(ctx context.Context, onReload func(), onError func(
 	eventsCh, errCh := s.client.Events(watchCtx, events.ListOptions{Filters: filter})
 	done := make(chan struct{})
 
-	go func() {
-		defer close(done)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case _, ok := <-eventsCh:
-				if !ok {
-					return
-				}
-				onReload()
-			case err, ok := <-errCh:
-				if !ok {
-					return
-				}
-				if err != nil && !strings.Contains(err.Error(), "context canceled") {
-					onError(err)
-				}
-				return
-			}
-		}
-	}()
+	go watchDockerEvents(ctx, eventsCh, errCh, onReload, onError, done)
 
 	return provider.NewOnceCloser(func() {
 		cancelWatch()
@@ -94,7 +75,39 @@ func (s *DockerSource) Watch(ctx context.Context, onReload func(), onError func(
 	}), nil
 }
 
-func dockerAddressPort(item container.Summary) (string, int) {
+func watchDockerEvents(
+	ctx context.Context,
+	eventsCh <-chan events.Message,
+	errCh <-chan error,
+	onReload func(),
+	onError func(error),
+	done chan<- struct{},
+) {
+	defer close(done)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case _, ok := <-eventsCh:
+			if !ok {
+				return
+			}
+			onReload()
+		case err, ok := <-errCh:
+			handleDockerWatchError(err, ok, onError)
+			return
+		}
+	}
+}
+
+func handleDockerWatchError(err error, ok bool, onError func(error)) {
+	if !ok || err == nil || strings.Contains(err.Error(), "context canceled") {
+		return
+	}
+	onError(err)
+}
+
+func dockerAddressPort(item *container.Summary) (string, int) {
 	for _, p := range item.Ports {
 		if p.PublicPort > 0 {
 			return "127.0.0.1", int(p.PublicPort)

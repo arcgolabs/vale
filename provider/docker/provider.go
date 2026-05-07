@@ -1,18 +1,15 @@
+// Package docker provides a Docker label config provider for Vela.
 package docker
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"io"
 	"log/slog"
-	"strconv"
-	"strings"
-	"sync"
 
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
-	"github.com/arcgolabs/vela/provider"
-	"github.com/samber/mo"
+	"github.com/samber/oops"
 )
 
 type Container struct {
@@ -37,12 +34,14 @@ type Provider struct {
 type Options struct {
 	DefaultEntrypointName string
 	DefaultEntrypointAddr string
+	EntrypointAddresses   *mapping.Map[string, string]
 }
 
 func DefaultOptions() Options {
 	return Options{
 		DefaultEntrypointName: "web",
 		DefaultEntrypointAddr: ":8080",
+		EntrypointAddresses:   mapping.NewMapFrom(map[string]string{"web": ":8080"}),
 	}
 }
 
@@ -50,13 +49,7 @@ func New(name string, source Source, options Options) *Provider {
 	if name == "" {
 		name = "docker"
 	}
-	defaults := DefaultOptions()
-	if options.DefaultEntrypointName == "" {
-		options.DefaultEntrypointName = defaults.DefaultEntrypointName
-	}
-	if options.DefaultEntrypointAddr == "" {
-		options.DefaultEntrypointAddr = defaults.DefaultEntrypointAddr
-	}
+	options = normalizeOptions(options)
 	return &Provider{
 		name:    name,
 		source:  source,
@@ -82,224 +75,73 @@ func (p *Provider) Name() string {
 
 func (p *Provider) Load(ctx context.Context) (*config.Config, error) {
 	if p.source == nil {
-		return nil, fmt.Errorf("docker provider source is nil")
+		return nil, errors.New("docker provider source is nil")
 	}
 	containers, err := p.source.ListContainers(ctx)
 	if err != nil {
 		if p.logger != nil {
 			p.logger.Error("docker source list failed", "provider", p.name, "error", err)
 		}
-		return nil, err
+		return nil, oops.In("docker_provider").Wrapf(err, "list docker containers")
 	}
-	if p.logger != nil {
-		p.logger.Info("docker containers listed", "provider", p.name, "containers", len(containers))
-	}
+	p.logContainersListed(containers)
 
-	cfg := provider.NewEntrypointConfig(p.options.DefaultEntrypointName, p.options.DefaultEntrypointAddr)
-
-	serviceMap := mapping.NewMap[string, *config.Service]()
-	routeMap := mapping.NewMap[string, config.Route]()
-	middlewareMap := mapping.NewMap[string, config.Middleware]()
-	disabledCount := 0
-	invalidEndpointCount := 0
-
-	for _, container := range containers {
-		labels := container.Labels
-		if !parseBool(labels["vela.enable"], false) {
-			disabledCount++
-			continue
-		}
-		if container.Address == "" || container.Port <= 0 {
-			invalidEndpointCount++
-			continue
-		}
-
-		serviceName := valueOr(labels["vela.service"], sanitizeName(container.Name, "service"))
-		routeName := valueOr(labels["vela.route"], serviceName+"-route")
-		entrypoint := valueOr(labels["vela.entrypoint"], p.options.DefaultEntrypointName)
-		host := strings.TrimSpace(labels["vela.rule.host"])
-		pathPrefix := strings.TrimSpace(labels["vela.rule.pathprefix"])
-		method := strings.TrimSpace(labels["vela.rule.method"])
-		scheme := valueOr(labels["vela.scheme"], "http")
-		weight := parseInt(labels["vela.weight"], 1)
-		applyEntrypointTLSLabels(cfg, labels)
-		routeMiddlewares := provider.SplitCSV(labels["vela.middlewares"])
-		if middleware, ok := middlewareFromLabels(routeName+"-middleware", labels); ok {
-			middlewareMap.Set(middleware.Name, middleware)
-			routeMiddlewares = append(routeMiddlewares, middleware.Name)
-		}
-
-		service, _ := serviceMap.GetOrCompute(serviceName, func() *config.Service {
-			return &config.Service{
-				Name:      serviceName,
-				Strategy:  "round_robin",
-				Endpoints: nil,
-			}
-		})
-		service.Endpoints = append(service.Endpoints, config.Endpoint{
-			URL:    fmt.Sprintf("%s://%s:%d", scheme, container.Address, container.Port),
-			Weight: weight,
-		})
-
-		if _, exists := routeMap.Get(routeName); !exists {
-			routeMap.Set(routeName, config.Route{
-				Name:        routeName,
-				Entrypoint:  entrypoint,
-				Service:     serviceName,
-				Host:        host,
-				PathPrefix:  pathPrefix,
-				Method:      method,
-				Headers:     map[string]string{},
-				Middlewares: routeMiddlewares,
-			})
-		}
-	}
-
-	provider.AppendSortedServices(cfg, serviceMap)
-	for _, middlewareName := range provider.SortedStrings(middlewareMap.Keys()) {
-		middleware, _ := middlewareMap.Get(middlewareName)
-		cfg.Middlewares = append(cfg.Middlewares, middleware)
-	}
-	provider.AppendSortedRoutes(cfg, routeMap)
-
-	if err := config.Validate(cfg); err != nil {
+	result := buildConfig(p.options, containers)
+	if err := config.Validate(result.Config); err != nil {
 		if p.logger != nil {
 			p.logger.Error("docker config validation failed", "provider", p.name, "error", err)
 		}
-		return nil, err
+		return nil, oops.In("docker_provider").Wrapf(err, "validate docker config")
 	}
-	if p.logger != nil {
-		p.logger.Info("docker config built",
-			"provider", p.name,
-			"containers", len(containers),
-			"disabled", disabledCount,
-			"invalid_endpoints", invalidEndpointCount,
-			"middlewares", len(cfg.Middlewares),
-			"services", len(cfg.Services),
-			"routes", len(cfg.Routes),
-		)
-	}
-	return cfg, nil
+	p.logConfigBuilt(containers, result)
+	return result.Config, nil
 }
 
 func (p *Provider) Watch(ctx context.Context, onReload func(), onError func(error)) (io.Closer, error) {
 	if p.source == nil {
-		return nil, fmt.Errorf("docker provider source is nil")
+		return nil, errors.New("docker provider source is nil")
 	}
-	return p.source.Watch(ctx, onReload, onError)
-}
-
-type MemorySource struct {
-	mu         sync.RWMutex
-	containers []Container
-	listeners  *mapping.Map[int, func()]
-	nextID     int
-}
-
-func NewMemorySource(containers ...Container) *MemorySource {
-	return &MemorySource{
-		containers: containers,
-		listeners:  mapping.NewMap[int, func()](),
+	closer, err := p.source.Watch(ctx, onReload, onError)
+	if err != nil {
+		return nil, oops.In("docker_provider").Wrapf(err, "watch docker source")
 	}
+	return closer, nil
 }
 
-func (s *MemorySource) ListContainers(_ context.Context) ([]Container, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]Container, len(s.containers))
-	copy(out, s.containers)
-	return out, nil
+func normalizeOptions(options Options) Options {
+	defaults := DefaultOptions()
+	if options.DefaultEntrypointName == "" {
+		options.DefaultEntrypointName = defaults.DefaultEntrypointName
+	}
+	if options.DefaultEntrypointAddr == "" {
+		options.DefaultEntrypointAddr = defaults.DefaultEntrypointAddr
+	}
+	if options.EntrypointAddresses == nil {
+		options.EntrypointAddresses = mapping.NewMap[string, string]()
+	}
+	if _, ok := options.EntrypointAddresses.Get(options.DefaultEntrypointName); !ok {
+		options.EntrypointAddresses.Set(options.DefaultEntrypointName, options.DefaultEntrypointAddr)
+	}
+	return options
 }
 
-func (s *MemorySource) Watch(_ context.Context, onReload func(), _ func(error)) (io.Closer, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	id := s.nextID
-	s.nextID++
-	s.listeners.Set(id, onReload)
-	return provider.NewOnceCloser(func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		s.listeners.Delete(id)
-	}), nil
-}
-
-func (s *MemorySource) Update(containers ...Container) {
-	s.mu.Lock()
-	s.containers = containers
-	listeners := s.listeners.Values()
-	s.mu.Unlock()
-
-	for _, listener := range listeners {
-		if listener != nil {
-			listener()
-		}
+func (p *Provider) logContainersListed(containers []Container) {
+	if p.logger != nil {
+		p.logger.Info("docker containers listed", "provider", p.name, "containers", len(containers))
 	}
 }
 
-func valueOr(value string, fallback string) string {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	return value
-}
-
-func parseBool(value string, fallback bool) bool {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	parsed, err := strconv.ParseBool(value)
-	return mo.TupleToOption(parsed, err == nil).OrElse(fallback)
-}
-
-func parseInt(value string, fallback int) int {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
-	return mo.TupleToOption(parsed, err == nil).OrElse(fallback)
-}
-
-func sanitizeName(input string, fallback string) string {
-	input = strings.TrimSpace(strings.ToLower(input))
-	if input == "" {
-		return fallback
-	}
-	replacer := strings.NewReplacer("/", "-", "_", "-", " ", "-")
-	return replacer.Replace(input)
-}
-
-func middlewareFromLabels(name string, labels map[string]string) (config.Middleware, bool) {
-	middleware := config.Middleware{
-		Name:         name,
-		StripPrefix:  strings.TrimSpace(labels["vela.middleware.strip_prefix"]),
-		AddPrefix:    strings.TrimSpace(labels["vela.middleware.add_prefix"]),
-		MaxBodyBytes: int64(parseInt(labels["vela.middleware.max_body_bytes"], 0)),
-	}
-	return middleware, middleware.StripPrefix != "" || middleware.AddPrefix != "" || middleware.MaxBodyBytes > 0
-}
-
-func applyEntrypointTLSLabels(cfg *config.Config, labels map[string]string) {
-	if cfg == nil || len(cfg.Entrypoints) == 0 {
+func (p *Provider) logConfigBuilt(containers []Container, result configBuildResult) {
+	if p.logger == nil {
 		return
 	}
-	tlsEnabled := parseBool(labels["vela.entrypoint.tls.enabled"], false)
-	certFile := strings.TrimSpace(labels["vela.entrypoint.tls.cert_file"])
-	keyFile := strings.TrimSpace(labels["vela.entrypoint.tls.key_file"])
-	acmeEnabled := parseBool(labels["vela.entrypoint.acme.enabled"], false)
-	if tlsEnabled || certFile != "" || keyFile != "" {
-		cfg.Entrypoints[0].TLS = &config.EntrypointTLS{
-			Enabled:  tlsEnabled,
-			CertFile: certFile,
-			KeyFile:  keyFile,
-		}
-	}
-	if acmeEnabled {
-		cfg.Entrypoints[0].ACME = &config.EntrypointACME{
-			Enabled:  true,
-			Email:    strings.TrimSpace(labels["vela.entrypoint.acme.email"]),
-			CacheDir: strings.TrimSpace(labels["vela.entrypoint.acme.cache_dir"]),
-			Domains:  provider.SplitCSV(labels["vela.entrypoint.acme.domains"]),
-		}
-	}
+	p.logger.Info("docker config built",
+		"provider", p.name,
+		"containers", len(containers),
+		"disabled", result.DisabledCount,
+		"invalid_endpoints", result.InvalidEndpointCount,
+		"middlewares", len(result.Config.Middlewares),
+		"services", len(result.Config.Services),
+		"routes", len(result.Config.Routes),
+	)
 }

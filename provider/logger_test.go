@@ -1,9 +1,10 @@
-package provider
+package provider_test
 
 import (
-	"io"
 	"log/slog"
 	"testing"
+
+	"github.com/arcgolabs/vela/provider"
 )
 
 type loggerAwareStub struct {
@@ -15,10 +16,10 @@ func (s *loggerAwareStub) SetLogger(logger *slog.Logger) {
 }
 
 func TestApplyLogger(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	target := &loggerAwareStub{}
 
-	ApplyLogger(target, logger)
+	provider.ApplyLogger(target, logger)
 
 	if target.logger != logger {
 		t.Fatalf("expected logger to be applied")
@@ -26,9 +27,9 @@ func TestApplyLogger(t *testing.T) {
 }
 
 func TestApplyLoggerIgnoresUnsupportedTarget(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
-	ApplyLogger(struct{}{}, logger)
-	ApplyLogger(nil, logger)
-	ApplyLogger(&loggerAwareStub{}, nil)
+	provider.ApplyLogger(struct{}{}, logger)
+	provider.ApplyLogger(nil, logger)
+	provider.ApplyLogger(&loggerAwareStub{}, nil)
 }

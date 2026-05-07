@@ -1,14 +1,16 @@
-package provider
+package provider_test
 
 import (
 	"reflect"
 	"testing"
+
+	"github.com/arcgolabs/vela/provider"
 )
 
 func TestSortedStrings(t *testing.T) {
 	input := []string{"b", "a", "c"}
 
-	got := SortedStrings(input)
+	got := provider.SortedStrings(input)
 
 	if !reflect.DeepEqual(got, []string{"a", "b", "c"}) {
 		t.Fatalf("unexpected sorted values: %#v", got)

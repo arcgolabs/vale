@@ -1,7 +1,9 @@
+// Package provider defines Vela snapshot/config provider interfaces and helpers.
 package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -26,7 +28,7 @@ func Fallback(providers ...SnapshotProvider) SnapshotProvider {
 
 func (p *fallbackProvider) Load(ctx context.Context) (*runtime.CompiledSnapshot, error) {
 	if p.providers.IsEmpty() {
-		return nil, fmt.Errorf("fallback provider has no providers")
+		return nil, errors.New("fallback provider has no providers")
 	}
 
 	messages := collectionlist.NewList[string]()
@@ -48,7 +50,7 @@ func (p *fallbackProvider) Load(ctx context.Context) (*runtime.CompiledSnapshot,
 
 func (p *fallbackProvider) Watch(ctx context.Context, onReload func(*runtime.CompiledSnapshot), onError func(error)) (io.Closer, error) {
 	if p.providers.IsEmpty() {
-		return nil, fmt.Errorf("fallback provider has no providers")
+		return nil, errors.New("fallback provider has no providers")
 	}
 	closers := collectionlist.NewListWithCapacity[io.Closer](p.providers.Len())
 	var setupErr error
@@ -57,11 +59,8 @@ func (p *fallbackProvider) Watch(ctx context.Context, onReload func(*runtime.Com
 			onError(fmt.Errorf("provider[%d] watch error: %w", index, err))
 		})
 		if err != nil {
-			closers.Range(func(_ int, c io.Closer) bool {
-				_ = c.Close()
-				return true
-			})
-			setupErr = fmt.Errorf("provider[%d] watch setup failed: %w", index, err)
+			closeErr := MultiCloser(closers.Values()).Close()
+			setupErr = errors.Join(fmt.Errorf("provider[%d] watch setup failed: %w", index, err), closeErr)
 			return false
 		}
 		closers.Add(closer)

@@ -1,8 +1,10 @@
-package provider
+package provider_test
 
 import (
 	"errors"
 	"testing"
+
+	"github.com/arcgolabs/vela/provider"
 )
 
 type testCloser struct {
@@ -11,7 +13,7 @@ type testCloser struct {
 }
 
 func (c testCloser) Close() error {
-	*c.closed = *c.closed + 1
+	*c.closed++
 	return c.err
 }
 
@@ -20,7 +22,7 @@ func TestMultiCloserClose(t *testing.T) {
 	secondErr := errors.New("second")
 	closed := 0
 
-	err := MultiCloser{
+	err := provider.MultiCloser{
 		testCloser{closed: &closed, err: firstErr},
 		nil,
 		testCloser{closed: &closed, err: secondErr},
@@ -37,7 +39,7 @@ func TestMultiCloserClose(t *testing.T) {
 
 func TestNewOnceCloser(t *testing.T) {
 	closed := 0
-	closer := NewOnceCloser(func() {
+	closer := provider.NewOnceCloser(func() {
 		closed++
 	})
 
@@ -53,7 +55,7 @@ func TestNewOnceCloser(t *testing.T) {
 }
 
 func TestNopCloser(t *testing.T) {
-	if err := (NopCloser{}).Close(); err != nil {
+	if err := (provider.NopCloser{}).Close(); err != nil {
 		t.Fatalf("nop closer failed: %v", err)
 	}
 }

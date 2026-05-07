@@ -306,6 +306,10 @@ The default `observabilityx` metrics recorder exposes:
 ### Provider Expansion Notes
 
 - `provider/docker`: optional module, label-driven route/service projection (source pluggable).
+  It accepts native `vela.*` labels and a Traefik-compatible HTTP label subset:
+  `traefik.enable`, `traefik.http.routers.*.rule`, `entrypoints`, `middlewares`,
+  `service`, `traefik.http.services.*.loadbalancer.server.port/scheme`, and
+  `addPrefix`, `stripPrefix`, headers, and buffering middleware labels.
 - `provider/k8s`: optional module, route/endpoint projection from k8s-like source model (source pluggable).
 - both packages include `MemorySource` for local embedding/tests and can be replaced by real API clients later.
 

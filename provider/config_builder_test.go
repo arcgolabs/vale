@@ -1,4 +1,4 @@
-package provider
+package provider_test
 
 import (
 	"net/http"
@@ -8,15 +8,16 @@ import (
 
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vela/provider"
 )
 
 func TestAppendSortedServices(t *testing.T) {
-	cfg := NewEntrypointConfig("web", ":8080")
+	cfg := provider.NewEntrypointConfig("web", ":8080")
 	services := mapping.NewMap[string, *config.Service]()
 	services.Set("b", &config.Service{Name: "b"})
 	services.Set("a", &config.Service{Name: "a"})
 
-	AppendSortedServices(cfg, services)
+	provider.AppendSortedServices(cfg, services)
 
 	got := []string{cfg.Services[0].Name, cfg.Services[1].Name}
 	if !reflect.DeepEqual(got, []string{"a", "b"}) {
@@ -25,12 +26,12 @@ func TestAppendSortedServices(t *testing.T) {
 }
 
 func TestAppendSortedRoutes(t *testing.T) {
-	cfg := NewEntrypointConfig("web", ":8080")
+	cfg := provider.NewEntrypointConfig("web", ":8080")
 	routes := mapping.NewMap[string, config.Route]()
 	routes.Set("b", config.Route{Name: "b"})
 	routes.Set("a", config.Route{Name: "a"})
 
-	AppendSortedRoutes(cfg, routes)
+	provider.AppendSortedRoutes(cfg, routes)
 
 	got := []string{cfg.Routes[0].Name, cfg.Routes[1].Name}
 	if !reflect.DeepEqual(got, []string{"a", "b"}) {
@@ -41,27 +42,27 @@ func TestAppendSortedRoutes(t *testing.T) {
 func TestConfigBuilderFluentAPI(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := NewConfigBuilder().
+	cfg, err := provider.NewConfigBuilder().
 		Entrypoint("websecure", ":8443",
-			EntrypointTLS("cert.pem", "key.pem"),
-			EntrypointACME("ops@example.com", "", "example.com"),
+			provider.EntrypointTLS("cert.pem", "key.pem"),
+			provider.EntrypointACME("ops@example.com", "", "example.com"),
 		).
 		ServiceWithStrategy("api", "weighted_round_robin",
-			ConfigEndpoint("http://127.0.0.1:8081", 2),
-			ConfigEndpoint("http://127.0.0.1:8082", 1),
+			provider.ConfigEndpoint("http://127.0.0.1:8081", 2),
+			provider.ConfigEndpoint("http://127.0.0.1:8082", 1),
 		).
 		MiddlewareNamed("strip-api",
-			MiddlewareStripPrefix("/api"),
-			MiddlewareRequestHeader("X-Test", "ok"),
-			MiddlewareResponseHeader("X-Response", "set"),
-			MiddlewareMaxBodyBytes(1024),
+			provider.MiddlewareStripPrefix("/api"),
+			provider.MiddlewareRequestHeader("X-Test", "ok"),
+			provider.MiddlewareResponseHeader("X-Response", "set"),
+			provider.MiddlewareMaxBodyBytes(1024),
 		).
 		RouteTo("api", "websecure", "api",
-			RouteHost("api.example.com"),
-			RoutePathPrefix("/api"),
-			RouteMethod(http.MethodGet),
-			RouteHeader("X-Env", "test"),
-			RouteMiddlewares("strip-api"),
+			provider.RouteHost("api.example.com"),
+			provider.RoutePathPrefix("/api"),
+			provider.RouteMethod(http.MethodGet),
+			provider.RouteHeader("X-Env", "test"),
+			provider.RouteMiddlewares("strip-api"),
 		).
 		Admin(":19090").
 		Observability(true, true).
@@ -87,9 +88,9 @@ func TestConfigBuilderFluentAPI(t *testing.T) {
 func TestConfigBuilderBuildValidatedReturnsAccumulatedErrors(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewConfigBuilder().
+	_, err := provider.NewConfigBuilder().
 		Entrypoint("", "").
-		ServiceWithStrategy("api", "random", ConfigEndpoint("not-a-url", 1)).
+		ServiceWithStrategy("api", "random", provider.ConfigEndpoint("not-a-url", 1)).
 		RouteTo("api", "web", "api").
 		BuildValidated()
 	if err == nil {
