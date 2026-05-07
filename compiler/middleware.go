@@ -49,7 +49,124 @@ func compileMiddleware(middleware *config.Middleware) (runtime.MiddlewareRuntime
 		ResponseHeaders:        normalizeHeaders(middleware.ResponseHeaders),
 		MaxBodyBytes:           middleware.MaxBodyBytes,
 		Chain:                  cleanStringList(middleware.Chain),
+		Secure:                 compileSecureMiddleware(middleware.Secure),
+		CORS:                   compileCORSMiddleware(middleware.CORS),
+		RateLimit:              compileRateLimit(middleware.RateLimit),
+		CircuitBreaker:         compileCircuitBreaker(middleware.CircuitBreaker),
 	}, nil
+}
+
+func compileSecureMiddleware(secure *config.SecureMiddleware) runtime.SecureMiddlewareRuntime {
+	if secure == nil {
+		return runtime.SecureMiddlewareRuntime{}
+	}
+	return runtime.SecureMiddlewareRuntime{
+		Enabled:                         secure.Enabled || hasSecureMiddlewareOptions(secure),
+		AllowedHosts:                    cleanStringList(secure.AllowedHosts),
+		AllowedHostsAreRegex:            secure.AllowedHostsAreRegex,
+		SSLRedirect:                     secure.SSLRedirect,
+		SSLHost:                         strings.TrimSpace(secure.SSLHost),
+		SSLTemporaryRedirect:            secure.SSLTemporaryRedirect,
+		STSSeconds:                      secure.STSSeconds,
+		STSIncludeSubdomains:            secure.STSIncludeSubdomains,
+		STSPreload:                      secure.STSPreload,
+		FrameDeny:                       secure.FrameDeny,
+		ContentTypeNosniff:              secure.ContentTypeNosniff,
+		BrowserXSSFilter:                secure.BrowserXSSFilter,
+		ContentSecurityPolicy:           strings.TrimSpace(secure.ContentSecurityPolicy),
+		ContentSecurityPolicyReportOnly: strings.TrimSpace(secure.ContentSecurityPolicyReportOnly),
+		ReferrerPolicy:                  strings.TrimSpace(secure.ReferrerPolicy),
+		PermissionsPolicy:               strings.TrimSpace(secure.PermissionsPolicy),
+	}
+}
+
+func hasSecureMiddlewareOptions(secure *config.SecureMiddleware) bool {
+	return hasAnyTrue(collectionlist.NewList(
+		len(secure.AllowedHosts) > 0,
+		secure.AllowedHostsAreRegex,
+		secure.SSLRedirect,
+		strings.TrimSpace(secure.SSLHost) != "",
+		secure.SSLTemporaryRedirect,
+		secure.STSSeconds > 0,
+		secure.STSIncludeSubdomains,
+		secure.STSPreload,
+		secure.FrameDeny,
+		secure.ContentTypeNosniff,
+		secure.BrowserXSSFilter,
+		strings.TrimSpace(secure.ContentSecurityPolicy) != "",
+		strings.TrimSpace(secure.ContentSecurityPolicyReportOnly) != "",
+		strings.TrimSpace(secure.ReferrerPolicy) != "",
+		strings.TrimSpace(secure.PermissionsPolicy) != "",
+	))
+}
+
+func compileCORSMiddleware(cors *config.CORSMiddleware) runtime.CORSMiddlewareRuntime {
+	if cors == nil {
+		return runtime.CORSMiddlewareRuntime{}
+	}
+	return runtime.CORSMiddlewareRuntime{
+		Enabled:              cors.Enabled || hasCORSMiddlewareOptions(cors),
+		AllowedOrigins:       cleanStringList(cors.AllowedOrigins),
+		AllowedMethods:       cleanStringList(cors.AllowedMethods),
+		AllowedHeaders:       cleanStringList(cors.AllowedHeaders),
+		ExposedHeaders:       cleanStringList(cors.ExposedHeaders),
+		MaxAge:               cors.MaxAge,
+		AllowCredentials:     cors.AllowCredentials,
+		AllowPrivateNetwork:  cors.AllowPrivateNetwork,
+		OptionsPassthrough:   cors.OptionsPassthrough,
+		OptionsSuccessStatus: cors.OptionsSuccessStatus,
+	}
+}
+
+func hasCORSMiddlewareOptions(cors *config.CORSMiddleware) bool {
+	return hasAnyTrue(collectionlist.NewList(
+		len(cors.AllowedOrigins) > 0,
+		len(cors.AllowedMethods) > 0,
+		len(cors.AllowedHeaders) > 0,
+		len(cors.ExposedHeaders) > 0,
+		cors.MaxAge != 0,
+		cors.AllowCredentials,
+		cors.AllowPrivateNetwork,
+		cors.OptionsPassthrough,
+		cors.OptionsSuccessStatus != 0,
+	))
+}
+
+func compileRateLimit(rateLimit *config.RateLimit) runtime.RateLimitRuntime {
+	if rateLimit == nil {
+		return runtime.RateLimitRuntime{}
+	}
+	burst := rateLimit.Burst
+	if burst <= 0 && rateLimit.Rate > 0 {
+		burst = 1
+	}
+	return runtime.RateLimitRuntime{
+		Enabled: rateLimit.Enabled || rateLimit.Rate > 0 || burst > 0,
+		Rate:    rateLimit.Rate,
+		Burst:   burst,
+	}
+}
+
+func compileCircuitBreaker(circuitBreaker *config.CircuitBreaker) runtime.CircuitBreakerRuntime {
+	if circuitBreaker == nil {
+		return runtime.CircuitBreakerRuntime{}
+	}
+	return runtime.CircuitBreakerRuntime{
+		Enabled:          circuitBreaker.Enabled || hasCircuitBreakerOptions(circuitBreaker),
+		MaxRequests:      circuitBreaker.MaxRequests,
+		Interval:         strings.TrimSpace(circuitBreaker.Interval),
+		Timeout:          strings.TrimSpace(circuitBreaker.Timeout),
+		FailureThreshold: circuitBreaker.FailureThreshold,
+	}
+}
+
+func hasCircuitBreakerOptions(circuitBreaker *config.CircuitBreaker) bool {
+	return hasAnyTrue(collectionlist.NewList(
+		circuitBreaker.MaxRequests > 0,
+		strings.TrimSpace(circuitBreaker.Interval) != "",
+		strings.TrimSpace(circuitBreaker.Timeout) != "",
+		circuitBreaker.FailureThreshold > 0,
+	))
 }
 
 func compileRouteMiddlewares(names []string, middlewares *mapping.Map[string, runtime.MiddlewareRuntime]) *collectionlist.List[runtime.MiddlewareRuntime] {
@@ -117,4 +234,13 @@ func cleanStringList(values []string) *collectionlist.List[string] {
 		}
 	}
 	return cleaned
+}
+
+func hasAnyTrue(values *collectionlist.List[bool]) bool {
+	matched := false
+	values.Range(func(_ int, value bool) bool {
+		matched = value
+		return !matched
+	})
+	return matched
 }

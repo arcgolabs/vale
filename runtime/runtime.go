@@ -87,6 +87,56 @@ type MiddlewareRuntime struct {
 	ResponseHeaders        *mapping.Map[string, string]
 	MaxBodyBytes           int64
 	Chain                  *collectionlist.List[string]
+	Secure                 SecureMiddlewareRuntime
+	CORS                   CORSMiddlewareRuntime
+	RateLimit              RateLimitRuntime
+	CircuitBreaker         CircuitBreakerRuntime
+}
+
+type SecureMiddlewareRuntime struct {
+	Enabled                         bool
+	AllowedHosts                    *collectionlist.List[string]
+	AllowedHostsAreRegex            bool
+	SSLRedirect                     bool
+	SSLHost                         string
+	SSLTemporaryRedirect            bool
+	STSSeconds                      int64
+	STSIncludeSubdomains            bool
+	STSPreload                      bool
+	FrameDeny                       bool
+	ContentTypeNosniff              bool
+	BrowserXSSFilter                bool
+	ContentSecurityPolicy           string
+	ContentSecurityPolicyReportOnly string
+	ReferrerPolicy                  string
+	PermissionsPolicy               string
+}
+
+type CORSMiddlewareRuntime struct {
+	Enabled              bool
+	AllowedOrigins       *collectionlist.List[string]
+	AllowedMethods       *collectionlist.List[string]
+	AllowedHeaders       *collectionlist.List[string]
+	ExposedHeaders       *collectionlist.List[string]
+	MaxAge               int
+	AllowCredentials     bool
+	AllowPrivateNetwork  bool
+	OptionsPassthrough   bool
+	OptionsSuccessStatus int
+}
+
+type RateLimitRuntime struct {
+	Enabled bool
+	Rate    float64
+	Burst   int
+}
+
+type CircuitBreakerRuntime struct {
+	Enabled          bool
+	MaxRequests      uint32
+	Interval         string
+	Timeout          string
+	FailureThreshold uint32
 }
 
 type ServiceRuntime struct {

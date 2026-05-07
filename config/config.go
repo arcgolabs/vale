@@ -71,6 +71,56 @@ type Middleware struct {
 	ResponseHeaders        map[string]string `hcl:"response_headers,optional"`
 	MaxBodyBytes           int64             `hcl:"max_body_bytes,optional"`
 	Chain                  []string          `hcl:"chain,optional"`
+	Secure                 *SecureMiddleware `hcl:"secure,block"`
+	CORS                   *CORSMiddleware   `hcl:"cors,block"`
+	RateLimit              *RateLimit        `hcl:"rate_limit,block"`
+	CircuitBreaker         *CircuitBreaker   `hcl:"circuit_breaker,block"`
+}
+
+type SecureMiddleware struct {
+	Enabled                         bool     `hcl:"enabled,optional"`
+	AllowedHosts                    []string `hcl:"allowed_hosts,optional"`
+	AllowedHostsAreRegex            bool     `hcl:"allowed_hosts_are_regex,optional"`
+	SSLRedirect                     bool     `hcl:"ssl_redirect,optional"`
+	SSLHost                         string   `hcl:"ssl_host,optional"`
+	SSLTemporaryRedirect            bool     `hcl:"ssl_temporary_redirect,optional"`
+	STSSeconds                      int64    `hcl:"sts_seconds,optional"`
+	STSIncludeSubdomains            bool     `hcl:"sts_include_subdomains,optional"`
+	STSPreload                      bool     `hcl:"sts_preload,optional"`
+	FrameDeny                       bool     `hcl:"frame_deny,optional"`
+	ContentTypeNosniff              bool     `hcl:"content_type_nosniff,optional"`
+	BrowserXSSFilter                bool     `hcl:"browser_xss_filter,optional"`
+	ContentSecurityPolicy           string   `hcl:"content_security_policy,optional"`
+	ContentSecurityPolicyReportOnly string   `hcl:"content_security_policy_report_only,optional"`
+	ReferrerPolicy                  string   `hcl:"referrer_policy,optional"`
+	PermissionsPolicy               string   `hcl:"permissions_policy,optional"`
+}
+
+type CORSMiddleware struct {
+	Enabled              bool     `hcl:"enabled,optional"`
+	AllowedOrigins       []string `hcl:"allowed_origins,optional"`
+	AllowedMethods       []string `hcl:"allowed_methods,optional"`
+	AllowedHeaders       []string `hcl:"allowed_headers,optional"`
+	ExposedHeaders       []string `hcl:"exposed_headers,optional"`
+	MaxAge               int      `hcl:"max_age,optional"`
+	AllowCredentials     bool     `hcl:"allow_credentials,optional"`
+	AllowPrivateNetwork  bool     `hcl:"allow_private_network,optional"`
+	OptionsPassthrough   bool     `hcl:"options_passthrough,optional"`
+	OptionsSuccessStatus int      `hcl:"options_success_status,optional"`
+}
+
+type RateLimit struct {
+	Enabled bool    `hcl:"enabled,optional"`
+	Rate    float64 `hcl:"rate,optional"`
+	Burst   int     `hcl:"burst,optional"`
+}
+
+type CircuitBreaker struct {
+	Enabled          bool   `hcl:"enabled,optional"`
+	MaxRequests      uint32 `hcl:"max_requests,optional"`
+	Interval         string `hcl:"interval,optional"`
+	Timeout          string `hcl:"timeout,optional"`
+	FailureThreshold uint32 `hcl:"failure_threshold,optional"`
 }
 
 type Admin struct {

@@ -95,7 +95,7 @@ func WrapMiddlewaresWithRegistry(handler http.Handler, middlewares *collectionli
 func wrapBuiltinMiddleware(next http.Handler, middleware MiddlewareRuntime) http.Handler {
 	replacePathRegex := compileMiddlewareRegex(middleware.ReplacePathRegex)
 	redirectRegex := compileMiddlewareRegex(middleware.RedirectRegex)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if middleware.MaxBodyBytes > 0 {
 			r.Body = http.MaxBytesReader(w, r.Body, middleware.MaxBodyBytes)
 		}
@@ -107,7 +107,12 @@ func wrapBuiltinMiddleware(next http.Handler, middleware MiddlewareRuntime) http
 		}
 		applyHeaders(w.Header(), middleware.ResponseHeaders)
 		next.ServeHTTP(w, r)
-	})
+	}))
+	handler = wrapCircuitBreakerMiddleware(handler, middleware)
+	handler = wrapRateLimitMiddleware(handler, middleware)
+	handler = wrapCORSMiddleware(handler, middleware)
+	handler = wrapSecureMiddleware(handler, middleware)
+	return handler
 }
 
 func applyPathMiddleware(r *http.Request, middleware MiddlewareRuntime, replacePathRegex *regexp.Regexp) {

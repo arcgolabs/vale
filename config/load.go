@@ -132,11 +132,8 @@ func validateMiddlewares(middlewares []Middleware) (*collectionset.Set[string], 
 	middlewareSet := collectionset.NewSetWithCapacity[string](len(middlewares))
 	for index := range middlewares {
 		middleware := &middlewares[index]
-		if middleware.Name == "" {
-			return nil, errors.New("middleware name cannot be empty")
-		}
-		if middlewareSet.Contains(middleware.Name) {
-			return nil, fmt.Errorf("duplicated middleware %q", middleware.Name)
+		if err := validateMiddleware(middleware, middlewareSet); err != nil {
+			return nil, err
 		}
 		middlewareSet.Add(middleware.Name)
 	}

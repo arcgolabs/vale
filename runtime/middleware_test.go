@@ -170,3 +170,116 @@ func TestMiddlewareRegistryCloneKeepsFactoriesIsolated(t *testing.T) {
 		t.Fatalf("clone names = %v, want [mark other]", names)
 	}
 }
+
+func TestBuiltinMiddlewareAppliesSecureHeaders(t *testing.T) {
+	t.Parallel()
+
+	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
+		velaruntime.MiddlewareRuntime{
+			Secure: velaruntime.SecureMiddlewareRuntime{Enabled: true},
+		},
+	))
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/", http.NoBody))
+
+	if rec.Header().Get("X-Frame-Options") != "DENY" {
+		t.Fatalf("X-Frame-Options = %q, want DENY", rec.Header().Get("X-Frame-Options"))
+	}
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", rec.Header().Get("X-Content-Type-Options"))
+	}
+}
+
+func TestBuiltinMiddlewareAppliesCORS(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		called = true
+	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
+		velaruntime.MiddlewareRuntime{
+			CORS: velaruntime.CORSMiddlewareRuntime{
+				Enabled:        true,
+				AllowedOrigins: collectionlist.NewList("https://ui.example.com"),
+				AllowedMethods: collectionlist.NewList(http.MethodGet),
+				AllowedHeaders: collectionlist.NewList("X-Tenant"),
+			},
+		},
+	))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodOptions, "http://api.example.com/", http.NoBody)
+	req.Header.Set("Origin", "https://ui.example.com")
+	req.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	req.Header.Set("Access-Control-Request-Headers", "x-tenant")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if called {
+		t.Fatal("handler was called for CORS preflight")
+	}
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://ui.example.com" {
+		t.Fatalf("Access-Control-Allow-Origin = %q", got)
+	}
+}
+
+func TestBuiltinMiddlewareRateLimits(t *testing.T) {
+	t.Parallel()
+
+	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
+		velaruntime.MiddlewareRuntime{
+			RateLimit: velaruntime.RateLimitRuntime{
+				Enabled: true,
+				Rate:    1,
+				Burst:   1,
+			},
+		},
+	))
+
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/", http.NoBody))
+	if first.Code != http.StatusNoContent {
+		t.Fatalf("first status = %d, want %d", first.Code, http.StatusNoContent)
+	}
+
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/", http.NoBody))
+	if second.Code != http.StatusTooManyRequests {
+		t.Fatalf("second status = %d, want %d", second.Code, http.StatusTooManyRequests)
+	}
+}
+
+func TestBuiltinMiddlewareCircuitBreakerRejectsAfterFailures(t *testing.T) {
+	t.Parallel()
+
+	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "upstream failed", http.StatusBadGateway)
+	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
+		velaruntime.MiddlewareRuntime{
+			Name: "breaker",
+			CircuitBreaker: velaruntime.CircuitBreakerRuntime{
+				Enabled:          true,
+				FailureThreshold: 1,
+			},
+		},
+	))
+
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/", http.NoBody))
+	if first.Code != http.StatusBadGateway {
+		t.Fatalf("first status = %d, want %d", first.Code, http.StatusBadGateway)
+	}
+
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/", http.NoBody))
+	if second.Code != http.StatusServiceUnavailable {
+		t.Fatalf("second status = %d, want %d", second.Code, http.StatusServiceUnavailable)
+	}
+}
