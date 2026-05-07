@@ -146,3 +146,27 @@ func TestMiddlewareRegistryUsesCustomFactory(t *testing.T) {
 
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/", http.NoBody))
 }
+
+func TestMiddlewareRegistryCloneKeepsFactoriesIsolated(t *testing.T) {
+	t.Parallel()
+
+	registry := velaruntime.NewMiddlewareRegistry()
+	if err := registry.Register("mark", func(next http.Handler, _ velaruntime.MiddlewareRuntime) http.Handler {
+		return next
+	}); err != nil {
+		t.Fatal(err)
+	}
+	clone := registry.Clone()
+	if err := clone.Register("other", func(next http.Handler, _ velaruntime.MiddlewareRuntime) http.Handler {
+		return next
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := registry.Factory("other"); ok {
+		t.Fatal("original registry saw clone factory")
+	}
+	if names := clone.Names().Values(); len(names) != 2 || names[0] != "mark" || names[1] != "other" {
+		t.Fatalf("clone names = %v, want [mark other]", names)
+	}
+}

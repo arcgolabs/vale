@@ -49,6 +49,27 @@ func (r *MiddlewareRegistry) Register(middlewareType string, factory MiddlewareF
 	return nil
 }
 
+func (r *MiddlewareRegistry) Factory(middlewareType string) (MiddlewareFactory, bool) {
+	if r == nil || r.factories == nil {
+		return nil, false
+	}
+	return r.factories.Get(normalizeMiddlewareType(middlewareType))
+}
+
+func (r *MiddlewareRegistry) Names() *collectionlist.List[string] {
+	if r == nil || r.factories == nil {
+		return collectionlist.NewList[string]()
+	}
+	return collectionlist.NewList(r.factories.Keys()...).Sort(strings.Compare)
+}
+
+func (r *MiddlewareRegistry) Clone() *MiddlewareRegistry {
+	if r == nil || r.factories == nil {
+		return NewMiddlewareRegistry()
+	}
+	return &MiddlewareRegistry{factories: r.factories.Clone()}
+}
+
 func WrapMiddlewares(handler http.Handler, middlewares *collectionlist.List[MiddlewareRuntime]) http.Handler {
 	return WrapMiddlewaresWithRegistry(handler, middlewares, nil)
 }
@@ -59,9 +80,9 @@ func WrapMiddlewaresWithRegistry(handler http.Handler, middlewares *collectionli
 	}
 	for index := middlewares.Len() - 1; index >= 0; index-- {
 		middleware, _ := middlewares.Get(index)
-		factory, ok := registry.factories.Get(normalizeMiddlewareType(middleware.Type))
+		factory, ok := registry.Factory(middleware.Type)
 		if !ok {
-			factory, _ = registry.factories.Get(MiddlewareTypeBuiltin)
+			factory, _ = registry.Factory(MiddlewareTypeBuiltin)
 		}
 		if factory == nil {
 			continue
