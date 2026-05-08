@@ -1,9 +1,9 @@
-// Package vela is the library-first entrypoint for embedding Vela.
+// Package vale is the library-first entrypoint for embedding Vale.
 //
 // The root package intentionally exposes process-independent construction APIs.
-// The standalone velad binary wires the same components with dix/configx/logx
+// The standalone valed binary wires the same components with dix/configx/logx
 // under cmd/.
-package vela
+package vale
 
 import (
 	"log/slog"
@@ -33,15 +33,15 @@ func New(options ...Option) (*Gateway, error) {
 		}
 		if err := option(&cfg); err != nil {
 			return nil, oops.
-				In("vela").
-				Wrapf(err, "apply vela option")
+				In("vale").
+				Wrapf(err, "apply vale option")
 		}
 	}
 	applyDefaultConfigSource(&cfg)
 	gw, err := gateway.NewFromConfig(cfg)
 	if err != nil {
 		return nil, oops.
-			In("vela").
+			In("vale").
 			Wrapf(err, "create gateway")
 	}
 	return gw, nil
@@ -52,7 +52,7 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 	gw, err := gateway.NewFromConfig(cfg)
 	if err != nil {
 		return nil, oops.
-			In("vela").
+			In("vale").
 			Wrapf(err, "create gateway from config")
 	}
 	return gw, nil

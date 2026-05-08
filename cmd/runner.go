@@ -16,16 +16,16 @@ import (
 
 const defaultShutdownTimeout = 10 * time.Second
 
-type veladRunner struct {
-	gateway         *vela.Gateway
+type valedRunner struct {
+	gateway         *vale.Gateway
 	logger          *slog.Logger
 	bus             eventx.BusRuntime
 	shutdownTimeout time.Duration
 	signals         chan os.Signal
 }
 
-func provideRunner(gateway *vela.Gateway, logger *slog.Logger, bus eventx.BusRuntime) *veladRunner {
-	return &veladRunner{
+func provideRunner(gateway *vale.Gateway, logger *slog.Logger, bus eventx.BusRuntime) *valedRunner {
+	return &valedRunner{
 		gateway:         gateway,
 		logger:          logger,
 		bus:             bus,
@@ -34,13 +34,13 @@ func provideRunner(gateway *vela.Gateway, logger *slog.Logger, bus eventx.BusRun
 	}
 }
 
-func (r *veladRunner) Run() error {
+func (r *valedRunner) Run() error {
 	if err := r.gateway.Start(context.Background()); err != nil {
 		return oops.
 			In("cmd").
-			Wrapf(err, "start velad")
+			Wrapf(err, "start valed")
 	}
-	r.logger.Info("velad started")
+	r.logger.Info("valed started")
 
 	signal.Notify(r.signals, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-r.signals
@@ -49,7 +49,7 @@ func (r *veladRunner) Run() error {
 
 	r.stopGateway()
 	r.closeEventBus()
-	r.logger.Info("velad stopped")
+	r.logger.Info("valed stopped")
 	if err := logx.Close(r.logger); err != nil {
 		return oops.
 			In("cmd").
@@ -58,7 +58,7 @@ func (r *veladRunner) Run() error {
 	return nil
 }
 
-func (r *veladRunner) stopGateway() {
+func (r *valedRunner) stopGateway() {
 	ctx, cancel := context.WithTimeout(context.Background(), r.shutdownTimeout)
 	defer cancel()
 	if err := r.gateway.Stop(ctx); err != nil {
@@ -66,7 +66,7 @@ func (r *veladRunner) stopGateway() {
 	}
 }
 
-func (r *veladRunner) closeEventBus() {
+func (r *valedRunner) closeEventBus() {
 	if r.bus == nil {
 		return
 	}

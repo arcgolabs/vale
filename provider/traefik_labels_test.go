@@ -21,7 +21,7 @@ func TestParseTraefikLabelsProjectsHTTPResources(t *testing.T) {
 		"traefik.http.services.api-svc.loadbalancer.server.scheme":                    "https",
 		"traefik.http.middlewares.strip.stripprefix.prefixes":                         "/api,/v1",
 		"traefik.http.middlewares.headers.headers.customrequestheaders.x-request-id":  "from-label",
-		"traefik.http.middlewares.headers.headers.customresponseheaders.x-powered-by": "vela",
+		"traefik.http.middlewares.headers.headers.customresponseheaders.x-powered-by": "vale",
 		"traefik.http.middlewares.rewrite.replacepathregex.regex":                     "^/old/(.*)$",
 		"traefik.http.middlewares.rewrite.replacepathregex.replacement":               "/new/${1}",
 		"traefik.http.middlewares.redirect.redirectscheme.scheme":                     "https",
@@ -94,7 +94,7 @@ func assertTraefikStripMiddleware(t *testing.T, labels provider.TraefikLabels) {
 func assertTraefikHeaderMiddleware(t *testing.T, labels provider.TraefikLabels) {
 	t.Helper()
 	middleware, _ := labels.Middlewares.Get("headers")
-	if middleware.RequestHeaders["x-request-id"] != "from-label" || middleware.ResponseHeaders["x-powered-by"] != "vela" {
+	if middleware.RequestHeaders["x-request-id"] != "from-label" || middleware.ResponseHeaders["x-powered-by"] != "vale" {
 		t.Fatalf("headers = %#v", middleware)
 	}
 }

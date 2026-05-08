@@ -56,35 +56,35 @@ func (r *configBuildResult) addContainer(container Container, options Options) {
 		applyTraefikContainerConfig(r.ServiceMap, r.RouteMap, r.MiddlewareMap, container, options, traefikLabels)
 		return
 	}
-	r.addVelaContainer(container, options)
+	r.addValeContainer(container, options)
 }
 
-func (r *configBuildResult) addVelaContainer(container Container, options Options) {
+func (r *configBuildResult) addValeContainer(container Container, options Options) {
 	labels := container.Labels
-	serviceName := valueOr(labelValue(labels, "vela.service"), sanitizeName(container.Name, "service"))
-	routeName := valueOr(labelValue(labels, "vela.route"), serviceName+"-route")
-	routeMiddlewares := provider.SplitCSV(labelValue(labels, "vela.middlewares"))
+	serviceName := valueOr(labelValue(labels, "vale.service"), sanitizeName(container.Name, "service"))
+	routeName := valueOr(labelValue(labels, "vale.route"), serviceName+"-route")
+	routeMiddlewares := provider.SplitCSV(labelValue(labels, "vale.middlewares"))
 	if middleware, ok := middlewareFromLabels(routeName+"-middleware", labels); ok {
 		r.MiddlewareMap.Set(middleware.Name, middleware)
 		routeMiddlewares.Add(middleware.Name)
 	}
-	r.addVelaServiceEndpoint(container, serviceName)
+	r.addValeServiceEndpoint(container, serviceName)
 	if _, exists := r.RouteMap.Get(routeName); exists {
 		return
 	}
 	r.RouteMap.Set(routeName, config.Route{
 		Name:        routeName,
-		Entrypoint:  valueOr(labelValue(labels, "vela.entrypoint"), options.DefaultEntrypointName),
+		Entrypoint:  valueOr(labelValue(labels, "vale.entrypoint"), options.DefaultEntrypointName),
 		Service:     serviceName,
-		Host:        strings.TrimSpace(labelValue(labels, "vela.rule.host")),
-		PathPrefix:  strings.TrimSpace(labelValue(labels, "vela.rule.pathprefix")),
-		Method:      strings.TrimSpace(labelValue(labels, "vela.rule.method")),
+		Host:        strings.TrimSpace(labelValue(labels, "vale.rule.host")),
+		PathPrefix:  strings.TrimSpace(labelValue(labels, "vale.rule.pathprefix")),
+		Method:      strings.TrimSpace(labelValue(labels, "vale.rule.method")),
 		Headers:     map[string]string{},
 		Middlewares: routeMiddlewares.Values(),
 	})
 }
 
-func (r *configBuildResult) addVelaServiceEndpoint(container Container, serviceName string) {
+func (r *configBuildResult) addValeServiceEndpoint(container Container, serviceName string) {
 	labels := container.Labels
 	service, _ := r.ServiceMap.GetOrCompute(serviceName, func() *config.Service {
 		return &config.Service{
@@ -94,7 +94,7 @@ func (r *configBuildResult) addVelaServiceEndpoint(container Container, serviceN
 		}
 	})
 	service.Endpoints = append(service.Endpoints, config.Endpoint{
-		URL:    fmt.Sprintf("%s://%s:%d", valueOr(labelValue(labels, "vela.scheme"), "http"), container.Address, container.Port),
-		Weight: parseInt(labelValue(labels, "vela.weight"), 1),
+		URL:    fmt.Sprintf("%s://%s:%d", valueOr(labelValue(labels, "vale.scheme"), "http"), container.Address, container.Port),
+		Weight: parseInt(labelValue(labels, "vale.weight"), 1),
 	})
 }

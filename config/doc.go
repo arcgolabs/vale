@@ -1,2 +1,2 @@
-// Package config contains Vela's declarative gateway configuration model.
+// Package config contains Vale's declarative gateway configuration model.
 package config

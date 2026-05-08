@@ -1,4 +1,4 @@
-// Standalone velad process: dix assembly, configx, Cobra, and runtime loop live here;
+// Standalone valed process: dix assembly, configx, Cobra, and runtime loop live here;
 // main.go only prints errors and sets the exit code.
 package main
 
@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// veladConfig is the standalone process bootstrap shape (env VELA_*, defaults, changed CLI flags).
-type veladConfig struct {
+// valedConfig is the standalone process bootstrap shape (env VALE_*, defaults, changed CLI flags).
+type valedConfig struct {
 	ConfigPath  string `koanf:"config"`
 	ConfigFiles string `koanf:"config_files"`
 	Watch       bool   `koanf:"watch"`
@@ -25,13 +25,13 @@ type veladConfig struct {
 	RaftBoot    bool   `koanf:"raft_bootstrap"`
 }
 
-// veladStandaloneApp is the sole DI assembly entry for this process.
-func veladStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
-	return dix.NewApp("velad", dix.NewModule(
-		"velad",
+// valedStandaloneApp is the sole DI assembly entry for this process.
+func valedStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
+	return dix.NewApp("valed", dix.NewModule(
+		"valed",
 		dix.Providers(
 			dix.Value(cliFlags),
-			dix.ProviderErr1(provideVeladConfig),
+			dix.ProviderErr1(provideValedConfig),
 			dix.ProviderErr1(provideLogger),
 			dix.Provider0(provideEventBus),
 			dix.ProviderErr0(providePluginRegistry),
@@ -47,11 +47,11 @@ func veladStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
 	))
 }
 
-func provideVeladConfig(fs *pflag.FlagSet) (veladConfig, error) {
-	def := defaultVeladConfig()
-	cfg, err := configx.LoadTErr[veladConfig](
+func provideValedConfig(fs *pflag.FlagSet) (valedConfig, error) {
+	def := defaultValedConfig()
+	cfg, err := configx.LoadTErr[valedConfig](
 		configx.WithTypedDefaults(def),
-		configx.WithEnvPrefix("VELA"),
+		configx.WithEnvPrefix("VALE"),
 		configx.WithEnvSeparator("_"),
 		configx.WithFlagSet(fs),
 		configx.WithArgsNameFunc(cliFlagKoanfPath),
@@ -62,8 +62,8 @@ func provideVeladConfig(fs *pflag.FlagSet) (veladConfig, error) {
 	return cfg, nil
 }
 
-func defaultVeladConfig() veladConfig {
-	return veladConfig{
+func defaultValedConfig() valedConfig {
+	return valedConfig{
 		ConfigPath:  "",
 		ConfigFiles: "",
 		Watch:       true,

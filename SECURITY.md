@@ -30,10 +30,10 @@ Maintainers should acknowledge reports before discussing fixes publicly.
 
 ## Security Defaults
 
-Vela's current secure defaults include:
+Vale's current secure defaults include:
 
 - TLS listeners use Go's secure TLS defaults with minimum TLS 1.2.
 - ACME requires explicit domains and email.
-- ACME defaults its cache directory to `.vela/acme` when omitted.
+- ACME defaults its cache directory to `.vale/acme` when omitted.
 - The built-in default runtime enables bounded header and body settings.
 - Unknown middleware types fail compilation instead of being ignored.

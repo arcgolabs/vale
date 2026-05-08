@@ -7,11 +7,11 @@ import (
 	"github.com/arcgolabs/collectionx/mapping"
 	collectionset "github.com/arcgolabs/collectionx/set"
 	"github.com/arcgolabs/vale/config"
-	velaprovider "github.com/arcgolabs/vale/provider"
+	valeprovider "github.com/arcgolabs/vale/provider"
 )
 
-func labelsEnabled(labels *mapping.Map[string, string], traefikLabels velaprovider.TraefikLabels) bool {
-	return traefikLabels.Enabled.OrElse(parseBool(labelValue(labels, "vela.enable"), false) || traefikLabels.HasHTTPConfig())
+func labelsEnabled(labels *mapping.Map[string, string], traefikLabels valeprovider.TraefikLabels) bool {
+	return traefikLabels.Enabled.OrElse(parseBool(labelValue(labels, "vale.enable"), false) || traefikLabels.HasHTTPConfig())
 }
 
 func applyTraefikContainerConfig(
@@ -20,10 +20,10 @@ func applyTraefikContainerConfig(
 	middlewares *mapping.Map[string, config.Middleware],
 	container Container,
 	options Options,
-	traefikLabels velaprovider.TraefikLabels,
+	traefikLabels valeprovider.TraefikLabels,
 ) {
 	addedServices := collectionset.NewSet[string]()
-	traefikLabels.Services.Range(func(serviceName string, service velaprovider.TraefikService) bool {
+	traefikLabels.Services.Range(func(serviceName string, service valeprovider.TraefikService) bool {
 		addTraefikServiceEndpoint(services, addedServices, container, serviceName, service)
 		return true
 	})
@@ -35,7 +35,7 @@ func applyTraefikContainerConfig(
 		addDefaultTraefikRoute(routes, container, options, traefikLabels)
 		return
 	}
-	traefikLabels.Routers.Range(func(routerName string, router velaprovider.TraefikRouter) bool {
+	traefikLabels.Routers.Range(func(routerName string, router valeprovider.TraefikRouter) bool {
 		serviceName := traefikRouterServiceName(container, router, traefikLabels)
 		service, _ := traefikLabels.Services.Get(serviceName)
 		addTraefikServiceEndpoint(services, addedServices, container, serviceName, service)
@@ -49,7 +49,7 @@ func addTraefikServiceEndpoint(
 	added *collectionset.Set[string],
 	container Container,
 	serviceName string,
-	traefikService velaprovider.TraefikService,
+	traefikService valeprovider.TraefikService,
 ) {
 	if added.Contains(serviceName) {
 		return
@@ -76,7 +76,7 @@ func addDefaultTraefikRoute(
 	routes *mapping.Map[string, config.Route],
 	container Container,
 	options Options,
-	traefikLabels velaprovider.TraefikLabels,
+	traefikLabels valeprovider.TraefikLabels,
 ) {
 	serviceName := defaultTraefikServiceName(container, traefikLabels)
 	routeName := sanitizeName(container.Name, "container") + "-route"
@@ -95,7 +95,7 @@ func addDefaultTraefikRoute(
 func addTraefikRouterRoutes(
 	routes *mapping.Map[string, config.Route],
 	routerName string,
-	router velaprovider.TraefikRouter,
+	router valeprovider.TraefikRouter,
 	serviceName string,
 	options Options,
 ) {
@@ -122,22 +122,22 @@ func addTraefikRouterRoutes(
 	})
 }
 
-func traefikRouterServiceName(container Container, router velaprovider.TraefikRouter, labels velaprovider.TraefikLabels) string {
+func traefikRouterServiceName(container Container, router valeprovider.TraefikRouter, labels valeprovider.TraefikLabels) string {
 	if router.Service != "" {
 		return router.Service
 	}
 	return defaultTraefikServiceName(container, labels)
 }
 
-func defaultTraefikServiceName(container Container, labels velaprovider.TraefikLabels) string {
+func defaultTraefikServiceName(container Container, labels valeprovider.TraefikLabels) string {
 	if labels.Services.Len() == 1 {
-		serviceName, _ := velaprovider.SortedStrings(collectionlist.NewList(labels.Services.Keys()...)).GetFirst()
+		serviceName, _ := valeprovider.SortedStrings(collectionlist.NewList(labels.Services.Keys()...)).GetFirst()
 		return serviceName
 	}
 	return sanitizeName(container.Name, "service")
 }
 
-func traefikRouterEntrypoints(router velaprovider.TraefikRouter, options Options) *collectionlist.List[string] {
+func traefikRouterEntrypoints(router valeprovider.TraefikRouter, options Options) *collectionlist.List[string] {
 	if router.Entrypoints != nil && !router.Entrypoints.IsEmpty() {
 		known := collectionlist.NewList[string]()
 		router.Entrypoints.Range(func(_ int, entrypoint string) bool {
@@ -153,7 +153,7 @@ func traefikRouterEntrypoints(router velaprovider.TraefikRouter, options Options
 	return collectionlist.NewList[string](options.DefaultEntrypointName)
 }
 
-func traefikRouteHeaders(router velaprovider.TraefikRouter) map[string]string {
+func traefikRouteHeaders(router valeprovider.TraefikRouter) map[string]string {
 	headers := map[string]string{}
 	if router.Headers == nil {
 		return headers

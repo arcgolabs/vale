@@ -98,7 +98,7 @@ func buildRaftConfig(config Config, logger *slog.Logger) (*raft.Config, io.Write
 	raftConfig := raft.DefaultConfig()
 	raftConfig.LocalID = raft.ServerID(config.NodeID)
 	raftConfig.Logger = hclog.New(&hclog.LoggerOptions{
-		Name:   "vela-raft",
+		Name:   "vale-raft",
 		Level:  hclog.Info,
 		Output: logWriter,
 	})
@@ -106,7 +106,7 @@ func buildRaftConfig(config Config, logger *slog.Logger) (*raft.Config, io.Write
 }
 
 func openRaftResources(config Config, logger *slog.Logger, logWriter io.Writer) (*raftResources, error) {
-	stateStore, err := openStateStore(filepath.Join(config.DataDir, "vela-state.bbolt"), logger)
+	stateStore, err := openStateStore(filepath.Join(config.DataDir, "vale-state.bbolt"), logger)
 	if err != nil {
 		return nil, oops.
 			In("raftnode").

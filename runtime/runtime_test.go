@@ -7,7 +7,7 @@ import (
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	velaruntime "github.com/arcgolabs/vale/runtime"
+	valeruntime "github.com/arcgolabs/vale/runtime"
 )
 
 func TestServiceRuntimePickSkipsUnhealthyEndpoints(t *testing.T) {
@@ -22,12 +22,12 @@ func TestServiceRuntimePickSkipsUnhealthyEndpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	service := &velaruntime.ServiceRuntime{
+	service := &valeruntime.ServiceRuntime{
 		Name:     "api",
 		Strategy: "round_robin",
-		Endpoints: collectionlist.NewList[*velaruntime.EndpointRuntime](
-			&velaruntime.EndpointRuntime{URL: unhealthyURL, Weight: 1},
-			&velaruntime.EndpointRuntime{URL: healthyURL, Weight: 1},
+		Endpoints: collectionlist.NewList[*valeruntime.EndpointRuntime](
+			&valeruntime.EndpointRuntime{URL: unhealthyURL, Weight: 1},
+			&valeruntime.EndpointRuntime{URL: healthyURL, Weight: 1},
 		),
 	}
 	unhealthy, _ := service.Endpoints.Get(0)
@@ -58,15 +58,15 @@ func TestServiceRuntimeWeightedRoundRobinUsesWeights(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	service := &velaruntime.ServiceRuntime{
+	service := &valeruntime.ServiceRuntime{
 		Name:     "api",
 		Strategy: "weighted_round_robin",
-		Endpoints: collectionlist.NewList[*velaruntime.EndpointRuntime](
-			&velaruntime.EndpointRuntime{URL: firstURL, Weight: 2},
-			&velaruntime.EndpointRuntime{URL: secondURL, Weight: 1},
+		Endpoints: collectionlist.NewList[*valeruntime.EndpointRuntime](
+			&valeruntime.EndpointRuntime{URL: firstURL, Weight: 2},
+			&valeruntime.EndpointRuntime{URL: secondURL, Weight: 1},
 		),
 	}
-	service.Endpoints.Range(func(_ int, endpoint *velaruntime.EndpointRuntime) bool {
+	service.Endpoints.Range(func(_ int, endpoint *valeruntime.EndpointRuntime) bool {
 		endpoint.Healthy.Store(true)
 		return true
 	})
@@ -93,12 +93,12 @@ func TestGatewayInvokesExtendedMetricsRecorder(t *testing.T) {
 	t.Parallel()
 
 	metrics := &testExtendedMetricsRecorder{}
-	gateway := velaruntime.NewGateway(velaruntime.NewSnapshot(), nil, false, metrics)
+	gateway := valeruntime.NewGateway(valeruntime.NewSnapshot(), nil, false, metrics)
 	if metrics.snapshots != 1 {
 		t.Fatalf("snapshots = %d, want 1 after NewGateway", metrics.snapshots)
 	}
 
-	gateway.Swap(velaruntime.NewSnapshot())
+	gateway.Swap(valeruntime.NewSnapshot())
 	if metrics.snapshots != 2 {
 		t.Fatalf("snapshots = %d, want 2 after Swap", metrics.snapshots)
 	}
@@ -107,7 +107,7 @@ func TestGatewayInvokesExtendedMetricsRecorder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	endpoint := &velaruntime.EndpointRuntime{URL: endpointURL}
+	endpoint := &valeruntime.EndpointRuntime{URL: endpointURL}
 	gateway.ObserveHealth(endpoint, true)
 	if metrics.healthChecks != 1 {
 		t.Fatalf("health checks = %d, want 1", metrics.healthChecks)
@@ -126,14 +126,14 @@ type testExtendedMetricsRecorder struct {
 	lastReloadResult string
 }
 
-func (r *testExtendedMetricsRecorder) Observe(_ *velaruntime.CompiledRoute, _ *velaruntime.EndpointRuntime, _ int, _ time.Duration) {
+func (r *testExtendedMetricsRecorder) Observe(_ *valeruntime.CompiledRoute, _ *valeruntime.EndpointRuntime, _ int, _ time.Duration) {
 }
 
 func (r *testExtendedMetricsRecorder) Handler() http.Handler {
 	return http.NotFoundHandler()
 }
 
-func (r *testExtendedMetricsRecorder) ObserveSnapshot(_ *velaruntime.CompiledSnapshot) {
+func (r *testExtendedMetricsRecorder) ObserveSnapshot(_ *valeruntime.CompiledSnapshot) {
 	r.snapshots++
 }
 
@@ -142,6 +142,6 @@ func (r *testExtendedMetricsRecorder) ObserveReload(result string) {
 	r.lastReloadResult = result
 }
 
-func (r *testExtendedMetricsRecorder) ObserveHealth(_ *velaruntime.EndpointRuntime, _ bool) {
+func (r *testExtendedMetricsRecorder) ObserveHealth(_ *valeruntime.EndpointRuntime, _ bool) {
 	r.healthChecks++
 }

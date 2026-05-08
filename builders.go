@@ -1,4 +1,4 @@
-package vela
+package vale
 
 import (
 	"net/http"
@@ -46,7 +46,7 @@ func NewEndpoint(rawURL string, weight int, proxy http.Handler) (*RuntimeEndpoin
 	endpoint, err := runtime.NewEndpoint(rawURL, weight, proxy)
 	if err != nil {
 		return nil, oops.
-			In("vela").
+			In("vale").
 			With("url", rawURL, "weight", weight).
 			Wrapf(err, "create runtime endpoint")
 	}

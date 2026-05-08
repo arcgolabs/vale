@@ -1,6 +1,6 @@
 # Contributing
 
-Vela is maintained as a library-first Go workspace. The root module is the
+Vale is maintained as a library-first Go workspace. The root module is the
 preferred public API for embedding, and `cmd` contains the standalone binary
 wiring.
 

@@ -1,4 +1,4 @@
-// Package provider defines Vela snapshot/config provider interfaces and helpers.
+// Package provider defines Vale snapshot/config provider interfaces and helpers.
 package provider
 
 import (

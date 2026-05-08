@@ -1,4 +1,4 @@
-package vela
+package vale
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 )
 
 type (
-	Plugin     interface{ RegisterVela(*Registry) error }
+	Plugin     interface{ RegisterVale(*Registry) error }
 	PluginFunc func(*Registry) error
 	Registry   struct {
 		configProviders   *provider.ConfigProviderRegistry
@@ -27,9 +27,9 @@ type (
 	MetricsFactory          = gateway.MetricsFactory
 )
 
-func (fn PluginFunc) RegisterVela(registry *Registry) error {
+func (fn PluginFunc) RegisterVale(registry *Registry) error {
 	if fn == nil {
-		return oops.In("vela").New("plugin function cannot be nil")
+		return oops.In("vale").New("plugin function cannot be nil")
 	}
 	return fn(registry)
 }
@@ -45,14 +45,14 @@ func NewRegistry() *Registry {
 
 func (r *Registry) Use(plugins ...Plugin) error {
 	if r == nil {
-		return oops.In("vela").New("registry cannot be nil")
+		return oops.In("vale").New("registry cannot be nil")
 	}
 	for _, plugin := range plugins {
 		if plugin == nil {
 			continue
 		}
-		if err := plugin.RegisterVela(r); err != nil {
-			return oops.In("vela").Wrapf(err, "register plugin")
+		if err := plugin.RegisterVale(r); err != nil {
+			return oops.In("vale").Wrapf(err, "register plugin")
 		}
 	}
 	return nil
@@ -61,18 +61,18 @@ func (r *Registry) Use(plugins ...Plugin) error {
 func (r *Registry) RegisterConfigProvider(providerType string, factory ConfigProviderFactory) error {
 	r.ensureInit()
 	if err := r.configProviders.Register(providerType, factory); err != nil {
-		return oops.In("vela").With("type", providerType).Wrapf(err, "register config provider factory")
+		return oops.In("vale").With("type", providerType).Wrapf(err, "register config provider factory")
 	}
 	return nil
 }
 
 func (r *Registry) CreateConfigProvider(ctx context.Context, spec ProviderSpec) (provider.ConfigProvider, error) {
 	if r == nil {
-		return nil, oops.In("vela").New("registry cannot be nil")
+		return nil, oops.In("vale").New("registry cannot be nil")
 	}
 	configProvider, err := r.configProviders.Create(ctx, spec)
 	if err != nil {
-		return nil, oops.In("vela").With("type", spec.Type, "name", spec.Name).Wrapf(err, "create config provider")
+		return nil, oops.In("vale").With("type", spec.Type, "name", spec.Name).Wrapf(err, "create config provider")
 	}
 	return configProvider, nil
 }
@@ -87,18 +87,18 @@ func (r *Registry) ConfigProviderTypes() *collectionlist.List[string] {
 func (r *Registry) RegisterSnapshotProvider(providerType string, factory SnapshotProviderFactory) error {
 	r.ensureInit()
 	if err := r.snapshotProviders.Register(providerType, factory); err != nil {
-		return oops.In("vela").With("type", providerType).Wrapf(err, "register snapshot provider factory")
+		return oops.In("vale").With("type", providerType).Wrapf(err, "register snapshot provider factory")
 	}
 	return nil
 }
 
 func (r *Registry) CreateSnapshotProvider(ctx context.Context, spec ProviderSpec) (provider.SnapshotProvider, error) {
 	if r == nil {
-		return nil, oops.In("vela").New("registry cannot be nil")
+		return nil, oops.In("vale").New("registry cannot be nil")
 	}
 	snapshotProvider, err := r.snapshotProviders.Create(ctx, spec)
 	if err != nil {
-		return nil, oops.In("vela").With("type", spec.Type, "name", spec.Name).Wrapf(err, "create snapshot provider")
+		return nil, oops.In("vale").With("type", spec.Type, "name", spec.Name).Wrapf(err, "create snapshot provider")
 	}
 	return snapshotProvider, nil
 }
@@ -113,7 +113,7 @@ func (r *Registry) SnapshotProviderTypes() *collectionlist.List[string] {
 func (r *Registry) RegisterMiddleware(middlewareType string, factory MiddlewareFactory) error {
 	r.ensureInit()
 	if err := r.middleware.Register(middlewareType, factory); err != nil {
-		return oops.In("vela").With("type", middlewareType).Wrapf(err, "register middleware factory")
+		return oops.In("vale").With("type", middlewareType).Wrapf(err, "register middleware factory")
 	}
 	return nil
 }
@@ -128,10 +128,10 @@ func (r *Registry) MiddlewareRegistry() *runtime.MiddlewareRegistry {
 func (r *Registry) RegisterMetricsFactory(name string, factory MetricsFactory) error {
 	name = strings.ToLower(strings.TrimSpace(name))
 	if name == "" {
-		return oops.In("vela").New("metrics factory name cannot be empty")
+		return oops.In("vale").New("metrics factory name cannot be empty")
 	}
 	if factory == nil {
-		return oops.In("vela").With("name", name).New("metrics factory cannot be nil")
+		return oops.In("vale").With("name", name).New("metrics factory cannot be nil")
 	}
 	r.ensureInit()
 	r.metrics.Set(name, factory)
@@ -155,7 +155,7 @@ func (r *Registry) MetricsFactoryNames() *collectionlist.List[string] {
 func WithRegistry(registry *Registry) Option {
 	return func(cfg *Config) error {
 		if registry == nil {
-			return oops.In("vela").New("registry cannot be nil")
+			return oops.In("vale").New("registry cannot be nil")
 		}
 		return gateway.WithMiddlewareRegistry(registry.MiddlewareRegistry())(cfg)
 	}
@@ -165,7 +165,7 @@ func WithMetricsFromRegistry(registry *Registry, name string) Option {
 	return func(cfg *Config) error {
 		factory, ok := registry.MetricsFactory(name)
 		if !ok {
-			return oops.In("vela").With("name", name).New("metrics factory is not registered")
+			return oops.In("vale").With("name", name).New("metrics factory is not registered")
 		}
 		return gateway.WithMetricsFactory(factory)(cfg)
 	}

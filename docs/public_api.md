@@ -23,7 +23,7 @@ embedded users; subpackages remain available for advanced wiring and optional mo
 
 | Module | Purpose |
 | --- | --- |
-| `github.com/arcgolabs/vale/cmd` | Standalone `velad` binary. |
+| `github.com/arcgolabs/vale/cmd` | Standalone `valed` binary. |
 | `github.com/arcgolabs/vale/cluster/raftnode` | Optional HashiCorp Raft control-plane adapter. |
 | `github.com/arcgolabs/vale/observability/prometheus` | Optional Prometheus adapter for metrics exposition. |
 | `github.com/arcgolabs/vale/provider/docker` | Optional Docker label-driven config source. |

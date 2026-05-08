@@ -1,4 +1,4 @@
-// Static in-process config: validated *config.Config, shared eventx bus, and vela.WithStaticConfig.
+// Static in-process config: validated *config.Config, shared eventx bus, and vale.WithStaticConfig.
 package main
 
 import (
@@ -35,19 +35,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg := vela.NewConfigBuilder().
+	cfg := vale.NewConfigBuilder().
 		Entrypoint("web", ":8080").
 		Service("echo", "http://127.0.0.1:8081").
-		RouteTo("echo-route", "web", "echo", vela.RoutePathPrefix("/")).
+		RouteTo("echo-route", "web", "echo", vale.RoutePathPrefix("/")).
 		Admin(":19090").
 		Observability(true, true).
 		Health("5s", "2s").
 		Build()
 
-	embeddedGateway, err := vela.New(
-		vela.WithLogger(logger),
-		vela.WithEventBus(bus),
-		vela.WithStaticConfig(cfg),
+	embeddedGateway, err := vale.New(
+		vale.WithLogger(logger),
+		vale.WithEventBus(bus),
+		vale.WithStaticConfig(cfg),
 	)
 	if err != nil {
 		logger.Error("create embedded gateway failed", "error", err)

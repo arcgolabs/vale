@@ -1,10 +1,10 @@
-# Vela 技术选型稳定版
+# Vale 技术选型稳定版
 
 ## 1. 文档说明
 
-本文档用于确定 Vela 的第一版技术选型。
+本文档用于确定 Vale 的第一版技术选型。
 
-Vela 暂定定位为：
+Vale 暂定定位为：
 
 > 一个轻量、可嵌入、基于 Provider 驱动、支持私有插件 Registry 与 RPC 插件体系的动态应用网关。
 
@@ -22,7 +22,7 @@ Vela 暂定定位为：
 
 ## 2. 总体选型结论
 
-Vela 的技术路线建议定为：
+Vale 的技术路线建议定为：
 
 ```text
 语言：Go 1.26.x+
@@ -39,7 +39,7 @@ arcgolabs：复用 logx/configx/collectionx/observabilityx/httpx，但不污染 
 
 核心原则：
 
-> Vela 的核心 runtime 要像标准库一样轻，控制面要像 Traefik 一样动态，插件体系要像 HashiCorp 一样隔离，分发体系要像 OCI 一样私有可控。
+> Vale 的核心 runtime 要像标准库一样轻，控制面要像 Traefik 一样动态，插件体系要像 HashiCorp 一样隔离，分发体系要像 OCI 一样私有可控。
 
 ---
 
@@ -70,7 +70,7 @@ Go >= 1.26.2
 
 ### 3.1 为什么选择 Go
 
-Vela 属于网络代理和控制面系统，Go 的优势比较明显：
+Vale 属于网络代理和控制面系统，Go 的优势比较明显：
 
 - 单二进制部署友好；
 - 标准库网络能力成熟；
@@ -104,7 +104,7 @@ Vela 属于网络代理和控制面系统，Go 的优势比较明显：
 协议正确性 > 连接复用 > 可观测性 > 低分配 > 极限 QPS
 ```
 
-Vela 是网关，不是单纯 benchmark 项目。网关必须优先保证：
+Vale 是网关，不是单纯 benchmark 项目。网关必须优先保证：
 
 - WebSocket；
 - SSE；
@@ -188,9 +188,9 @@ database
 
 ## 5. Router 技术选型
 
-Vela 不建议直接使用 chi、httprouter、gin 的 router。
+Vale 不建议直接使用 chi、httprouter、gin 的 router。
 
-原因是 Vela 的路由模型不是普通 Web API 路由，而是网关规则：
+原因是 Vale 的路由模型不是普通 Web API 路由，而是网关规则：
 
 ```text
 Host(`api.example.com`) && PathPrefix(`/v1`) && Header(`X-Tenant`, `a`)
@@ -250,7 +250,7 @@ arcgolabs/collectionx
 - set；
 - immutable/snapshot 辅助结构。
 
-如果当前 collectionx 的实现还没有完全适配网关路由，可以先在 Vela 内部写极简 radix tree，后续再沉淀回 arcgolabs。
+如果当前 collectionx 的实现还没有完全适配网关路由，可以先在 Vale 内部写极简 radix tree，后续再沉淀回 arcgolabs。
 
 ### 5.4 不建议
 
@@ -279,7 +279,7 @@ Rule 必须在配置更新时编译，请求时只执行已编译 matcher。
 
 ### 6.1 为什么选择 HCL
 
-Vela 的配置天然适合 HCL：
+Vale 的配置天然适合 HCL：
 
 - entrypoint；
 - router；
@@ -307,7 +307,7 @@ file / docker / orch / plugin provider
 
 ### 6.3 不建议使用 Viper 作为核心配置层
 
-Viper 适合普通应用配置，但 Vela 需要：
+Viper 适合普通应用配置，但 Vale 需要：
 
 - 多 Provider 合并；
 - 局部配置；
@@ -317,7 +317,7 @@ Viper 适合普通应用配置，但 Vela 需要：
 - 配置来源追踪；
 - 多版本快照。
 
-这些能力应该由 Vela 自己控制。
+这些能力应该由 Vale 自己控制。
 
 ---
 
@@ -417,7 +417,7 @@ Provider Plugin
 
 ### 8.1 为什么使用 RPC 插件
 
-RPC 插件相比源码解释插件更适合 Vela：
+RPC 插件相比源码解释插件更适合 Vale：
 
 - 插件是预编译二进制；
 - 不依赖 GitHub；
@@ -543,7 +543,7 @@ plugin "authz" {
   version     = "1.0.0"
   type        = "middleware"
   protocol    = "grpc"
-  api_version = "vela.plugin.v1"
+  api_version = "vale.plugin.v1"
 
   capabilities = [
     "request.headers.read",
@@ -571,9 +571,9 @@ Phase 3: OCI Registry
 ### 9.4 插件安装命令
 
 ```bash
-vela plugin install file:///opt/vela/plugins/corp-authz
-vela plugin install https://registry.example.com/vela/plugins/corp-authz/1.0.0
-vela plugin install oci://registry.example.com/vela/plugins/authz:1.0.0
+vale plugin install file:///opt/vale/plugins/corp-authz
+vale plugin install https://registry.example.com/vale/plugins/corp-authz/1.0.0
+vale plugin install oci://registry.example.com/vale/plugins/authz:1.0.0
 ```
 
 ---
@@ -604,9 +604,9 @@ vela plugin install oci://registry.example.com/vela/plugins/authz:1.0.0
 ### 10.2 角色设计
 
 ```text
-velad --role=manager,proxy
-velad --role=manager
-velad --role=proxy
+valed --role=manager,proxy
+valed --role=manager
+valed --role=proxy
 ```
 
 Manager 节点负责：
@@ -717,7 +717,7 @@ type CertificateProvider interface {
 
 ### 12.1 日志分类
 
-Vela 日志分三类：
+Vale 日志分三类：
 
 ```text
 Runtime Log
@@ -775,19 +775,19 @@ plugin batch sink
 第一版必须有：
 
 ```text
-vela_requests_total
-vela_request_duration_seconds
-vela_upstream_duration_seconds
-vela_upstream_errors_total
-vela_routes_total
-vela_services_total
-vela_endpoints_total
-vela_healthy_endpoints_total
-vela_snapshot_version
-vela_snapshot_apply_total
-vela_snapshot_apply_errors_total
-vela_plugin_status
-vela_plugin_rpc_duration_seconds
+vale_requests_total
+vale_request_duration_seconds
+vale_upstream_duration_seconds
+vale_upstream_errors_total
+vale_routes_total
+vale_services_total
+vale_endpoints_total
+vale_healthy_endpoints_total
+vale_snapshot_version
+vale_snapshot_apply_total
+vale_snapshot_apply_errors_total
+vale_plugin_status
+vale_plugin_rpc_duration_seconds
 ```
 
 ---
@@ -850,9 +850,9 @@ compress middleware: gzip
 建议原则：
 
 ```text
-Vela core 尽量 dependency-light
-Vela `cmd/velad`（进程入口）可以复用 arcgolabs
-Vela provider/plugin/admin 可以更多复用 arcgolabs
+Vale core 尽量 dependency-light
+Vale `cmd/valed`（进程入口）可以复用 arcgolabs
+Vale provider/plugin/admin 可以更多复用 arcgolabs
 ```
 
 不要让公共库反向决定网关核心架构。
@@ -1093,10 +1093,10 @@ provider plugin: control plane only
 ## 18. 推荐仓库结构
 
 ```text
-vela/
+vale/
   cmd/
-    vela/
-    velad/
+    vale/
+    valed/
 
   pkg/
     gateway/              # embedded API
@@ -1211,7 +1211,7 @@ runtime 只消费：
 
 第一阶段 MVP 应满足：
 
-1. 可以通过 HCL 配置启动 `velad`；
+1. 可以通过 HCL 配置启动 `valed`；
 2. 支持 HTTP entrypoint；
 3. 支持 HTTPS 静态证书；
 4. 支持 Host 路由；
@@ -1241,7 +1241,7 @@ runtime 只消费：
 功能：
 
 ```text
-velad
+valed
 File Provider
 HCL
 HTTP/HTTPS reverse proxy
@@ -1327,7 +1327,7 @@ Dashboard
 
 ## 22. 最终结论
 
-Vela 的稳定技术选型应遵循：
+Vale 的稳定技术选型应遵循：
 
 ```text
 核心 runtime 极简
@@ -1357,6 +1357,6 @@ TLS：静态证书起步，CertMagic adapter 后置
 arcgolabs：复用外围能力，不污染 core runtime
 ```
 
-这套选型既能最大化复用 Go 成熟生态，又保留 Vela 自己的核心控制力。  
+这套选型既能最大化复用 Go 成熟生态，又保留 Vale 自己的核心控制力。
 真正要自研的是动态网关最关键的部分：Snapshot、Router、Provider 聚合、Runtime 编译、插件管控和嵌入式生命周期。  
 不该自研的是 HTTP 协议栈、RPC 协议、Raft、OCI 分发、指标协议这些成熟底层能力。

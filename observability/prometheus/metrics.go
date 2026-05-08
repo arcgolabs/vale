@@ -1,4 +1,4 @@
-// Package prometheus provides a Prometheus metrics adapter for Vela.
+// Package prometheus provides a Prometheus metrics adapter for Vale.
 package prometheus
 
 import (
@@ -12,7 +12,7 @@ import (
 func New(enabled bool, logger *slog.Logger) runtime.MetricsRecorder {
 	adapter := observabilityprom.New(
 		observabilityprom.WithLogger(logger),
-		observabilityprom.WithNamespace("vela"),
+		observabilityprom.WithNamespace("vale"),
 	)
 	return runtime.NewObservabilityMetrics(enabled, adapter, adapter.Handler())
 }

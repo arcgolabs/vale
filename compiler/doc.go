@@ -1,2 +1,2 @@
-// Package compiler turns declarative Vela config into runtime snapshots.
+// Package compiler turns declarative Vale config into runtime snapshots.
 package compiler

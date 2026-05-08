@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultACMECacheDir = ".vela/acme"
+const defaultACMECacheDir = ".vale/acme"
 
 func (g *Gateway) buildTLSConfig(tlsRuntime runtime.TLSRuntime) (*tls.Config, bool, error) {
 	if !tlsRuntime.Enabled {

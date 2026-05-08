@@ -1,4 +1,4 @@
-// Package runtime contains Vela's collectionx-backed compiled data plane model,
+// Package runtime contains Vale's collectionx-backed compiled data plane model,
 // route matcher, middleware chain, health checker, access logging, and metrics
 // recorder contracts.
 //

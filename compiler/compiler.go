@@ -14,7 +14,7 @@ import (
 	"github.com/arcgolabs/vale/runtime"
 )
 
-const DefaultACMECacheDir = ".vela/acme"
+const DefaultACMECacheDir = ".vale/acme"
 
 func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
 	middlewareMap, err := compileMiddlewares(cfg.Middlewares)

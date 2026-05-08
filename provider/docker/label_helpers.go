@@ -62,9 +62,9 @@ func labelValue(labels *mapping.Map[string, string], key string) string {
 func middlewareFromLabels(name string, labels *mapping.Map[string, string]) (config.Middleware, bool) {
 	middleware := config.Middleware{
 		Name:         name,
-		StripPrefix:  strings.TrimSpace(labelValue(labels, "vela.middleware.strip_prefix")),
-		AddPrefix:    strings.TrimSpace(labelValue(labels, "vela.middleware.add_prefix")),
-		MaxBodyBytes: int64(parseInt(labelValue(labels, "vela.middleware.max_body_bytes"), 0)),
+		StripPrefix:  strings.TrimSpace(labelValue(labels, "vale.middleware.strip_prefix")),
+		AddPrefix:    strings.TrimSpace(labelValue(labels, "vale.middleware.add_prefix")),
+		MaxBodyBytes: int64(parseInt(labelValue(labels, "vale.middleware.max_body_bytes"), 0)),
 	}
 	return middleware, middleware.StripPrefix != "" || middleware.AddPrefix != "" || middleware.MaxBodyBytes > 0
 }
@@ -73,10 +73,10 @@ func applyEntrypointTLSLabels(cfg *config.Config, labels *mapping.Map[string, st
 	if cfg == nil || len(cfg.Entrypoints) == 0 {
 		return
 	}
-	tlsEnabled := parseBool(labelValue(labels, "vela.entrypoint.tls.enabled"), false)
-	certFile := strings.TrimSpace(labelValue(labels, "vela.entrypoint.tls.cert_file"))
-	keyFile := strings.TrimSpace(labelValue(labels, "vela.entrypoint.tls.key_file"))
-	acmeEnabled := parseBool(labelValue(labels, "vela.entrypoint.acme.enabled"), false)
+	tlsEnabled := parseBool(labelValue(labels, "vale.entrypoint.tls.enabled"), false)
+	certFile := strings.TrimSpace(labelValue(labels, "vale.entrypoint.tls.cert_file"))
+	keyFile := strings.TrimSpace(labelValue(labels, "vale.entrypoint.tls.key_file"))
+	acmeEnabled := parseBool(labelValue(labels, "vale.entrypoint.acme.enabled"), false)
 	if tlsEnabled || certFile != "" || keyFile != "" {
 		cfg.Entrypoints[0].TLS = &config.EntrypointTLS{
 			Enabled:  tlsEnabled,
@@ -87,9 +87,9 @@ func applyEntrypointTLSLabels(cfg *config.Config, labels *mapping.Map[string, st
 	if acmeEnabled {
 		cfg.Entrypoints[0].ACME = &config.EntrypointACME{
 			Enabled:  true,
-			Email:    strings.TrimSpace(labelValue(labels, "vela.entrypoint.acme.email")),
-			CacheDir: strings.TrimSpace(labelValue(labels, "vela.entrypoint.acme.cache_dir")),
-			Domains:  provider.SplitCSV(labelValue(labels, "vela.entrypoint.acme.domains")).Values(),
+			Email:    strings.TrimSpace(labelValue(labels, "vale.entrypoint.acme.email")),
+			CacheDir: strings.TrimSpace(labelValue(labels, "vale.entrypoint.acme.cache_dir")),
+			Domains:  provider.SplitCSV(labelValue(labels, "vale.entrypoint.acme.domains")).Values(),
 		}
 	}
 }

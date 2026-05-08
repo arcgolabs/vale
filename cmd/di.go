@@ -16,15 +16,15 @@ import (
 const defaultMetricsName = "prometheus"
 
 type (
-	veladBaseOptions         []vela.Option
-	veladMetricsOptions      []vela.Option
-	veladConfigSourceOptions []vela.Option
-	veladClusterOptions      []vela.Option
-	veladEventBusOptions     []vela.Option
-	veladGatewayOptions      []vela.Option
+	valedBaseOptions         []vale.Option
+	valedMetricsOptions      []vale.Option
+	valedConfigSourceOptions []vale.Option
+	valedClusterOptions      []vale.Option
+	valedEventBusOptions     []vale.Option
+	valedGatewayOptions      []vale.Option
 )
 
-func provideLogger(cfg veladConfig) (*slog.Logger, error) {
+func provideLogger(cfg valedConfig) (*slog.Logger, error) {
 	logger, err := logx.New(
 		logx.WithConsole(true),
 		logx.WithLevelString(cfg.LogLevel),
@@ -45,8 +45,8 @@ func provideEventBus() eventx.BusRuntime {
 	return eventx.New()
 }
 
-func providePluginRegistry() (*vela.Registry, error) {
-	registry := vela.NewRegistry()
+func providePluginRegistry() (*vale.Registry, error) {
+	registry := vale.NewRegistry()
 	if err := registry.RegisterMetricsFactory(defaultMetricsName, prometheusmetrics.New); err != nil {
 		return nil, oops.
 			In("cmd").
@@ -56,36 +56,36 @@ func providePluginRegistry() (*vela.Registry, error) {
 	return registry, nil
 }
 
-func provideBaseOptions(cfg veladConfig, logger *slog.Logger) veladBaseOptions {
-	return veladBaseOptions{
-		vela.WithWatch(cfg.Watch),
-		vela.WithLogger(logger),
+func provideBaseOptions(cfg valedConfig, logger *slog.Logger) valedBaseOptions {
+	return valedBaseOptions{
+		vale.WithWatch(cfg.Watch),
+		vale.WithLogger(logger),
 	}
 }
 
-func provideMetricsOptions(registry *vela.Registry) veladMetricsOptions {
-	return veladMetricsOptions{
-		vela.WithMetricsFromRegistry(registry, defaultMetricsName),
+func provideMetricsOptions(registry *vale.Registry) valedMetricsOptions {
+	return valedMetricsOptions{
+		vale.WithMetricsFromRegistry(registry, defaultMetricsName),
 	}
 }
 
-func provideConfigSourceOptions(cfg veladConfig) veladConfigSourceOptions {
+func provideConfigSourceOptions(cfg valedConfig) valedConfigSourceOptions {
 	files := parseCSV(cfg.ConfigFiles)
 	switch {
 	case !files.IsEmpty():
-		return veladConfigSourceOptions{fileconfig.WithConfigFileList(files)}
+		return valedConfigSourceOptions{fileconfig.WithConfigFileList(files)}
 	case strings.TrimSpace(cfg.ConfigPath) != "":
-		return veladConfigSourceOptions{fileconfig.WithConfigPath(cfg.ConfigPath)}
+		return valedConfigSourceOptions{fileconfig.WithConfigPath(cfg.ConfigPath)}
 	default:
 		return nil
 	}
 }
 
-func provideClusterOptions(cfg veladConfig) veladClusterOptions {
+func provideClusterOptions(cfg valedConfig) valedClusterOptions {
 	if !cfg.RaftEnabled {
 		return nil
 	}
-	return veladClusterOptions{
+	return valedClusterOptions{
 		raftnode.WithCluster(raftnode.Config{
 			Enabled:   true,
 			NodeID:    cfg.RaftNodeID,
@@ -96,19 +96,19 @@ func provideClusterOptions(cfg veladConfig) veladClusterOptions {
 	}
 }
 
-func provideEventBusOptions(bus eventx.BusRuntime) veladEventBusOptions {
-	return veladEventBusOptions{vela.WithEventBus(bus)}
+func provideEventBusOptions(bus eventx.BusRuntime) valedEventBusOptions {
+	return valedEventBusOptions{vale.WithEventBus(bus)}
 }
 
 func provideGatewayOptions(
-	base veladBaseOptions,
-	metrics veladMetricsOptions,
-	configSource veladConfigSourceOptions,
-	cluster veladClusterOptions,
-	eventBus veladEventBusOptions,
-) veladGatewayOptions {
+	base valedBaseOptions,
+	metrics valedMetricsOptions,
+	configSource valedConfigSourceOptions,
+	cluster valedClusterOptions,
+	eventBus valedEventBusOptions,
+) valedGatewayOptions {
 	size := len(base) + len(metrics) + len(configSource) + len(cluster) + len(eventBus)
-	options := make([]vela.Option, 0, size)
+	options := make([]vale.Option, 0, size)
 	options = append(options, base...)
 	options = append(options, metrics...)
 	options = append(options, configSource...)
@@ -117,8 +117,8 @@ func provideGatewayOptions(
 	return options
 }
 
-func provideGateway(options veladGatewayOptions) (*vela.Gateway, error) {
-	gateway, err := vela.New(options...)
+func provideGateway(options valedGatewayOptions) (*vale.Gateway, error) {
+	gateway, err := vale.New(options...)
 	if err != nil {
 		return nil, oops.
 			In("cmd").

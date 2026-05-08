@@ -1,7 +1,7 @@
-# Vela Gateway
+# Vale Gateway
 
-Vela is a library-first Go reverse proxy gateway that can also be packaged as
-the standalone `velad` binary. The root module is the preferred embedded API,
+Vale is a library-first Go reverse proxy gateway that can also be packaged as
+the standalone `valed` binary. The root module is the preferred embedded API,
 while optional workspace modules provide integrations such as file config,
 Docker labels, K8s-like sources, Prometheus metrics, and Raft control-plane
 state.
@@ -38,9 +38,9 @@ the current git remote: `github.com/arcgolabs/vale`.
 - `provider/fileconfig`: optional HCL file config source provider (file + watch).
 - `provider/merged`: multi-source merge + validate + compile.
 - `provider`: config builder helpers for embedded/library-first use.
-- root `vela`: library-first public API (`New` / `Start` / `Stop`).
+- root `vale`: library-first public API (`New` / `Start` / `Stop`).
 - `gateway`: lower-level embedded gateway implementation.
-- `cmd`: `velad` executable (`dix` graph + `configx` + Cobra + run loop).
+- `cmd`: `valed` executable (`dix` graph + `configx` + Cobra + run loop).
 
 This keeps runtime dependency-light and moves provider/config concerns outside runtime.
 
@@ -60,7 +60,7 @@ The workspace should not rely on local `replace` directives in `go.mod`. As the 
 Current workspace modules:
 
 - `github.com/arcgolabs/vale`: library-first core module.
-- `github.com/arcgolabs/vale/cmd`: standalone `velad` binary wiring.
+- `github.com/arcgolabs/vale/cmd`: standalone `valed` binary wiring.
 - `github.com/arcgolabs/vale/cluster/raftnode`: optional HashiCorp Raft cluster adapter.
 - `github.com/arcgolabs/vale/observability/prometheus`: optional Prometheus metrics adapter.
 - `github.com/arcgolabs/vale/provider/docker`: optional Docker config provider.
@@ -76,7 +76,7 @@ versions when consumed outside this workspace.
 
 ## arcgolabs Integration
 
-- `github.com/arcgolabs/dix`: dependency injection for `velad` daemon assembly in `cmd`.
+- `github.com/arcgolabs/dix`: dependency injection for `valed` daemon assembly in `cmd`.
 - `github.com/arcgolabs/logx`: structured logger construction and lifecycle.
 - `github.com/arcgolabs/configx`: bootstrap config from env/defaults.
 - `github.com/arcgolabs/eventx`: core provider load/reload/failure event bus.
@@ -87,9 +87,9 @@ versions when consumed outside this workspace.
 
 ## Run
 
-Process bootstrap is loaded inside the `velad` [dix](https://github.com/arcgolabs/dix) graph via [configx](https://github.com/arcgolabs/configx) (`WithTypedDefaults` → `VELA_*` env → explicit CLI flags on Cobra’s `pflag` set). Flags exist for `--help` and parsing; merge order is configx’s. See `velad --help`.
+Process bootstrap is loaded inside the `valed` [dix](https://github.com/arcgolabs/dix) graph via [configx](https://github.com/arcgolabs/configx) (`WithTypedDefaults` → `VALE_*` env → explicit CLI flags on Cobra’s `pflag` set). Flags exist for `--help` and parsing; merge order is configx’s. See `valed --help`.
 
-`velad` can start without a config file. In that case it uses the built-in default config:
+`valed` can start without a config file. In that case it uses the built-in default config:
 
 - entrypoint `web` on `:8080`
 - admin on `:19090`
@@ -106,7 +106,7 @@ go run ./cmd
 To run with an HCL file, copy sample config:
 
 ```bash
-cp vela.example.hcl vela.hcl
+cp vale.example.hcl vale.hcl
 ```
 
 Start an upstream service (example):
@@ -118,7 +118,7 @@ python -m http.server 8081
 Start gateway with an explicit config:
 
 ```bash
-go run ./cmd -config ./vela.hcl
+go run ./cmd -config ./vale.hcl
 ```
 
 Or merge multiple files (later files override same-name objects):
@@ -133,7 +133,7 @@ TLS and ACME defaults:
 
 - TLS listeners use Go's secure TLS defaults with minimum TLS 1.2.
 - ACME uses `golang.org/x/crypto/acme/autocert`.
-- When ACME is enabled and `cache_dir` is omitted, Vela uses `.vela/acme`.
+- When ACME is enabled and `cache_dir` is omitted, Vale uses `.vale/acme`.
 - ACME config requires explicit domains and email in file config.
 
 Verify:
@@ -150,7 +150,7 @@ Verify:
 ## Embedded API
 
 Use `github.com/arcgolabs/vale` as the primary library import path.
-`vela.New()` uses the built-in default config when no config path, config provider,
+`vale.New()` uses the built-in default config when no config path, config provider,
 snapshot provider, or static config is supplied.
 
 ```go
@@ -163,10 +163,10 @@ import (
 )
 
 func runEmbedded() error {
-  g, err := vela.New(
-    fileconfig.WithConfigPath("./vela.hcl"),
-    vela.WithWatch(true),
-    vela.WithLogger(slog.Default()),
+  g, err := vale.New(
+    fileconfig.WithConfigPath("./vale.hcl"),
+    vale.WithWatch(true),
+    vale.WithLogger(slog.Default()),
   )
   if err != nil {
     return err
@@ -180,34 +180,34 @@ func runEmbedded() error {
 }
 ```
 
-`vela.NewFromConfig(vela.Config{...})` is also available for struct-based construction.
+`vale.NewFromConfig(vale.Config{...})` is also available for struct-based construction.
 
-For code-first runtime construction, the root `vela` package exposes
+For code-first runtime construction, the root `vale` package exposes
 collectionx-backed helpers:
 
 ```go
-endpoint, _ := vela.NewEndpoint("http://127.0.0.1:8081", 1, http.DefaultServeMux)
-service := vela.NewService("api", "round_robin", endpoint)
-route := vela.NewRoute("api", "web", service).WithPathPrefix("/api")
+endpoint, _ := vale.NewEndpoint("http://127.0.0.1:8081", 1, http.DefaultServeMux)
+service := vale.NewService("api", "round_robin", endpoint)
+route := vale.NewRoute("api", "web", service).WithPathPrefix("/api")
 
-snapshot := vela.NewSnapshot().
-  AddEntrypoint("web", ":8080", vela.RuntimeEntrypoint{}).
+snapshot := vale.NewSnapshot().
+  AddEntrypoint("web", ":8080", vale.RuntimeEntrypoint{}).
   AddService(service).
   AddRoute(route).
   BuildMatchers()
 ```
 
-For config-first construction without HCL, use `vela.NewConfigBuilder()` and pass
-the result to `vela.WithStaticConfig`:
+For config-first construction without HCL, use `vale.NewConfigBuilder()` and pass
+the result to `vale.WithStaticConfig`:
 
 ```go
-cfg := vela.NewConfigBuilder().
+cfg := vale.NewConfigBuilder().
   Entrypoint("web", ":8080").
   Service("api", "http://127.0.0.1:8081").
-  MiddlewareNamed("strip-api", vela.MiddlewareStripPrefix("/api")).
+  MiddlewareNamed("strip-api", vale.MiddlewareStripPrefix("/api")).
   RouteTo("api", "web", "api",
-    vela.RoutePathPrefix("/api"),
-    vela.RouteMiddlewares("strip-api"),
+    vale.RoutePathPrefix("/api"),
+    vale.RouteMiddlewares("strip-api"),
   ).
   Admin(":19090").
   Observability(true, true).
@@ -222,8 +222,8 @@ config together with accumulated builder errors plus `config.Validate` errors.
 
 See `examples/embedded_static_config/main.go` for a full example that uses:
 
-- `vela.WithStaticConfig(...)`
-- `vela.WithEventBus(...)`
+- `vale.WithStaticConfig(...)`
+- `vale.WithEventBus(...)`
 - `eventx.Subscribe(...)` to consume provider lifecycle events
 
 Run:
@@ -250,19 +250,19 @@ Constructor options currently include:
 
 - `fileconfig.WithConfigPath(path)`
 - `fileconfig.WithConfigFiles(path1, path2, ...)` (merge order: left -> right, later wins)
-- `vela.WithWatch(enabled)`
-- `vela.WithClusterFactory(factory)` (optional control-plane cluster adapter)
-- `vela.WithLogger(logger)`
-- `vela.WithEventBus(bus)` (subscribe provider lifecycle events)
-- `vela.WithMetricsFactory(factory)` (optional metrics recorder adapter)
-- `vela.WithMiddlewareRegistry(registry)` (embedded runtime middleware extensions)
-- `vela.WithSnapshotProvider(provider)` (advanced/custom provider)
-- `vela.WithConfigSourceProviders(...)` (advanced merge pipeline input)
+- `vale.WithWatch(enabled)`
+- `vale.WithClusterFactory(factory)` (optional control-plane cluster adapter)
+- `vale.WithLogger(logger)`
+- `vale.WithEventBus(bus)` (subscribe provider lifecycle events)
+- `vale.WithMetricsFactory(factory)` (optional metrics recorder adapter)
+- `vale.WithMiddlewareRegistry(registry)` (embedded runtime middleware extensions)
+- `vale.WithSnapshotProvider(provider)` (advanced/custom provider)
+- `vale.WithConfigSourceProviders(...)` (advanced merge pipeline input)
 - `docker.NewFromEnv(name, options)` for Docker daemon-backed source
-- `vela.WithStaticConfig(config)` (inject in-memory config as source, watch off)
-- `vela.WithFallbackProviders(p1, p2, ...)` (provider failover chain)
-- `vela.WithStaticSnapshot(snapshot)` (in-memory embedded mode)
-- `vela.WithWatchErrorHandler(handler)`
+- `vale.WithStaticConfig(config)` (inject in-memory config as source, watch off)
+- `vale.WithFallbackProviders(p1, p2, ...)` (provider failover chain)
+- `vale.WithStaticSnapshot(snapshot)` (in-memory embedded mode)
+- `vale.WithWatchErrorHandler(handler)`
 
 Provider events currently emitted on the event bus:
 
@@ -291,31 +291,31 @@ Built-in middleware supports path prefix rewriting, request/response headers, an
 limits. Embedded users can register runtime middleware factories:
 
 ```go
-registry := vela.DefaultMiddlewareRegistry()
-_ = registry.Register("custom", func(next http.Handler, middleware vela.RuntimeMiddleware) http.Handler {
+registry := vale.DefaultMiddlewareRegistry()
+_ = registry.Register("custom", func(next http.Handler, middleware vale.RuntimeMiddleware) http.Handler {
   return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     next.ServeHTTP(w, r)
   })
 })
-g, err := vela.New(vela.WithMiddlewareRegistry(registry))
+g, err := vale.New(vale.WithMiddlewareRegistry(registry))
 ```
 
 ### Metrics
 
 The default `observabilityx` metrics recorder exposes:
 
-- `vela_http_requests_total`
-- `vela_http_request_duration_seconds`
-- `vela_runtime_reloads_total`
-- `vela_health_checks_total`
-- `vela_active_routes`
-- `vela_active_services`
-- `vela_active_endpoints`
+- `vale_http_requests_total`
+- `vale_http_request_duration_seconds`
+- `vale_runtime_reloads_total`
+- `vale_health_checks_total`
+- `vale_active_routes`
+- `vale_active_services`
+- `vale_active_endpoints`
 
 ### Provider Expansion Notes
 
 - `provider/docker`: optional module, label-driven route/service projection (source pluggable).
-  It accepts native `vela.*` labels and a Traefik-compatible HTTP label subset:
+  It accepts native `vale.*` labels and a Traefik-compatible HTTP label subset:
   `traefik.enable`, `traefik.http.routers.*.rule`, `entrypoints`, `middlewares`,
   `service`, `traefik.http.services.*.loadbalancer.server.port/scheme`, and
   `addPrefix`, `stripPrefix`, headers, and buffering middleware labels.
@@ -350,15 +350,15 @@ toward replicated config state without changing the gateway cluster interface.
 
 ## Bootstrap Env Variables
 
-- `VELA_CONFIG`
-- `VELA_CONFIG_FILES` (comma-separated)
-- `VELA_WATCH`
-- `VELA_LOG_LEVEL`
-- `VELA_RAFT_ENABLED`
-- `VELA_RAFT_NODE_ID`
-- `VELA_RAFT_BIND`
-- `VELA_RAFT_DATA_DIR`
-- `VELA_RAFT_BOOTSTRAP`
+- `VALE_CONFIG`
+- `VALE_CONFIG_FILES` (comma-separated)
+- `VALE_WATCH`
+- `VALE_LOG_LEVEL`
+- `VALE_RAFT_ENABLED`
+- `VALE_RAFT_NODE_ID`
+- `VALE_RAFT_BIND`
+- `VALE_RAFT_DATA_DIR`
+- `VALE_RAFT_BOOTSTRAP`
 
 Admin/observability/health runtime knobs are read from the HCL snapshot.
 

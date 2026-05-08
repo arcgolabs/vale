@@ -9,7 +9,7 @@ import (
 
 func init() {
 	f := rootCmd.Flags()
-	f.String("config", "", "path to vela HCL config")
+	f.String("config", "", "path to vale HCL config")
 	f.String("config-files", "", "comma-separated config files (merge order: left to right)")
 	f.Bool("watch", false, "watch config and hot reload")
 	f.String("log-level", "", "log level")
@@ -21,20 +21,20 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:           "velad",
-	Short:         "Vela application gateway daemon",
+	Use:           "valed",
+	Short:         "Vale application gateway daemon",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	Args:          cobra.NoArgs,
-	RunE:          runVelad,
+	RunE:          runValed,
 }
 
-func runVelad(cmd *cobra.Command, _ []string) error {
-	rt, err := veladStandaloneApp(cmd.Flags()).Build()
+func runValed(cmd *cobra.Command, _ []string) error {
+	rt, err := valedStandaloneApp(cmd.Flags()).Build()
 	if err != nil {
 		return fmt.Errorf("dix build: %w", err)
 	}
-	runner, err := dix.ResolveAs[*veladRunner](rt.Container())
+	runner, err := dix.ResolveAs[*valedRunner](rt.Container())
 	if err != nil {
 		return fmt.Errorf("resolve runner: %w", err)
 	}

@@ -1,4 +1,4 @@
-// Package k8s provides a Kubernetes-like config provider abstraction for Vela.
+// Package k8s provides a Kubernetes-like config provider abstraction for Vale.
 package k8s
 
 import (

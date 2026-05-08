@@ -1,4 +1,4 @@
-// Package raftnode provides an optional HashiCorp Raft cluster adapter for Vela.
+// Package raftnode provides an optional HashiCorp Raft cluster adapter for Vale.
 package raftnode
 
 import (

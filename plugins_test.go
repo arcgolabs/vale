@@ -1,4 +1,4 @@
-package vela_test
+package vale_test
 
 import (
 	"context"
@@ -17,8 +17,8 @@ import (
 func TestRegistryUseRegistersCompileTimePlugin(t *testing.T) {
 	t.Parallel()
 
-	registry := vela.NewRegistry()
-	plugin := vela.PluginFunc(func(registry *vela.Registry) error {
+	registry := vale.NewRegistry()
+	plugin := vale.PluginFunc(func(registry *vale.Registry) error {
 		if err := registry.RegisterConfigProvider("memory", newTestPluginConfigProvider); err != nil {
 			return fmt.Errorf("register config provider: %w", err)
 		}
@@ -39,11 +39,11 @@ func TestRegistryUseRegistersCompileTimePlugin(t *testing.T) {
 	assertPluginMetrics(t, registry)
 }
 
-func newTestPluginConfigProvider(_ context.Context, spec vela.ProviderSpec) (provider.ConfigProvider, error) {
+func newTestPluginConfigProvider(_ context.Context, spec vale.ProviderSpec) (provider.ConfigProvider, error) {
 	return testPluginConfigProvider{name: spec.Name}, nil
 }
 
-func markMiddleware(next http.Handler, _ vela.RuntimeMiddleware) http.Handler {
+func markMiddleware(next http.Handler, _ vale.RuntimeMiddleware) http.Handler {
 	return next
 }
 
@@ -51,9 +51,9 @@ func newNoopPluginMetrics(bool, *slog.Logger) runtime.MetricsRecorder {
 	return runtime.NewNoopMetrics()
 }
 
-func assertPluginConfigProvider(t *testing.T, registry *vela.Registry) {
+func assertPluginConfigProvider(t *testing.T, registry *vale.Registry) {
 	t.Helper()
-	created, err := registry.CreateConfigProvider(context.Background(), vela.NewProviderSpec("memory").WithName("main"))
+	created, err := registry.CreateConfigProvider(context.Background(), vale.NewProviderSpec("memory").WithName("main"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func assertPluginConfigProvider(t *testing.T, registry *vela.Registry) {
 	}
 }
 
-func assertPluginMiddleware(t *testing.T, registry *vela.Registry) {
+func assertPluginMiddleware(t *testing.T, registry *vale.Registry) {
 	t.Helper()
 	middlewares := registry.MiddlewareRegistry()
 	if _, ok := middlewares.Factory("mark"); !ok {
@@ -70,10 +70,10 @@ func assertPluginMiddleware(t *testing.T, registry *vela.Registry) {
 	}
 }
 
-func assertPluginMetrics(t *testing.T, registry *vela.Registry) {
+func assertPluginMetrics(t *testing.T, registry *vale.Registry) {
 	t.Helper()
-	cfg := vela.DefaultConfig()
-	if err := vela.WithMetricsFromRegistry(registry, "noop")(&cfg); err != nil {
+	cfg := vale.DefaultConfig()
+	if err := vale.WithMetricsFromRegistry(registry, "noop")(&cfg); err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Metrics == nil {

@@ -37,11 +37,11 @@ func main() {
 			Address: "127.0.0.1",
 			Port:    8081,
 			Labels: mapping.NewMapFrom(map[string]string{
-				"vela.enable":          "true",
-				"vela.service":         "svc-app-a",
-				"vela.route":           "route-app-a",
-				"vela.entrypoint":      "web",
-				"vela.rule.pathprefix": "/a",
+				"vale.enable":          "true",
+				"vale.service":         "svc-app-a",
+				"vale.route":           "route-app-a",
+				"vale.entrypoint":      "web",
+				"vale.rule.pathprefix": "/a",
 			}),
 		},
 	)
@@ -66,11 +66,11 @@ func main() {
 	dockerProvider := providerdocker.New("docker-mem", dockerSource, providerdocker.DefaultOptions())
 	k8sProvider := providerk8s.New("k8s-mem", k8sSource, providerk8s.DefaultOptions())
 
-	embeddedGateway, err := vela.New(
-		vela.WithLogger(logger),
-		vela.WithEventBus(bus),
-		vela.WithConfigSourceProviders(dockerProvider, k8sProvider),
-		vela.WithWatch(true),
+	embeddedGateway, err := vale.New(
+		vale.WithLogger(logger),
+		vale.WithEventBus(bus),
+		vale.WithConfigSourceProviders(dockerProvider, k8sProvider),
+		vale.WithWatch(true),
 	)
 	if err != nil {
 		logger.Error("create embedded gateway failed", "error", err)

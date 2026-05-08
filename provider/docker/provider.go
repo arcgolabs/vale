@@ -1,4 +1,4 @@
-// Package docker provides a Docker label config provider for Vela.
+// Package docker provides a Docker label config provider for Vale.
 package docker
 
 import (

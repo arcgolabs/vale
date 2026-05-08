@@ -1,4 +1,4 @@
-# Vela v0.1.0 Release Checklist
+# Vale v0.1.0 Release Checklist
 
 ## Required Checks
 

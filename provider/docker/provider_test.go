@@ -51,7 +51,7 @@ func TestProviderLoadsTraefikLabels(t *testing.T) {
 	}
 }
 
-func TestProviderFallsBackToVelaLabels(t *testing.T) {
+func TestProviderFallsBackToValeLabels(t *testing.T) {
 	t.Parallel()
 
 	source := providerdocker.NewMemorySource(providerdocker.Container{
@@ -59,10 +59,10 @@ func TestProviderFallsBackToVelaLabels(t *testing.T) {
 		Address: "10.0.0.2",
 		Port:    8080,
 		Labels: mapping.NewMapFrom(map[string]string{
-			"vela.enable":          "true",
-			"vela.service":         "api",
-			"vela.route":           "api-route",
-			"vela.rule.pathprefix": "/api",
+			"vale.enable":          "true",
+			"vale.service":         "api",
+			"vale.route":           "api-route",
+			"vale.rule.pathprefix": "/api",
 		}),
 	})
 	provider := providerdocker.New("docker", source, providerdocker.DefaultOptions())

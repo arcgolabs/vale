@@ -7,7 +7,7 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
-	velaruntime "github.com/arcgolabs/vale/runtime"
+	valeruntime "github.com/arcgolabs/vale/runtime"
 )
 
 func TestWrapMiddlewares(t *testing.T) {
@@ -15,12 +15,12 @@ func TestWrapMiddlewares(t *testing.T) {
 
 	var gotPath string
 	var gotHeader string
-	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := valeruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		gotHeader = r.Header.Get("X-Test")
 		w.WriteHeader(http.StatusNoContent)
-	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
-		velaruntime.MiddlewareRuntime{
+	}), collectionlist.NewList[valeruntime.MiddlewareRuntime](
+		valeruntime.MiddlewareRuntime{
 			StripPrefix: "/api",
 			AddPrefix:   "/v1",
 			RequestHeaders: mapping.NewMapFrom(map[string]string{
@@ -51,10 +51,10 @@ func TestWrapMiddlewaresAppliesPathTransforms(t *testing.T) {
 	t.Parallel()
 
 	var gotPath string
-	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	handler := valeruntime.WrapMiddlewares(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
-		velaruntime.MiddlewareRuntime{
+	}), collectionlist.NewList[valeruntime.MiddlewareRuntime](
+		valeruntime.MiddlewareRuntime{
 			StripPrefixes:          collectionlist.NewList("/api", "/v1"),
 			ReplacePathRegex:       `^/users/(.*)$`,
 			ReplacePathReplacement: `/accounts/$1`,
@@ -74,10 +74,10 @@ func TestWrapMiddlewaresRedirectsScheme(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	handler := valeruntime.WrapMiddlewares(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		called = true
-	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
-		velaruntime.MiddlewareRuntime{
+	}), collectionlist.NewList[valeruntime.MiddlewareRuntime](
+		valeruntime.MiddlewareRuntime{
 			RedirectScheme:    "https",
 			RedirectPort:      "443",
 			RedirectPermanent: true,
@@ -102,10 +102,10 @@ func TestWrapMiddlewaresRedirectsScheme(t *testing.T) {
 func TestWrapMiddlewaresRedirectsRegex(t *testing.T) {
 	t.Parallel()
 
-	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	handler := valeruntime.WrapMiddlewares(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("handler was called after redirect")
-	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
-		velaruntime.MiddlewareRuntime{
+	}), collectionlist.NewList[valeruntime.MiddlewareRuntime](
+		valeruntime.MiddlewareRuntime{
 			RedirectRegex:       `^http://old.example.com/(.*)$`,
 			RedirectReplacement: `https://new.example.com/$1`,
 		},
@@ -126,8 +126,8 @@ func TestWrapMiddlewaresRedirectsRegex(t *testing.T) {
 func TestMiddlewareRegistryUsesCustomFactory(t *testing.T) {
 	t.Parallel()
 
-	registry := velaruntime.NewMiddlewareRegistry()
-	if err := registry.Register("mark", func(next http.Handler, middleware velaruntime.MiddlewareRuntime) http.Handler {
+	registry := valeruntime.NewMiddlewareRegistry()
+	if err := registry.Register("mark", func(next http.Handler, middleware valeruntime.MiddlewareRuntime) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			r.Header.Set("X-Middleware", middleware.Name)
 			next.ServeHTTP(w, r)
@@ -136,12 +136,12 @@ func TestMiddlewareRegistryUsesCustomFactory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handler := velaruntime.WrapMiddlewaresWithRegistry(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	handler := valeruntime.WrapMiddlewaresWithRegistry(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("X-Middleware"); got != "custom" {
 			t.Fatalf("header = %q, want custom", got)
 		}
-	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
-		velaruntime.MiddlewareRuntime{Name: "custom", Type: "mark"},
+	}), collectionlist.NewList[valeruntime.MiddlewareRuntime](
+		valeruntime.MiddlewareRuntime{Name: "custom", Type: "mark"},
 	), registry)
 
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/", http.NoBody))
@@ -150,14 +150,14 @@ func TestMiddlewareRegistryUsesCustomFactory(t *testing.T) {
 func TestMiddlewareRegistryCloneKeepsFactoriesIsolated(t *testing.T) {
 	t.Parallel()
 
-	registry := velaruntime.NewMiddlewareRegistry()
-	if err := registry.Register("mark", func(next http.Handler, _ velaruntime.MiddlewareRuntime) http.Handler {
+	registry := valeruntime.NewMiddlewareRegistry()
+	if err := registry.Register("mark", func(next http.Handler, _ valeruntime.MiddlewareRuntime) http.Handler {
 		return next
 	}); err != nil {
 		t.Fatal(err)
 	}
 	clone := registry.Clone()
-	if err := clone.Register("other", func(next http.Handler, _ velaruntime.MiddlewareRuntime) http.Handler {
+	if err := clone.Register("other", func(next http.Handler, _ valeruntime.MiddlewareRuntime) http.Handler {
 		return next
 	}); err != nil {
 		t.Fatal(err)
@@ -174,11 +174,11 @@ func TestMiddlewareRegistryCloneKeepsFactoriesIsolated(t *testing.T) {
 func TestBuiltinMiddlewareAppliesSecureHeaders(t *testing.T) {
 	t.Parallel()
 
-	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := valeruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
-		velaruntime.MiddlewareRuntime{
-			Secure: velaruntime.SecureMiddlewareRuntime{Enabled: true},
+	}), collectionlist.NewList[valeruntime.MiddlewareRuntime](
+		valeruntime.MiddlewareRuntime{
+			Secure: valeruntime.SecureMiddlewareRuntime{Enabled: true},
 		},
 	))
 
@@ -197,11 +197,11 @@ func TestBuiltinMiddlewareAppliesCORS(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	handler := valeruntime.WrapMiddlewares(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		called = true
-	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
-		velaruntime.MiddlewareRuntime{
-			CORS: velaruntime.CORSMiddlewareRuntime{
+	}), collectionlist.NewList[valeruntime.MiddlewareRuntime](
+		valeruntime.MiddlewareRuntime{
+			CORS: valeruntime.CORSMiddlewareRuntime{
 				Enabled:        true,
 				AllowedOrigins: collectionlist.NewList("https://ui.example.com"),
 				AllowedMethods: collectionlist.NewList(http.MethodGet),
@@ -231,11 +231,11 @@ func TestBuiltinMiddlewareAppliesCORS(t *testing.T) {
 func TestBuiltinMiddlewareRateLimits(t *testing.T) {
 	t.Parallel()
 
-	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := valeruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
-		velaruntime.MiddlewareRuntime{
-			RateLimit: velaruntime.RateLimitRuntime{
+	}), collectionlist.NewList[valeruntime.MiddlewareRuntime](
+		valeruntime.MiddlewareRuntime{
+			RateLimit: valeruntime.RateLimitRuntime{
 				Enabled: true,
 				Rate:    1,
 				Burst:   1,
@@ -259,12 +259,12 @@ func TestBuiltinMiddlewareRateLimits(t *testing.T) {
 func TestBuiltinMiddlewareCircuitBreakerRejectsAfterFailures(t *testing.T) {
 	t.Parallel()
 
-	handler := velaruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := valeruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "upstream failed", http.StatusBadGateway)
-	}), collectionlist.NewList[velaruntime.MiddlewareRuntime](
-		velaruntime.MiddlewareRuntime{
+	}), collectionlist.NewList[valeruntime.MiddlewareRuntime](
+		valeruntime.MiddlewareRuntime{
 			Name: "breaker",
-			CircuitBreaker: velaruntime.CircuitBreakerRuntime{
+			CircuitBreaker: valeruntime.CircuitBreakerRuntime{
 				Enabled:          true,
 				FailureThreshold: 1,
 			},

@@ -1,4 +1,4 @@
-// Package gateway embeds Vela in other Go programs: build a Gateway with functional
+// Package gateway embeds Vale in other Go programs: build a Gateway with functional
 // options, call Start to listen on entrypoints and on the admin address from the
 // compiled snapshot, then Stop for graceful shutdown.
 //

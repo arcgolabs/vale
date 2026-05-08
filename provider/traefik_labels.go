@@ -15,7 +15,7 @@ const (
 	traefikMiddlewarePrefix = "traefik.http.middlewares."
 )
 
-// TraefikLabels is the normalized subset of Traefik HTTP dynamic labels Vela can project.
+// TraefikLabels is the normalized subset of Traefik HTTP dynamic labels Vale can project.
 type TraefikLabels struct {
 	Enabled     mo.Option[bool]
 	Routers     *mapping.Map[string, TraefikRouter]
@@ -23,7 +23,7 @@ type TraefikLabels struct {
 	Middlewares *mapping.Map[string, config.Middleware]
 }
 
-// TraefikRouter contains router labels projected into Vela's HTTP route model.
+// TraefikRouter contains router labels projected into Vale's HTTP route model.
 type TraefikRouter struct {
 	Name        string
 	Rule        string
@@ -36,7 +36,7 @@ type TraefikRouter struct {
 	Headers     *mapping.Map[string, string]
 }
 
-// TraefikService contains load balancer labels projected into Vela services.
+// TraefikService contains load balancer labels projected into Vale services.
 type TraefikService struct {
 	Name   string
 	Port   int

@@ -67,7 +67,7 @@ func (g *Gateway) buildAdminMux() http.Handler {
 	router.Handle("/metrics", g.runtime.MetricsHandler())
 
 	adminAdapter := httpxstd.New(router, adapter.HumaOptions{
-		Title:             "Vela Admin API",
+		Title:             "Vale Admin API",
 		Version:           "0.1.0",
 		Description:       "Runtime and cluster control-plane endpoints.",
 		DisableDocsRoutes: true,

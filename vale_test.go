@@ -1,4 +1,4 @@
-package vela_test
+package vale_test
 
 import (
 	"log/slog"
@@ -12,7 +12,7 @@ import (
 func TestNewUsesDefaultConfigWhenNoSourceIsConfigured(t *testing.T) {
 	t.Parallel()
 
-	gateway, err := vela.New(vela.WithLogger(slog.New(slog.DiscardHandler)))
+	gateway, err := vale.New(vale.WithLogger(slog.New(slog.DiscardHandler)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,14 +32,14 @@ func TestDefaultConfigModelIsValid(t *testing.T) {
 func TestRootPackageRuntimeBuilders(t *testing.T) {
 	t.Parallel()
 
-	endpoint, err := vela.NewEndpoint("http://127.0.0.1:8081", 1, http.NotFoundHandler())
+	endpoint, err := vale.NewEndpoint("http://127.0.0.1:8081", 1, http.NotFoundHandler())
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := vela.NewService("api", "round_robin", endpoint)
-	route := vela.NewRoute("api", "web", service).WithPathPrefix("/api")
-	snapshot := vela.NewSnapshot().
-		AddEntrypoint("web", ":8080", vela.RuntimeEntrypoint{}).
+	service := vale.NewService("api", "round_robin", endpoint)
+	route := vale.NewRoute("api", "web", service).WithPathPrefix("/api")
+	snapshot := vale.NewSnapshot().
+		AddEntrypoint("web", ":8080", vale.RuntimeEntrypoint{}).
 		AddService(service).
 		AddRoute(route).
 		BuildMatchers()
@@ -52,10 +52,10 @@ func TestRootPackageRuntimeBuilders(t *testing.T) {
 func TestRootPackageConfigBuilder(t *testing.T) {
 	t.Parallel()
 
-	cfg := vela.NewConfigBuilder().
+	cfg := vale.NewConfigBuilder().
 		Entrypoint("web", ":8080").
 		Service("api", "http://127.0.0.1:8081").
-		RouteTo("api", "web", "api", vela.RoutePathPrefix("/api")).
+		RouteTo("api", "web", "api", vale.RoutePathPrefix("/api")).
 		Admin(":19090").
 		Build()
 
