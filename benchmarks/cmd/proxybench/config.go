@@ -23,6 +23,7 @@ type config struct {
 	path         string
 	jsonPath     string
 	markdownPath string
+	logLevel     string
 }
 
 type target struct {
@@ -44,6 +45,7 @@ func parseConfig() (config, error) {
 	path := flag.String("path", "/", "request path")
 	jsonPath := flag.String("json", "", "optional JSON report path")
 	markdownPath := flag.String("markdown", "", "optional Markdown report path")
+	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error, off")
 	flag.Parse()
 
 	targetList, err := parseTargets(*targets, *path)
@@ -69,6 +71,7 @@ func parseConfig() (config, error) {
 		path:         normalizePath(*path),
 		jsonPath:     strings.TrimSpace(*jsonPath),
 		markdownPath: strings.TrimSpace(*markdownPath),
+		logLevel:     strings.ToLower(strings.TrimSpace(*logLevel)),
 	}, nil
 }
 

@@ -30,14 +30,17 @@ Default host ports:
 Run on PowerShell:
 
 ```powershell
-./benchmarks/bench-compare.ps1 -Duration 30s -Warmup 5s -Concurrency 64
+./benchmarks/bench-compare.ps1 -Duration 30s -Warmup 5s -Concurrency 64 -LogLevel info
 ```
 
 Run on POSIX shells:
 
 ```bash
-DURATION=30s WARMUP=5s CONCURRENCY=64 ./benchmarks/bench-compare.sh
+DURATION=30s WARMUP=5s CONCURRENCY=64 LOG_LEVEL=info ./benchmarks/bench-compare.sh
 ```
+
+Benchmark progress logs are written to stderr. Use `-LogLevel off` on
+PowerShell or `LOG_LEVEL=off` on POSIX shells to keep only the result table.
 
 The scripts write:
 

@@ -4,6 +4,7 @@ param(
     [string]$Warmup = "3s",
     [int]$Concurrency = 32,
     [int]$TimeoutSeconds = 60,
+    [string]$LogLevel = "info",
     [string]$OutputDir = "",
     [switch]$Keep
 )
@@ -18,6 +19,12 @@ if ([string]::IsNullOrWhiteSpace($OutputDir)) {
     $OutputDir = Join-Path $BenchDir "results\$Stamp"
 }
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+
+function Write-BenchLog {
+    param([string]$Message)
+
+    Write-Host "bench: $Message"
+}
 
 function Wait-BenchEndpoint {
     param(
@@ -41,23 +48,31 @@ function Wait-BenchEndpoint {
 
 Push-Location $Root
 try {
+    Write-BenchLog "starting compose stack"
     docker compose -f $ComposeFile up -d --build
 
+    Write-BenchLog "waiting for vale"
     Wait-BenchEndpoint -Name "vale" -Url "http://127.0.0.1:18080/"
+    Write-BenchLog "waiting for traefik"
     Wait-BenchEndpoint -Name "traefik" -Url "http://127.0.0.1:18081/"
+    Write-BenchLog "waiting for caddy"
     Wait-BenchEndpoint -Name "caddy" -Url "http://127.0.0.1:18082/"
 
+    Write-BenchLog "recording image metadata in $OutputDir"
     docker compose -f $ComposeFile images | Out-File -FilePath (Join-Path $OutputDir "images.txt") -Encoding utf8
 
+    Write-BenchLog "running proxybench"
     go run ./benchmarks/cmd/proxybench `
         -duration $Duration `
         -warmup $Warmup `
         -concurrency $Concurrency `
+        -log-level $LogLevel `
         -target "vale=http://127.0.0.1:18080,traefik=http://127.0.0.1:18081,caddy=http://127.0.0.1:18082" `
         -json (Join-Path $OutputDir "proxybench.json") `
         -markdown (Join-Path $OutputDir "proxybench.md")
 } finally {
     if (-not $Keep) {
+        Write-BenchLog "stopping compose stack"
         docker compose -f $ComposeFile down -v
     }
     Pop-Location

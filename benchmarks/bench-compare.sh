@@ -8,11 +8,16 @@ DURATION="${DURATION:-15s}"
 WARMUP="${WARMUP:-3s}"
 CONCURRENCY="${CONCURRENCY:-32}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-60}"
+LOG_LEVEL="${LOG_LEVEL:-info}"
 STAMP=$(date +%Y%m%d-%H%M%S)
 OUTPUT_DIR="${OUTPUT_DIR:-$SCRIPT_DIR/results/$STAMP}"
 KEEP="${KEEP:-0}"
 
 mkdir -p "$OUTPUT_DIR"
+
+bench_log() {
+  echo "bench: $*" >&2
+}
 
 wait_endpoint() {
   name="$1"
@@ -30,24 +35,32 @@ wait_endpoint() {
 
 cleanup() {
   if [ "$KEEP" != "1" ]; then
+    bench_log "stopping compose stack"
     docker compose -f "$COMPOSE_FILE" down -v
   fi
 }
 trap cleanup EXIT
 
 cd "$ROOT_DIR"
+bench_log "starting compose stack"
 docker compose -f "$COMPOSE_FILE" up -d --build
 
+bench_log "waiting for vale"
 wait_endpoint vale http://127.0.0.1:18080/
+bench_log "waiting for traefik"
 wait_endpoint traefik http://127.0.0.1:18081/
+bench_log "waiting for caddy"
 wait_endpoint caddy http://127.0.0.1:18082/
 
+bench_log "recording image metadata in $OUTPUT_DIR"
 docker compose -f "$COMPOSE_FILE" images > "$OUTPUT_DIR/images.txt"
 
+bench_log "running proxybench"
 go run ./benchmarks/cmd/proxybench \
   -duration "$DURATION" \
   -warmup "$WARMUP" \
   -concurrency "$CONCURRENCY" \
+  -log-level "$LOG_LEVEL" \
   -target "vale=http://127.0.0.1:18080,traefik=http://127.0.0.1:18081,caddy=http://127.0.0.1:18082" \
   -json "$OUTPUT_DIR/proxybench.json" \
   -markdown "$OUTPUT_DIR/proxybench.md"

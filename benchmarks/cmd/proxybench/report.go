@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -111,16 +112,19 @@ func newBenchmarkReport(cfg config, results *collectionlist.List[benchmarkResult
 	}
 }
 
-func writeReports(cfg config, currentReport benchmarkReport) error {
+func writeReports(cfg config, currentReport benchmarkReport, logger *slog.Logger) error {
+	logger = normalizeLogger(logger)
 	if cfg.jsonPath != "" {
 		if err := writeJSONReport(cfg.jsonPath, currentReport); err != nil {
 			return err
 		}
+		logger.Info("benchmark report written", slog.String("format", "json"), slog.String("path", cfg.jsonPath))
 	}
 	if cfg.markdownPath != "" {
 		if err := writeMarkdownReport(cfg.markdownPath, currentReport); err != nil {
 			return err
 		}
+		logger.Info("benchmark report written", slog.String("format", "markdown"), slog.String("path", cfg.markdownPath))
 	}
 	return nil
 }
