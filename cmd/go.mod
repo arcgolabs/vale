@@ -1,4 +1,4 @@
-module github.com/arcgolabs/vela/cmd
+module github.com/arcgolabs/vale/cmd
 
 go 1.26.2
 

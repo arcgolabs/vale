@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	velaruntime "github.com/arcgolabs/vela/runtime"
+	velaruntime "github.com/arcgolabs/vale/runtime"
 )
 
 func TestSnapshotBuilderBuildsMatcher(t *testing.T) {

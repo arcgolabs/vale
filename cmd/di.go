@@ -6,10 +6,10 @@ import (
 
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/logx"
-	"github.com/arcgolabs/vela"
-	raftnode "github.com/arcgolabs/vela/cluster/raftnode"
-	prometheusmetrics "github.com/arcgolabs/vela/observability/prometheus"
-	fileconfig "github.com/arcgolabs/vela/provider/fileconfig"
+	"github.com/arcgolabs/vale"
+	raftnode "github.com/arcgolabs/vale/cluster/raftnode"
+	prometheusmetrics "github.com/arcgolabs/vale/observability/prometheus"
+	fileconfig "github.com/arcgolabs/vale/provider/fileconfig"
 	"github.com/samber/oops"
 )
 

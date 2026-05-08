@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/arcgolabs/collectionx/mapping"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/runtime"
 )
 
 func (g *Gateway) publishClusterUpdate(snapshot *runtime.CompiledSnapshot) {

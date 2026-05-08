@@ -8,7 +8,7 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	collectionset "github.com/arcgolabs/collectionx/set"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/runtime"
 	"github.com/caddyserver/certmagic"
 	"github.com/samber/oops"
 	"go.uber.org/zap"

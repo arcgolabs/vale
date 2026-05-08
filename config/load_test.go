@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vale/config"
 )
 
 func TestValidateReportsUnknownRouteReferences(t *testing.T) {

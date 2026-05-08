@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/arcgolabs/vela/config"
-	"github.com/arcgolabs/vela/provider"
+	"github.com/arcgolabs/vale/config"
+	"github.com/arcgolabs/vale/provider"
 )
 
 type Provider struct {

@@ -1,4 +1,4 @@
-module github.com/arcgolabs/vela/provider/docker
+module github.com/arcgolabs/vale/provider/docker
 
 go 1.26.2
 

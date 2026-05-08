@@ -7,9 +7,9 @@ import (
 	"io"
 	"log/slog"
 
-	"github.com/arcgolabs/vela/compiler"
-	fileconfig "github.com/arcgolabs/vela/provider/fileconfig"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/compiler"
+	fileconfig "github.com/arcgolabs/vale/provider/fileconfig"
+	"github.com/arcgolabs/vale/runtime"
 )
 
 type Provider struct {

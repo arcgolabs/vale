@@ -6,7 +6,7 @@
 
 ## v0.1.0 - 2026-05-08
 
-- Library-first root API under `github.com/arcgolabs/vela`.
+- Library-first root API under `github.com/arcgolabs/vale`.
 - Collectionx-backed compiled runtime API and builder helpers.
 - Built-in `oxy` reverse proxy engine.
 - Static config, file config, merged providers, reload debounce, and config fingerprint dedupe.

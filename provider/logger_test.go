@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/arcgolabs/vela/provider"
+	"github.com/arcgolabs/vale/provider"
 )
 
 type loggerAwareStub struct {

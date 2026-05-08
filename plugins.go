@@ -6,9 +6,9 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
-	"github.com/arcgolabs/vela/gateway"
-	"github.com/arcgolabs/vela/provider"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/gateway"
+	"github.com/arcgolabs/vale/provider"
+	"github.com/arcgolabs/vale/runtime"
 	"github.com/samber/oops"
 )
 

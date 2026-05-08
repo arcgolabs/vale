@@ -10,11 +10,11 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/observabilityx"
-	"github.com/arcgolabs/vela/config"
-	"github.com/arcgolabs/vela/gateway"
-	"github.com/arcgolabs/vela/provider"
-	staticconfigprovider "github.com/arcgolabs/vela/provider/staticconfig"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/config"
+	"github.com/arcgolabs/vale/gateway"
+	"github.com/arcgolabs/vale/provider"
+	staticconfigprovider "github.com/arcgolabs/vale/provider/staticconfig"
+	"github.com/arcgolabs/vale/runtime"
 	"github.com/samber/oops"
 )
 

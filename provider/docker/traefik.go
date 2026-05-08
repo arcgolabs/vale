@@ -6,8 +6,8 @@ import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	collectionset "github.com/arcgolabs/collectionx/set"
-	"github.com/arcgolabs/vela/config"
-	velaprovider "github.com/arcgolabs/vela/provider"
+	"github.com/arcgolabs/vale/config"
+	velaprovider "github.com/arcgolabs/vale/provider"
 )
 
 func labelsEnabled(labels *mapping.Map[string, string], traefikLabels velaprovider.TraefikLabels) bool {

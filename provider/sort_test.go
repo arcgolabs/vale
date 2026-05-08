@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	"github.com/arcgolabs/vela/provider"
+	"github.com/arcgolabs/vale/provider"
 )
 
 func TestSortedStrings(t *testing.T) {

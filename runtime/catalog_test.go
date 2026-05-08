@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	velaruntime "github.com/arcgolabs/vela/runtime"
+	velaruntime "github.com/arcgolabs/vale/runtime"
 )
 
 func TestCatalogQueriesRoutesByServiceAndEntrypoint(t *testing.T) {

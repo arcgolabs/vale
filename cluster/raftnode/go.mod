@@ -1,4 +1,4 @@
-module github.com/arcgolabs/vela/cluster/raftnode
+module github.com/arcgolabs/vale/cluster/raftnode
 
 go 1.26.2
 

@@ -27,9 +27,8 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 
 ## Status
 
-The project is in v0.1.0 release-candidate state. The public import path is
-`github.com/arcgolabs/vela`; the GitHub repository name should match that path
-before tagging the first public release.
+The project is in v0.1.0 release-candidate state. The public import path follows
+the current git remote: `github.com/arcgolabs/vale`.
 
 ## Architecture Boundary
 
@@ -60,16 +59,16 @@ The workspace should not rely on local `replace` directives in `go.mod`. As the 
 
 Current workspace modules:
 
-- `github.com/arcgolabs/vela`: library-first core module.
-- `github.com/arcgolabs/vela/cmd`: standalone `velad` binary wiring.
-- `github.com/arcgolabs/vela/cluster/raftnode`: optional HashiCorp Raft cluster adapter.
-- `github.com/arcgolabs/vela/observability/prometheus`: optional Prometheus metrics adapter.
-- `github.com/arcgolabs/vela/provider/docker`: optional Docker config provider.
-- `github.com/arcgolabs/vela/provider/file`: optional HCL snapshot provider.
-- `github.com/arcgolabs/vela/provider/fileconfig`: optional HCL config source provider.
-- `github.com/arcgolabs/vela/provider/k8s`: optional K8s-like config provider.
-- `github.com/arcgolabs/vela/examples/embedded_multi_provider`: example that consumes optional provider modules.
-- `github.com/arcgolabs/vela/examples/embedded_static_config`: example that consumes the core event bus.
+- `github.com/arcgolabs/vale`: library-first core module.
+- `github.com/arcgolabs/vale/cmd`: standalone `velad` binary wiring.
+- `github.com/arcgolabs/vale/cluster/raftnode`: optional HashiCorp Raft cluster adapter.
+- `github.com/arcgolabs/vale/observability/prometheus`: optional Prometheus metrics adapter.
+- `github.com/arcgolabs/vale/provider/docker`: optional Docker config provider.
+- `github.com/arcgolabs/vale/provider/file`: optional HCL snapshot provider.
+- `github.com/arcgolabs/vale/provider/fileconfig`: optional HCL config source provider.
+- `github.com/arcgolabs/vale/provider/k8s`: optional K8s-like config provider.
+- `github.com/arcgolabs/vale/examples/embedded_multi_provider`: example that consumes optional provider modules.
+- `github.com/arcgolabs/vale/examples/embedded_static_config`: example that consumes the core event bus.
 
 Local workspace modules are intentionally not declared as `replace` directives. `go.work`
 resolves them during repository development; published modules should use real released
@@ -150,7 +149,7 @@ Verify:
 
 ## Embedded API
 
-Use `github.com/arcgolabs/vela` as the primary library import path.
+Use `github.com/arcgolabs/vale` as the primary library import path.
 `vela.New()` uses the built-in default config when no config path, config provider,
 snapshot provider, or static config is supplied.
 
@@ -159,8 +158,8 @@ import (
   "context"
   "log/slog"
 
-  "github.com/arcgolabs/vela"
-  fileconfig "github.com/arcgolabs/vela/provider/fileconfig"
+  "github.com/arcgolabs/vale"
+  fileconfig "github.com/arcgolabs/vale/provider/fileconfig"
 )
 
 func runEmbedded() error {

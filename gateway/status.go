@@ -2,7 +2,7 @@ package gateway
 
 import (
 	"github.com/arcgolabs/collectionx/mapping"
-	"github.com/arcgolabs/vela/provider"
+	"github.com/arcgolabs/vale/provider"
 )
 
 // Events returns the event bus configured with WithEventBus or the internal instance.

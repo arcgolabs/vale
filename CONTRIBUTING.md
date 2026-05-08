@@ -31,7 +31,7 @@ The GitHub CI workflow runs the same test and vet set.
 
 ## API Guidelines
 
-- Prefer the root `github.com/arcgolabs/vela` package for public embedded APIs.
+- Prefer the root `github.com/arcgolabs/vale` package for public embedded APIs.
 - Keep `config` decoder DTOs friendly to HCL/JSON and Go standard tooling.
 - Prefer `collectionx` collection types for runtime-facing public APIs and
   internal collection-heavy code.

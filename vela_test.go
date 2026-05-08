@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/arcgolabs/vela"
-	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vale"
+	"github.com/arcgolabs/vale/config"
 )
 
 func TestNewUsesDefaultConfigWhenNoSourceIsConfigured(t *testing.T) {

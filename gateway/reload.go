@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/runtime"
 )
 
 func staticRuntimeChanges(current, next *runtime.CompiledSnapshot) *collectionlist.List[string] {

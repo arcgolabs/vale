@@ -1,4 +1,4 @@
-module github.com/arcgolabs/vela/provider/fileconfig
+module github.com/arcgolabs/vale/provider/fileconfig
 
 go 1.26.2
 

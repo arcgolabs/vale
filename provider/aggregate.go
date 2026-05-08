@@ -8,7 +8,7 @@ import (
 	"io"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/runtime"
 )
 
 type fallbackProvider struct {

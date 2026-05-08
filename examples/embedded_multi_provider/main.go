@@ -12,10 +12,10 @@ import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/eventx"
-	"github.com/arcgolabs/vela"
-	providerevents "github.com/arcgolabs/vela/provider"
-	providerdocker "github.com/arcgolabs/vela/provider/docker"
-	providerk8s "github.com/arcgolabs/vela/provider/k8s"
+	"github.com/arcgolabs/vale"
+	providerevents "github.com/arcgolabs/vale/provider"
+	providerdocker "github.com/arcgolabs/vale/provider/docker"
+	providerk8s "github.com/arcgolabs/vale/provider/k8s"
 )
 
 func main() {

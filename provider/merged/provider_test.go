@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arcgolabs/vela/config"
-	"github.com/arcgolabs/vela/provider/memoryconfig"
-	"github.com/arcgolabs/vela/provider/merged"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/config"
+	"github.com/arcgolabs/vale/provider/memoryconfig"
+	"github.com/arcgolabs/vale/provider/merged"
+	"github.com/arcgolabs/vale/runtime"
 )
 
 func TestWatchSkipsUnchangedFingerprint(t *testing.T) {

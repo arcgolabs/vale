@@ -9,8 +9,8 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	collectionset "github.com/arcgolabs/collectionx/set"
-	"github.com/arcgolabs/vela/provider"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/provider"
+	"github.com/arcgolabs/vale/runtime"
 )
 
 func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSnapshot), onError func(error)) (io.Closer, error) {

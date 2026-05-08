@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/arcgolabs/collectionx/mapping"
-	"github.com/arcgolabs/vela/provider"
+	"github.com/arcgolabs/vale/provider"
 )
 
 func TestParseTraefikLabelsProjectsHTTPResources(t *testing.T) {

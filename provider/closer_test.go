@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/arcgolabs/vela/provider"
+	"github.com/arcgolabs/vale/provider"
 )
 
 type testCloser struct {

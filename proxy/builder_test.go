@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/arcgolabs/vela/proxy"
+	"github.com/arcgolabs/vale/proxy"
 )
 
 func TestRewriteTargetURLPreservesRequestPathAndQuery(t *testing.T) {

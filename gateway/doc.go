@@ -9,5 +9,5 @@
 // Pass WithEventBus to share lifecycle events across your app or use Events(); if no bus was
 // passed, Gateway creates an eventx bus and closes it on Stop only when Gateway owned it internally.
 //
-// Stable low-level import path: github.com/arcgolabs/vela/gateway
+// Stable low-level import path: github.com/arcgolabs/vale/gateway
 package gateway

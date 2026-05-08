@@ -7,8 +7,8 @@ import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	collectionset "github.com/arcgolabs/collectionx/set"
-	"github.com/arcgolabs/vela/config"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/config"
+	"github.com/arcgolabs/vale/runtime"
 )
 
 var supportedMiddlewareTypes = collectionset.NewSet(runtime.MiddlewareTypeBuiltin)

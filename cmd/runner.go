@@ -10,7 +10,7 @@ import (
 
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/logx"
-	"github.com/arcgolabs/vela"
+	"github.com/arcgolabs/vale"
 	"github.com/samber/oops"
 )
 

@@ -3,7 +3,7 @@ package gateway
 import (
 	"log/slog"
 
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/runtime"
 )
 
 type MetricsFactory func(enabled bool, logger *slog.Logger) runtime.MetricsRecorder

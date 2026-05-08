@@ -1,4 +1,4 @@
-module github.com/arcgolabs/vela/examples/embedded_static_config
+module github.com/arcgolabs/vale/examples/embedded_static_config
 
 go 1.26.2
 

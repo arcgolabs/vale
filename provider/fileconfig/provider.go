@@ -11,9 +11,9 @@ import (
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	"github.com/arcgolabs/vela/config"
-	"github.com/arcgolabs/vela/gateway"
-	"github.com/arcgolabs/vela/provider"
+	"github.com/arcgolabs/vale/config"
+	"github.com/arcgolabs/vale/gateway"
+	"github.com/arcgolabs/vale/provider"
 	"github.com/fsnotify/fsnotify"
 	"github.com/hashicorp/hcl/v2/hclsimple"
 )

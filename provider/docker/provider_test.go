@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/arcgolabs/collectionx/mapping"
-	providerdocker "github.com/arcgolabs/vela/provider/docker"
+	providerdocker "github.com/arcgolabs/vale/provider/docker"
 )
 
 func TestProviderLoadsTraefikLabels(t *testing.T) {

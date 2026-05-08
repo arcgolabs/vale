@@ -3,7 +3,7 @@ package config_test
 import (
 	"testing"
 
-	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vale/config"
 )
 
 func TestFingerprintStableForSameConfig(t *testing.T) {

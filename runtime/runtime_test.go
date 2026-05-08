@@ -7,7 +7,7 @@ import (
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	velaruntime "github.com/arcgolabs/vela/runtime"
+	velaruntime "github.com/arcgolabs/vale/runtime"
 )
 
 func TestServiceRuntimePickSkipsUnhealthyEndpoints(t *testing.T) {

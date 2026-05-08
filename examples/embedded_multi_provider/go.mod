@@ -1,4 +1,4 @@
-module github.com/arcgolabs/vela/examples/embedded_multi_provider
+module github.com/arcgolabs/vale/examples/embedded_multi_provider
 
 go 1.26.2
 

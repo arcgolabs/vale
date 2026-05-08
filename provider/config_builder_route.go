@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vale/config"
 )
 
 func (b *ConfigBuilder) RouteTo(name, entrypoint, service string, options ...RouteOption) *ConfigBuilder {

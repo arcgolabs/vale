@@ -5,8 +5,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/arcgolabs/vela/config"
-	"github.com/arcgolabs/vela/provider"
+	"github.com/arcgolabs/vale/config"
+	"github.com/arcgolabs/vale/provider"
 )
 
 func TestConfigProviderRegistryCreatesProvider(t *testing.T) {

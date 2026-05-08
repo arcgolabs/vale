@@ -1,4 +1,4 @@
-module github.com/arcgolabs/vela
+module github.com/arcgolabs/vale
 
 go 1.26.2
 

@@ -1,4 +1,4 @@
-module github.com/arcgolabs/vela/observability/prometheus
+module github.com/arcgolabs/vale/observability/prometheus
 
 go 1.26.2
 

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/arcgolabs/dix"
-	"github.com/arcgolabs/vela"
+	"github.com/arcgolabs/vale"
 	"github.com/spf13/pflag"
 )
 

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/arcgolabs/eventx"
-	"github.com/arcgolabs/vela"
-	providerevents "github.com/arcgolabs/vela/provider"
+	"github.com/arcgolabs/vale"
+	providerevents "github.com/arcgolabs/vale/provider"
 )
 
 func main() {

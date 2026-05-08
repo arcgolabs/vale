@@ -23,8 +23,8 @@
 - No local `replace` directives are committed.
 - Optional modules keep publishable module paths.
 - `go.work` is local workspace wiring only.
-- GitHub repository name is `arcgolabs/vela`, or the redirect from the previous
-  repository name is verified for `go get github.com/arcgolabs/vela`.
+- GitHub repository name is `arcgolabs/vale` and `go get github.com/arcgolabs/vale`
+  is verified after tagging.
 
 ## Release Notes
 

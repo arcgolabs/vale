@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arcgolabs/vela/gateway"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/gateway"
+	"github.com/arcgolabs/vale/runtime"
 )
 
 func TestStartReturnsEntrypointListenError(t *testing.T) {

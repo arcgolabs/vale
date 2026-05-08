@@ -7,7 +7,7 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
-	velaruntime "github.com/arcgolabs/vela/runtime"
+	velaruntime "github.com/arcgolabs/vale/runtime"
 )
 
 func TestWrapMiddlewares(t *testing.T) {

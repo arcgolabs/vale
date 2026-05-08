@@ -5,8 +5,8 @@ import (
 	"log/slog"
 
 	observabilityprom "github.com/arcgolabs/observabilityx/prometheus"
-	"github.com/arcgolabs/vela/gateway"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/gateway"
+	"github.com/arcgolabs/vale/runtime"
 )
 
 func New(enabled bool, logger *slog.Logger) runtime.MetricsRecorder {

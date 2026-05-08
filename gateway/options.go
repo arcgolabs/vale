@@ -3,11 +3,11 @@ package gateway
 import (
 	"log/slog"
 
-	"github.com/arcgolabs/vela/config"
-	"github.com/arcgolabs/vela/provider"
-	staticprovider "github.com/arcgolabs/vela/provider/static"
-	staticconfigprovider "github.com/arcgolabs/vela/provider/staticconfig"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/config"
+	"github.com/arcgolabs/vale/provider"
+	staticprovider "github.com/arcgolabs/vale/provider/static"
+	staticconfigprovider "github.com/arcgolabs/vale/provider/staticconfig"
+	"github.com/arcgolabs/vale/runtime"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/observabilityx"

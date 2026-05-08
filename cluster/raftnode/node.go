@@ -11,7 +11,7 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
-	"github.com/arcgolabs/vela/gateway"
+	"github.com/arcgolabs/vale/gateway"
 	"github.com/hashicorp/raft"
 	"github.com/samber/oops"
 )

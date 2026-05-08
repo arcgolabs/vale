@@ -7,7 +7,7 @@ import (
 
 	"github.com/arcgolabs/collectionx/bitset"
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	velaruntime "github.com/arcgolabs/vela/runtime"
+	velaruntime "github.com/arcgolabs/vale/runtime"
 )
 
 func TestMatchRoutePrioritizesHostAndPredicates(t *testing.T) {

@@ -3,7 +3,7 @@ package gateway
 import (
 	"context"
 
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/runtime"
 )
 
 func (g *Gateway) applyReloadSnapshot(ctx context.Context, snapshot *runtime.CompiledSnapshot) {

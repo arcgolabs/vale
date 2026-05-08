@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arcgolabs/vela/cluster/raftnode"
+	"github.com/arcgolabs/vale/cluster/raftnode"
 )
 
 func TestNodeAppliesSnapshotUpdateCommand(t *testing.T) {

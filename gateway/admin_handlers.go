@@ -10,7 +10,7 @@ import (
 	"github.com/arcgolabs/httpx"
 	"github.com/arcgolabs/httpx/adapter"
 	httpxstd "github.com/arcgolabs/httpx/adapter/std"
-	"github.com/arcgolabs/vela/runtime"
+	"github.com/arcgolabs/vale/runtime"
 	"github.com/go-chi/chi/v5"
 )
 

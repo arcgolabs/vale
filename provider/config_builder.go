@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	"github.com/arcgolabs/vela/config"
+	"github.com/arcgolabs/vale/config"
 )
 
 type EntrypointOption func(*config.Entrypoint)
