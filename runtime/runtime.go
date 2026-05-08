@@ -178,6 +178,8 @@ type EndpointRuntime struct {
 
 type Gateway struct {
 	current            atomic.Pointer[CompiledSnapshot]
+	routeHandlers      atomic.Pointer[routeHandlerIndex]
+	routeMatches       atomic.Pointer[routeMatchCache]
 	access             *AccessLogger
 	metrics            MetricsRecorder
 	middlewareRegistry *MiddlewareRegistry

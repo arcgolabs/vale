@@ -3,6 +3,7 @@ package runtime
 import (
 	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -102,7 +103,7 @@ func wrapBuiltinMiddleware(next http.Handler, middleware MiddlewareRuntime) http
 		applyHeaders(r.Header, middleware.RequestHeaders)
 		applyPathMiddleware(r, middleware, replacePathRegex)
 		if target, ok := redirectTarget(r, middleware, redirectRegex); ok {
-			http.Redirect(w, r, target, redirectStatus(middleware.RedirectPermanent))
+			writeRedirect(w, target, redirectStatus(middleware.RedirectPermanent))
 			return
 		}
 		applyHeaders(w.Header(), middleware.ResponseHeaders)
@@ -175,6 +176,37 @@ func redirectTarget(r *http.Request, middleware MiddlewareRuntime, redirectRegex
 		return "", false
 	}
 	return redirectRegex.ReplaceAllString(current, middleware.RedirectReplacement), true
+}
+
+func writeRedirect(w http.ResponseWriter, target string, status int) {
+	location, ok := safeRedirectLocation(target)
+	if !ok {
+		http.Error(w, "invalid redirect target", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Location", location)
+	w.WriteHeader(status)
+}
+
+func safeRedirectLocation(target string) (string, bool) {
+	target = strings.TrimSpace(target)
+	if target == "" || strings.ContainsAny(target, "\r\n") {
+		return "", false
+	}
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return "", false
+	}
+	if parsed.IsAbs() {
+		if parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return "", false
+		}
+		return parsed.String(), true
+	}
+	if strings.HasPrefix(target, "//") || !strings.HasPrefix(target, "/") {
+		return "", false
+	}
+	return parsed.String(), true
 }
 
 func schemeRedirectTarget(r *http.Request, middleware MiddlewareRuntime) string {

@@ -15,7 +15,7 @@ func hasPredicate(route *CompiledRoute, predicate int) bool {
 	case PredicateMethod:
 		return route.Method != ""
 	case PredicateHeaders:
-		return route.Headers.Len() > 0
+		return route.Headers != nil && route.Headers.Len() > 0
 	default:
 		return false
 	}

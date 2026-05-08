@@ -1,8 +1,8 @@
 package runtime
 
 import (
-	"net"
 	"net/http"
+	"slices"
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
@@ -83,7 +83,7 @@ func MatchRoute(matcher *EntrypointMatcher, routes *collectionlist.List[*Compile
 	}
 
 	host := normalizeRequestHost(request.Host)
-	method := strings.ToUpper(request.Method)
+	method := normalizeRequestMethod(request.Method)
 
 	if exactBucket, ok := matcher.exactHosts.Get(host); ok {
 		if route := exactBucket.Match(request.URL.Path, method, request.Header); route != nil {
@@ -108,9 +108,25 @@ func MatchRoute(matcher *EntrypointMatcher, routes *collectionlist.List[*Compile
 	return matcher.fallback.Match(request.URL.Path, method, request.Header)
 }
 
+func matchSnapshotRoute(snapshot *CompiledSnapshot, entrypoint string, request *http.Request) *CompiledRoute {
+	if snapshot == nil {
+		return nil
+	}
+	if snapshot.EntrypointMatchers != nil {
+		matcher, _ := snapshot.EntrypointMatchers.Get(entrypoint)
+		if matcher != nil {
+			return MatchRoute(matcher, nil, request)
+		}
+	}
+	if snapshot.RoutesByEntrypoint == nil {
+		return nil
+	}
+	return MatchRoute(nil, collectionlist.NewList(snapshot.RoutesByEntrypoint.Get(entrypoint)...), request)
+}
+
 func linearMatch(routes *collectionlist.List[*CompiledRoute], request *http.Request) *CompiledRoute {
 	host := strings.ToLower(request.Host)
-	method := strings.ToUpper(request.Method)
+	method := normalizeRequestMethod(request.Method)
 	matched, ok := collectionlist.FindList(routes, func(_ int, route *CompiledRoute) bool {
 		return linearRouteMatches(route, request, host, method)
 	})
@@ -142,9 +158,7 @@ func matchHeaders(expected *mapping.Map[string, string], actual http.Header) boo
 	}
 	matched := true
 	expected.Range(func(key string, expectedValue string) bool {
-		if !collectionlist.NewList(actual.Values(key)...).AnyMatch(func(_ int, value string) bool {
-			return value == expectedValue
-		}) {
+		if !slices.Contains(actual.Values(key), expectedValue) {
 			matched = false
 			return false
 		}
@@ -198,21 +212,10 @@ func routeScore(route *CompiledRoute) int {
 	if hasPredicate(route, PredicateMethod) {
 		score += 10
 	}
-	if hasPredicate(route, PredicateHeaders) {
+	if hasPredicate(route, PredicateHeaders) && route.Headers != nil {
 		score += route.Headers.Len()
 	}
 	return score
-}
-
-func normalizeRequestHost(hostPort string) string {
-	hostPort = strings.ToLower(strings.TrimSpace(hostPort))
-	if hostPort == "" {
-		return hostPort
-	}
-	if host, _, err := net.SplitHostPort(hostPort); err == nil {
-		return strings.ToLower(host)
-	}
-	return hostPort
 }
 
 func newRouteBucket() *routeBucket {
@@ -264,12 +267,4 @@ func (b *routeBucket) Match(path, method string, headers http.Header) *CompiledR
 		probe = trimLastRune(pathPrefix)
 	}
 	return matchWithPredicates(b.fallback, path, method, headers)
-}
-
-func trimLastRune(value string) string {
-	runes := []rune(value)
-	if len(runes) == 0 {
-		return ""
-	}
-	return string(runes[:len(runes)-1])
 }

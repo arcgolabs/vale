@@ -4,8 +4,6 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-
-	collectionlist "github.com/arcgolabs/collectionx/list"
 )
 
 func NewGateway(snapshot *CompiledSnapshot, logger *slog.Logger, accessEnabled bool, metrics MetricsRecorder) *Gateway {
@@ -25,12 +23,16 @@ func NewGatewayWithMiddlewareRegistry(snapshot *CompiledSnapshot, logger *slog.L
 		metrics:            metrics,
 		middlewareRegistry: registry,
 	}
+	gateway.routeHandlers.Store(newRouteHandlerIndex(snapshot, registry))
+	gateway.routeMatches.Store(newRouteMatchCache(snapshot))
 	gateway.current.Store(snapshot)
 	gateway.ObserveSnapshot(snapshot)
 	return gateway
 }
 
 func (g *Gateway) Swap(snapshot *CompiledSnapshot) {
+	g.routeHandlers.Store(newRouteHandlerIndex(snapshot, g.middlewareRegistry))
+	g.routeMatches.Store(newRouteMatchCache(snapshot))
 	g.current.Store(snapshot)
 	g.ObserveSnapshot(snapshot)
 }
@@ -51,9 +53,7 @@ func (g *Gateway) Handler(entrypoint string) http.Handler {
 			return
 		}
 
-		matcher, _ := snapshot.EntrypointMatchers.Get(entrypoint)
-		routes := collectionlist.NewList(snapshot.RoutesByEntrypoint.Get(entrypoint)...)
-		route := MatchRoute(matcher, routes, r)
+		route := g.matchRoute(snapshot, entrypoint, r)
 		if route == nil {
 			http.NotFound(w, r)
 			return
@@ -67,7 +67,7 @@ func (g *Gateway) Handler(entrypoint string) http.Handler {
 
 		start := time.Now()
 		recorder := newStatusRecorder(w)
-		handler := WrapMiddlewaresWithRegistry(endpoint.Proxy, route.Middlewares, g.middlewareRegistry)
+		handler := g.routeHandler(snapshot, route, endpoint)
 		if snapshot.Security.MaxBodyBytes > 0 {
 			r.Body = http.MaxBytesReader(recorder, r.Body, snapshot.Security.MaxBodyBytes)
 		}
@@ -90,6 +90,28 @@ func (g *Gateway) Handler(entrypoint string) http.Handler {
 		g.access.Log(event)
 		g.logFailedRequest(event)
 	})
+}
+
+func (g *Gateway) matchRoute(snapshot *CompiledSnapshot, entrypoint string, request *http.Request) *CompiledRoute {
+	cache := g.routeMatches.Load()
+	if route, ok := cache.get(snapshot, entrypoint, request); ok {
+		return route
+	}
+	route := matchSnapshotRoute(snapshot, entrypoint, request)
+	cache.add(snapshot, entrypoint, request, route)
+	return route
+}
+
+func (g *Gateway) routeHandler(snapshot *CompiledSnapshot, route *CompiledRoute, endpoint *EndpointRuntime) http.Handler {
+	if handler, ok := g.routeHandlers.Load().handler(snapshot, route, endpoint); ok {
+		return handler
+	}
+	if endpoint == nil || endpoint.Proxy == nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		})
+	}
+	return WrapMiddlewaresWithRegistry(endpoint.Proxy, route.Middlewares, g.middlewareRegistry)
 }
 
 func (g *Gateway) logFailedRequest(event AccessEvent) {
