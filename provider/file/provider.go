@@ -1,7 +1,9 @@
+// Package file provides a snapshot provider backed by an HCL config file.
 package file
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 
@@ -35,14 +37,14 @@ func (p *Provider) Load(_ context.Context) (*runtime.CompiledSnapshot, error) {
 		if p.logger != nil {
 			p.logger.Error("snapshot config load failed", "path", p.configPath, "error", err)
 		}
-		return nil, err
+		return nil, fmt.Errorf("load snapshot config file %q: %w", p.configPath, err)
 	}
 	snapshot, err := compiler.Compile(cfg)
 	if err != nil {
 		if p.logger != nil {
 			p.logger.Error("snapshot compile failed", "path", p.configPath, "error", err)
 		}
-		return nil, err
+		return nil, fmt.Errorf("compile snapshot config file %q: %w", p.configPath, err)
 	}
 	if p.logger != nil {
 		p.logger.Info("snapshot loaded",
@@ -56,14 +58,20 @@ func (p *Provider) Load(_ context.Context) (*runtime.CompiledSnapshot, error) {
 	return snapshot, nil
 }
 
-func (p *Provider) Watch(_ context.Context, onReload func(*runtime.CompiledSnapshot), onError func(error)) (io.Closer, error) {
-	return fileconfig.WatchPathWithLogger(p.configPath, p.logger, func() {
-		snapshot, loadErr := p.Load(context.Background())
+func (p *Provider) Watch(ctx context.Context, onReload func(*runtime.CompiledSnapshot), onError func(error)) (io.Closer, error) {
+	closer, err := fileconfig.WatchPathWithLogger(p.configPath, p.logger, func() {
+		snapshot, loadErr := p.Load(ctx)
 		if loadErr != nil {
 			onError(loadErr)
 			return
 		}
 		onReload(snapshot)
-		p.logger.Info("snapshot reloaded", "built_at", snapshot.BuiltAt)
+		if p.logger != nil {
+			p.logger.Info("snapshot reloaded", "built_at", snapshot.BuiltAt)
+		}
 	}, onError)
+	if err != nil {
+		return nil, fmt.Errorf("watch snapshot config file %q: %w", p.configPath, err)
+	}
+	return closer, nil
 }

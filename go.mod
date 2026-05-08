@@ -3,15 +3,15 @@ module github.com/arcgolabs/vela
 go 1.26.2
 
 require (
-	github.com/arcgolabs/collectionx/bitset v0.7.0
-	github.com/arcgolabs/collectionx/graph v0.7.0
-	github.com/arcgolabs/collectionx/list v0.7.0
-	github.com/arcgolabs/collectionx/mapping v0.7.0
-	github.com/arcgolabs/collectionx/prefix v0.7.0
-	github.com/arcgolabs/collectionx/set v0.7.0
+	github.com/arcgolabs/collectionx/bitset v0.8.0
+	github.com/arcgolabs/collectionx/graph v0.8.0
+	github.com/arcgolabs/collectionx/list v0.8.0
+	github.com/arcgolabs/collectionx/mapping v0.8.0
+	github.com/arcgolabs/collectionx/prefix v0.8.0
+	github.com/arcgolabs/collectionx/set v0.8.0
 	github.com/arcgolabs/eventx v0.1.2
-	github.com/arcgolabs/httpx v0.1.4
-	github.com/arcgolabs/httpx/adapter/std v0.1.4
+	github.com/arcgolabs/httpx v0.1.5
+	github.com/arcgolabs/httpx/adapter/std v0.1.5
 	github.com/arcgolabs/observabilityx v0.4.0
 	github.com/caddyserver/certmagic v0.25.3
 	github.com/go-chi/chi/v5 v5.2.5
@@ -27,9 +27,6 @@ require (
 )
 
 require (
-	github.com/arcgolabs/httpx/adapter/echo v0.1.4 // indirect
-	github.com/arcgolabs/httpx/adapter/fiber v0.1.4 // indirect
-	github.com/arcgolabs/httpx/adapter/gin v0.1.4 // indirect
 	github.com/arcgolabs/pkg/option v0.0.3 // indirect
 	github.com/caddyserver/zerossl v0.1.5 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

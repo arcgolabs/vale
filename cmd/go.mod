@@ -3,7 +3,7 @@ module github.com/arcgolabs/vela/cmd
 go 1.26.2
 
 require (
-	github.com/arcgolabs/collectionx/list v0.7.0
+	github.com/arcgolabs/collectionx/list v0.8.0
 	github.com/arcgolabs/configx v0.3.2
 	github.com/arcgolabs/dix v0.7.2
 	github.com/arcgolabs/eventx v0.1.2
@@ -14,8 +14,8 @@ require (
 )
 
 require (
-	github.com/arcgolabs/collectionx/mapping v0.7.0 // indirect
-	github.com/arcgolabs/collectionx/set v0.7.0 // indirect
+	github.com/arcgolabs/collectionx/mapping v0.8.0 // indirect
+	github.com/arcgolabs/collectionx/set v0.8.0 // indirect
 	github.com/arcgolabs/observabilityx v0.4.0 // indirect
 	github.com/arcgolabs/pkg/option v0.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

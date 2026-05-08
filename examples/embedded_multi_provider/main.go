@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/vela"
 	providerevents "github.com/arcgolabs/vela/provider"
@@ -20,41 +22,45 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	bus := eventx.New()
 
-	_, _ = eventx.Subscribe[providerevents.ConfigSourceLoadedEvent](bus, func(_ context.Context, event providerevents.ConfigSourceLoadedEvent) error {
+	_, err := eventx.Subscribe[providerevents.ConfigSourceLoadedEvent](bus, func(_ context.Context, event providerevents.ConfigSourceLoadedEvent) error {
 		logger.Info("config source loaded", "source", event.Source, "duration", event.Duration, "size", event.ConfigSize)
 		return nil
 	})
+	if err != nil {
+		logger.Error("subscribe config source loaded event failed", "error", err)
+		os.Exit(1)
+	}
 
 	dockerSource := providerdocker.NewMemorySource(
 		providerdocker.Container{
 			Name:    "app-a",
 			Address: "127.0.0.1",
 			Port:    8081,
-			Labels: map[string]string{
+			Labels: mapping.NewMapFrom(map[string]string{
 				"vela.enable":          "true",
 				"vela.service":         "svc-app-a",
 				"vela.route":           "route-app-a",
 				"vela.entrypoint":      "web",
 				"vela.rule.pathprefix": "/a",
-			},
+			}),
 		},
 	)
 	k8sSource := providerk8s.NewMemorySource(
-		[]providerk8s.HTTPRoute{
-			{
+		collectionlist.NewList(
+			providerk8s.HTTPRoute{
 				Name:       "route-app-b",
 				Entrypoint: "web",
 				PathPrefix: "/b",
 				Service:    "svc-app-b",
 			},
-		},
-		[]providerk8s.ServiceEndpoint{
-			{
+		),
+		collectionlist.NewList(
+			providerk8s.ServiceEndpoint{
 				Service: "svc-app-b",
 				URL:     "http://127.0.0.1:8082",
 				Weight:  1,
 			},
-		},
+		),
 	)
 
 	dockerProvider := providerdocker.New("docker-mem", dockerSource, providerdocker.DefaultOptions())
@@ -82,7 +88,11 @@ func main() {
 	<-stop
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_ = embeddedGateway.Stop(ctx)
+	if err := embeddedGateway.Stop(ctx); err != nil {
+		cancel()
+		logger.Error("stop embedded gateway failed", "error", err)
+		os.Exit(1)
+	}
+	cancel()
 	logger.Info("embedded gateway stopped")
 }

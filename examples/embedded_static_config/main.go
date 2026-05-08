@@ -65,7 +65,11 @@ func main() {
 	<-stop
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_ = embeddedGateway.Stop(ctx)
+	if err := embeddedGateway.Stop(ctx); err != nil {
+		cancel()
+		logger.Error("stop embedded gateway failed", "error", err)
+		os.Exit(1)
+	}
+	cancel()
 	logger.Info("embedded gateway stopped")
 }

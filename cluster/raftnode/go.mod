@@ -3,7 +3,7 @@ module github.com/arcgolabs/vela/cluster/raftnode
 go 1.26.2
 
 require (
-	github.com/arcgolabs/collectionx/list v0.7.0
+	github.com/arcgolabs/collectionx/list v0.8.0
 	github.com/arcgolabs/storx/bboltx v0.5.0
 	github.com/arcgolabs/storx/codec v0.1.0
 	github.com/arcgolabs/storx/keycodec v0.2.0
@@ -14,8 +14,8 @@ require (
 )
 
 require (
-	github.com/arcgolabs/collectionx/mapping v0.7.0 // indirect
-	github.com/arcgolabs/collectionx/set v0.7.0 // indirect
+	github.com/arcgolabs/collectionx/mapping v0.8.0 // indirect
+	github.com/arcgolabs/collectionx/set v0.8.0 // indirect
 	github.com/arcgolabs/storx v0.2.0 // indirect
 	github.com/arcgolabs/storx/observer v0.1.0 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect

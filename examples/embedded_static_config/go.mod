@@ -5,8 +5,8 @@ go 1.26.2
 require github.com/arcgolabs/eventx v0.1.2
 
 require (
-	github.com/arcgolabs/collectionx/list v0.7.0 // indirect
-	github.com/arcgolabs/collectionx/mapping v0.7.0 // indirect
+	github.com/arcgolabs/collectionx/list v0.8.0 // indirect
+	github.com/arcgolabs/collectionx/mapping v0.8.0 // indirect
 	github.com/arcgolabs/observabilityx v0.4.0 // indirect
 	github.com/arcgolabs/pkg/option v0.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

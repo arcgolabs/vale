@@ -1,7 +1,11 @@
 github.com/arcgolabs/collectionx/list v0.7.0 h1:1BBQD0tB6cPr2rFBHgBM1Orqs9wH+OH/QrfEmMJ+fLE=
 github.com/arcgolabs/collectionx/list v0.7.0/go.mod h1:IjX8ZRyMZbJspx+VppjyrOaibDnHSY8/jkygk9Mmws4=
+github.com/arcgolabs/collectionx/list v0.8.0 h1:Nld94yYmNaIPRSSt4Hyb4p5bo8X3TcTrFVEnzoppPeo=
+github.com/arcgolabs/collectionx/list v0.8.0/go.mod h1:ljn1rjvCXgliu1T7qnFGbozhSUmMqJqlYeLcoLF1YMM=
 github.com/arcgolabs/collectionx/mapping v0.7.0 h1:5XYl9ml3JjNZsCJ/tUmTx2NjxiGpOnUlg6cTtILUMh8=
 github.com/arcgolabs/collectionx/mapping v0.7.0/go.mod h1:9LmFTF7m/hJ3vYx/SkcaHPBHDj2nSPImBYGyHflWEXA=
+github.com/arcgolabs/collectionx/mapping v0.8.0 h1:nocPzyU9ccsJaS3A036O1VH4l2pSvno2SKXq4OTp5XI=
+github.com/arcgolabs/collectionx/mapping v0.8.0/go.mod h1:X/bcV1HjKy+GRRuLHFUiHQ22hZ8yIF9QDGYIvdQFLo4=
 github.com/arcgolabs/eventx v0.1.2 h1:ikt4Cw+GW9Q1NsJVmmen74rQkNZBCdpqlwIfryYrGuk=
 github.com/arcgolabs/eventx v0.1.2/go.mod h1:8pvEz7hCLMyC8Y1VdX8+s7RjnY0haFLau4aiRmrkJkw=
 github.com/arcgolabs/observabilityx v0.4.0 h1:7ihfQev5KSV8xcO+6DcbMcUYSDVsYhnENH2ZbHB5IxY=

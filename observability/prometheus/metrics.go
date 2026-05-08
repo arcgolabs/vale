@@ -1,3 +1,4 @@
+// Package prometheus provides a Prometheus metrics adapter for Vela.
 package prometheus
 
 import (

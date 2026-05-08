@@ -1,0 +1,9 @@
+github.com/arcgolabs/collectionx/list v0.8.0 h1:Nld94yYmNaIPRSSt4Hyb4p5bo8X3TcTrFVEnzoppPeo=
+github.com/arcgolabs/collectionx/list v0.8.0/go.mod h1:ljn1rjvCXgliu1T7qnFGbozhSUmMqJqlYeLcoLF1YMM=
+github.com/arcgolabs/collectionx/mapping v0.8.0 h1:nocPzyU9ccsJaS3A036O1VH4l2pSvno2SKXq4OTp5XI=
+github.com/arcgolabs/collectionx/mapping v0.8.0/go.mod h1:X/bcV1HjKy+GRRuLHFUiHQ22hZ8yIF9QDGYIvdQFLo4=
+github.com/arcgolabs/collectionx/set v0.8.0 h1:qIE6LHMWFjcETzikv+acNNvkIShmyAVVtN83sG+GCSg=
+github.com/arcgolabs/collectionx/set v0.8.0/go.mod h1:575TbrhYlQ2LlnYuIDXb7TZRVru9EipuPG5bTE5RxAk=
+github.com/samber/mo v1.16.0 h1:qpEPCI63ou6wXlsNDMLE0IIN8A+devbGX/K1xdgr4b4=
+github.com/samber/mo v1.16.0/go.mod h1:DlgzJ4SYhOh41nP1L9kh9rDNERuf8IqWSAs+gj2Vxag=
+github.com/samber/oops v1.21.0/go.mod h1:Hsm/sKPxtCfPh0w/cE3xVoRfSiE1joDRiStPAsmG9bo=

@@ -3,9 +3,9 @@ module github.com/arcgolabs/vela/provider/docker
 go 1.26.2
 
 require (
-	github.com/arcgolabs/collectionx/list v0.7.0
-	github.com/arcgolabs/collectionx/mapping v0.7.0
-	github.com/arcgolabs/collectionx/set v0.7.0
+	github.com/arcgolabs/collectionx/list v0.8.0
+	github.com/arcgolabs/collectionx/mapping v0.8.0
+	github.com/arcgolabs/collectionx/set v0.8.0
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/samber/mo v1.16.0
 	github.com/samber/oops v1.21.0
