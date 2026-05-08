@@ -63,11 +63,22 @@ jobs:
 
       - name: Verify tag
         if: steps.release.outputs.skip != 'true'
+        id: tag
         shell: bash
         run: |
           set -euo pipefail
           tag="${{ steps.release.outputs.tag }}"
           git rev-parse --verify "refs/tags/${tag}"
+          git checkout --detach "refs/tags/${tag}"
+          echo "commit=$(git rev-parse --short=12 HEAD)" >> "${GITHUB_OUTPUT}"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Go
+        if: steps.release.outputs.skip != 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
 
       - name: Build release notes
         if: steps.release.outputs.skip != 'true'
@@ -86,6 +97,54 @@ jobs:
             printf 'See CHANGELOG.md for %s.\n' "${tag}" > release-notes.md
           fi
 
+      - name: Build release artifacts
+        if: steps.release.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${{ steps.release.outputs.tag }}"
+          commit="${{ steps.tag.outputs.commit }}"
+          date="${{ steps.tag.outputs.date }}"
+          ldflags="-s -w -X main.version=${tag} -X main.commit=${commit} -X main.date=${date}"
+          platforms=(
+            linux/amd64
+            linux/arm64
+            darwin/amd64
+            darwin/arm64
+            windows/amd64
+            windows/arm64
+          )
+
+          rm -rf dist
+          mkdir -p dist
+
+          for platform in "${platforms[@]}"; do
+            os="${platform%/*}"
+            arch="${platform#*/}"
+            artifact="valed_${tag}_${os}_${arch}"
+            binary="valed"
+            archive="${artifact}.tar.gz"
+            if [[ "${os}" == "windows" ]]; then
+              binary="valed.exe"
+              archive="${artifact}.zip"
+            fi
+
+            mkdir -p "dist/${artifact}"
+            GOOS="${os}" GOARCH="${arch}" CGO_ENABLED=0 \
+              go build -C cmd -trimpath -ldflags="${ldflags}" -o "../dist/${artifact}/${binary}" .
+            cp README.md LICENSE "dist/${artifact}/"
+
+            if [[ "${os}" == "windows" ]]; then
+              (cd "dist/${artifact}" && zip -qr "../${archive}" .)
+            else
+              tar -C "dist/${artifact}" -czf "dist/${archive}" .
+            fi
+            rm -rf "dist/${artifact}"
+          done
+
+          (cd dist && sha256sum *.tar.gz *.zip > checksums.txt)
+
       - name: Publish release
         if: steps.release.outputs.skip != 'true'
         env:
@@ -102,19 +161,20 @@ jobs:
               --repo "${GITHUB_REPOSITORY}" \
               --title "${title}" \
               --notes-file release-notes.md
-            exit 0
+          else
+            args=(
+              release create "${tag}"
+              --repo "${GITHUB_REPOSITORY}"
+              --title "${title}"
+              --notes-file release-notes.md
+              --verify-tag
+            )
+
+            if [[ "${PRERELEASE}" == "true" ]]; then
+              args+=(--prerelease)
+            fi
+
+            gh "${args[@]}"
           fi
 
-          args=(
-            release create "${tag}"
-            --repo "${GITHUB_REPOSITORY}"
-            --title "${title}"
-            --notes-file release-notes.md
-            --verify-tag
-          )
-
-          if [[ "${PRERELEASE}" == "true" ]]; then
-            args+=(--prerelease)
-          fi
-
-          gh "${args[@]}"
+          gh release upload "${tag}" dist/* --repo "${GITHUB_REPOSITORY}" --clobber
