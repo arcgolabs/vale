@@ -23,11 +23,13 @@
 - No local `replace` directives are committed.
 - Optional modules keep publishable module paths.
 - `go.work` is local workspace wiring only.
+- GitHub repository name is `arcgolabs/vela`, or the redirect from the previous
+  repository name is verified for `go get github.com/arcgolabs/vela`.
 
 ## Release Notes
 
 - Update `CHANGELOG.md`.
-- Confirm and add the project license before public release.
+- Confirm the MIT license is included.
 - Review `CONTRIBUTING.md` and `SECURITY.md` for public repository accuracy.
 - Tag the root module.
 - Tag optional modules only when their public contracts are ready for consumers.

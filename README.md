@@ -1,6 +1,10 @@
-# Vela Gateway Prototype (V1 Skeleton)
+# Vela Gateway
 
-This repository now contains a runnable `velad` prototype aligned to the technical selection document.
+Vela is a library-first Go reverse proxy gateway that can also be packaged as
+the standalone `velad` binary. The root module is the preferred embedded API,
+while optional workspace modules provide integrations such as file config,
+Docker labels, K8s-like sources, Prometheus metrics, and Raft control-plane
+state.
 
 Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 
@@ -20,6 +24,12 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 - Provider reload coalescing with stable config fingerprints
 - Built-in middleware plus a runtime middleware registry for embedded extensions
 - Static TLS and ACME with secure defaults
+
+## Status
+
+The project is in v0.1.0 release-candidate state. The public import path is
+`github.com/arcgolabs/vela`; the GitHub repository name should match that path
+before tagging the first public release.
 
 ## Architecture Boundary
 
@@ -352,3 +362,7 @@ toward replicated config state without changing the gateway cluster interface.
 - `VELA_RAFT_BOOTSTRAP`
 
 Admin/observability/health runtime knobs are read from the HCL snapshot.
+
+## License
+
+MIT. See [LICENSE](./LICENSE).

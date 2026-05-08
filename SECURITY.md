@@ -4,8 +4,13 @@
 
 Until the first public tag, security fixes target the main branch.
 
-After v0.1.0 is released, supported versions should be documented here before
-additional minor versions are tagged.
+After v0.1.0 is tagged, security fixes target the latest v0.1.x patch release
+and the main branch.
+
+| Version | Supported |
+| --- | --- |
+| main | Yes |
+| v0.1.x | Yes, after v0.1.0 is tagged |
 
 ## Reporting a Vulnerability
 
