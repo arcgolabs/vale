@@ -1,0 +1,44 @@
+name: vale-bench
+
+services:
+  upstream:
+    image: ${UPSTREAM_IMAGE:-caddy:2-alpine}
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    volumes:
+      - ./caddy-upstream.Caddyfile:/etc/caddy/Caddyfile:ro
+    expose:
+      - "8080"
+
+  vale:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: ["--config", "/etc/vale/vale.hcl", "--log-level", "error"]
+    volumes:
+      - ./vale.hcl:/etc/vale/vale.hcl:ro
+    ports:
+      - "18080:8080"
+      - "28090:19090"
+    depends_on:
+      - upstream
+
+  traefik:
+    image: ${TRAEFIK_IMAGE:-traefik:v3}
+    command: ["--configFile=/etc/traefik/traefik.yml"]
+    volumes:
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro
+    ports:
+      - "18081:8080"
+    depends_on:
+      - upstream
+
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2-alpine}
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "18082:8080"
+    depends_on:
+      - upstream

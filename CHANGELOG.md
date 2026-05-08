@@ -7,6 +7,7 @@
 - Added reload status admin view with route/service/endpoint diff information.
 - Added Raft applied-state persistence regression coverage.
 - Added GHCR container image publishing for `valed` release tags.
+- Added internal Go benchmarks plus a Docker-based Vale/Traefik/Caddy comparison harness.
 
 ## v0.1.0 - 2026-05-08
 

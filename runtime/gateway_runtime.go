@@ -74,8 +74,7 @@ func (g *Gateway) Handler(entrypoint string) http.Handler {
 		handler.ServeHTTP(recorder, r)
 		duration := time.Since(start)
 
-		g.metrics.Observe(route, endpoint, recorder.status, duration)
-		g.access.Log(AccessEvent{
+		event := AccessEvent{
 			Method:     r.Method,
 			Path:       r.URL.Path,
 			Host:       r.Host,
@@ -86,8 +85,29 @@ func (g *Gateway) Handler(entrypoint string) http.Handler {
 			Endpoint:   endpoint.URL.String(),
 			UserAgent:  r.UserAgent(),
 			RemoteAddr: r.RemoteAddr,
-		})
+		}
+		g.metrics.Observe(route, endpoint, recorder.status, duration)
+		g.access.Log(event)
+		g.logFailedRequest(event)
 	})
+}
+
+func (g *Gateway) logFailedRequest(event AccessEvent) {
+	if event.StatusCode < http.StatusInternalServerError || g == nil || g.access == nil || g.access.logger == nil {
+		return
+	}
+	g.access.logger.Error("request failed",
+		slog.String("method", event.Method),
+		slog.String("path", event.Path),
+		slog.String("host", event.Host),
+		slog.Int("status_code", event.StatusCode),
+		slog.Int64("duration_ms", event.DurationMs),
+		slog.String("route", event.Route),
+		slog.String("service", event.Service),
+		slog.String("endpoint", event.Endpoint),
+		slog.String("user_agent", event.UserAgent),
+		slog.String("remote_addr", event.RemoteAddr),
+	)
 }
 
 type statusRecorder struct {

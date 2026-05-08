@@ -405,6 +405,24 @@ For example:
 docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.0
 ```
 
+## Benchmarks
+
+Internal micro benchmarks cover route matching, gateway handler overhead, and
+config compilation:
+
+```bash
+go test ./runtime -run '^$' -bench 'Benchmark(MatchRoute|GatewayHandler)' -benchmem
+go test ./compiler -run '^$' -bench BenchmarkCompileByRouteCount -benchmem
+```
+
+The Docker comparison harness under [`benchmarks/`](./benchmarks/README.md)
+runs Vale, Traefik, and Caddy against the same upstream service and writes JSON
+and Markdown reports:
+
+```bash
+./benchmarks/bench-compare.sh
+```
+
 ## License
 
 MIT. See [LICENSE](./LICENSE).

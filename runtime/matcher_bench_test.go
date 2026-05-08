@@ -14,10 +14,10 @@ import (
 
 func BenchmarkMatchRouteByRouteCount(b *testing.B) {
 	for _, routeCount := range []int{100, 1000, 10000} {
-		b.Run(fmt.Sprintf("routes_%d", routeCount), func(b *testing.B) {
+		b.Run(benchmarkRouteCountName(routeCount), func(b *testing.B) {
 			routes := benchmarkRoutes(routeCount)
 			matcher := valeruntime.BuildEntrypointMatcher(routes)
-			target := fmt.Sprintf("http://api.example.com/api/%04d/users", routeCount-1)
+			target := benchmarkRouteURL(routeCount - 1)
 			req := httptest.NewRequestWithContext(b.Context(), http.MethodGet, target, http.NoBody)
 
 			b.ReportAllocs()
@@ -36,10 +36,10 @@ func benchmarkRoutes(count int) *collectionlist.List[*valeruntime.CompiledRoute]
 	routes := collectionlist.NewListWithCapacity[*valeruntime.CompiledRoute](count)
 	for i := range count {
 		route := &valeruntime.CompiledRoute{
-			Name:       fmt.Sprintf("api-%04d", i),
+			Name:       benchmarkRouteName(i),
 			Entrypoint: "web",
 			Host:       "api.example.com",
-			PathPrefix: fmt.Sprintf("/api/%04d", i),
+			PathPrefix: benchmarkRoutePath(i),
 			Method:     http.MethodGet,
 			Headers:    mapping.NewMap[string, string](),
 			Predicates: bitset.New(),
@@ -50,4 +50,20 @@ func benchmarkRoutes(count int) *collectionlist.List[*valeruntime.CompiledRoute]
 		routes.Add(route)
 	}
 	return routes
+}
+
+func benchmarkRouteCountName(routeCount int) string {
+	return fmt.Sprintf("routes_%d", routeCount)
+}
+
+func benchmarkRouteName(index int) string {
+	return fmt.Sprintf("api-%04d", index)
+}
+
+func benchmarkRoutePath(index int) string {
+	return fmt.Sprintf("/api/%04d", index)
+}
+
+func benchmarkRouteURL(index int) string {
+	return fmt.Sprintf("http://api.example.com%s/users", benchmarkRoutePath(index))
 }

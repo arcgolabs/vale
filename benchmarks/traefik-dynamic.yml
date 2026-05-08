@@ -1,0 +1,13 @@
+http:
+  routers:
+    bench:
+      entryPoints:
+        - web
+      rule: PathPrefix(`/`)
+      service: upstream
+
+  services:
+    upstream:
+      loadBalancer:
+        servers:
+          - url: "http://upstream:8080"
