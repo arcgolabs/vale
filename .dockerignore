@@ -1,0 +1,8 @@
+.git
+.github
+.idea
+dist
+.tmp-release-check
+*.test
+*.out
+coverage.*

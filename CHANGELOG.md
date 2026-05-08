@@ -6,6 +6,7 @@
 - Added builtin basic auth, gzip compression, and IP allow list middleware.
 - Added reload status admin view with route/service/endpoint diff information.
 - Added Raft applied-state persistence regression coverage.
+- Added GHCR container image publishing for `valed` release tags.
 
 ## v0.1.0 - 2026-05-08
 

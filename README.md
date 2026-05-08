@@ -104,6 +104,12 @@ Start with defaults:
 go run ./cmd
 ```
 
+Run the published container image:
+
+```bash
+docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.0
+```
+
 To run with an HCL file, copy sample config:
 
 ```bash
@@ -384,6 +390,20 @@ before Raft replay catches up.
 - `VALE_RAFT_BOOTSTRAP`
 
 Admin/observability/health runtime knobs are read from the HCL snapshot.
+
+## Container Images
+
+Release workflow publishes multi-arch Linux images to GHCR:
+
+- `ghcr.io/arcgolabs/vale:<tag>`
+- `ghcr.io/arcgolabs/vale:<semver-without-v>`
+- `ghcr.io/arcgolabs/vale:latest` for non-prerelease tags
+
+For example:
+
+```bash
+docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.0
+```
 
 ## License
 

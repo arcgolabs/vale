@@ -22,6 +22,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
@@ -117,7 +118,7 @@ jobs:
           )
 
           rm -rf dist
-          mkdir -p dist
+          mkdir -p dist/artifacts dist/image dist/work
 
           for platform in "${platforms[@]}"; do
             os="${platform%/*}"
@@ -130,20 +131,100 @@ jobs:
               archive="${artifact}.zip"
             fi
 
-            mkdir -p "dist/${artifact}"
+            mkdir -p "dist/work/${artifact}"
             GOOS="${os}" GOARCH="${arch}" CGO_ENABLED=0 \
-              go build -C cmd -trimpath -ldflags="${ldflags}" -o "../dist/${artifact}/${binary}" .
-            cp README.md LICENSE "dist/${artifact}/"
+              go build -C cmd -trimpath -ldflags="${ldflags}" -o "../dist/work/${artifact}/${binary}" .
+            cp README.md LICENSE "dist/work/${artifact}/"
+
+            if [[ "${os}" == "linux" ]]; then
+              mkdir -p "dist/image/linux_${arch}"
+              cp "dist/work/${artifact}/${binary}" "dist/image/linux_${arch}/valed"
+            fi
 
             if [[ "${os}" == "windows" ]]; then
-              (cd "dist/${artifact}" && zip -qr "../${archive}" .)
+              (cd "dist/work/${artifact}" && zip -qr "../../artifacts/${archive}" .)
             else
-              tar -C "dist/${artifact}" -czf "dist/${archive}" .
+              tar -C "dist/work/${artifact}" -czf "dist/artifacts/${archive}" .
             fi
-            rm -rf "dist/${artifact}"
+            rm -rf "dist/work/${artifact}"
           done
 
-          (cd dist && sha256sum *.tar.gz *.zip > checksums.txt)
+          (cd dist/artifacts && sha256sum *.tar.gz *.zip > checksums.txt)
+
+      - name: Prepare container image metadata
+        if: steps.release.outputs.skip != 'true'
+        id: image
+        env:
+          PRERELEASE: ${{ inputs.prerelease || 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${{ steps.release.outputs.tag }}"
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          version="${tag#v}"
+          tags="${image}:${tag}"
+
+          if [[ "${version}" != "${tag}" ]]; then
+            tags="${tags}"$'\n'"${image}:${version}"
+          fi
+          if [[ "${PRERELEASE}" != "true" && "${tag}" != *-* ]]; then
+            tags="${tags}"$'\n'"${image}:latest"
+          fi
+
+          {
+            echo "image=${image}"
+            echo "tags<<EOF"
+            echo "${tags}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+          cat > dist/image/Dockerfile <<'DOCKERFILE'
+          FROM alpine:3
+
+          RUN apk add --no-cache ca-certificates tzdata
+
+          ARG TARGETARCH
+          COPY linux_${TARGETARCH}/valed /usr/local/bin/valed
+
+          USER 65532:65532
+          EXPOSE 8080 19090
+
+          ENTRYPOINT ["/usr/local/bin/valed"]
+          DOCKERFILE
+
+      - name: Set up QEMU
+        if: steps.release.outputs.skip != 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.release.outputs.skip != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.release.outputs.skip != 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push container image
+        if: steps.release.outputs.skip != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: dist/image
+          file: dist/image/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.image.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=Vale
+            org.opencontainers.image.description=Library-first reverse proxy gateway and valed binary.
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.release.outputs.tag }}
+            org.opencontainers.image.revision=${{ steps.tag.outputs.commit }}
+            org.opencontainers.image.created=${{ steps.tag.outputs.date }}
 
       - name: Publish release
         if: steps.release.outputs.skip != 'true'
@@ -177,4 +258,4 @@ jobs:
             gh "${args[@]}"
           fi
 
-          gh release upload "${tag}" dist/* --repo "${GITHUB_REPOSITORY}" --clobber
+          gh release upload "${tag}" dist/artifacts/* --repo "${GITHUB_REPOSITORY}" --clobber
