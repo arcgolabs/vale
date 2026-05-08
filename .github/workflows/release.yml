@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/release.yml
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish.
+        required: true
+        type: string
+      prerelease:
+        description: Mark the GitHub Release as a prerelease.
+        default: false
+        required: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag=""
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.tag }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            message="$(jq -r '.head_commit.message // ""' "${GITHUB_EVENT_PATH}")"
+            if [[ "${message}" =~ \[release:([^]]+)\] ]]; then
+              tag="${BASH_REMATCH[1]}"
+            fi
+          fi
+
+          if [[ -z "${tag}" ]]; then
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+            echo "No release tag was requested."
+            exit 0
+          fi
+
+          echo "skip=false" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout
+        if: steps.release.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag
+        if: steps.release.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.release.outputs.tag }}"
+          git rev-parse --verify "refs/tags/${tag}"
+
+      - name: Build release notes
+        if: steps.release.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.release.outputs.tag }}"
+
+          awk -v tag="${tag}" '
+            $0 == "## " tag || $0 ~ ("^## " tag " - ") { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            printf 'See CHANGELOG.md for %s.\n' "${tag}" > release-notes.md
+          fi
+
+      - name: Publish release
+        if: steps.release.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease || 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.release.outputs.tag }}"
+          title="Vale ${tag}"
+
+          if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release edit "${tag}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${title}" \
+              --notes-file release-notes.md
+            exit 0
+          fi
+
+          args=(
+            release create "${tag}"
+            --repo "${GITHUB_REPOSITORY}"
+            --title "${title}"
+            --notes-file release-notes.md
+            --verify-tag
+          )
+
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+
+          gh "${args[@]}"
