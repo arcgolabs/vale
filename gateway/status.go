@@ -19,10 +19,12 @@ func (g *Gateway) Status() *mapping.Map[string, any] {
 	if g.runtime != nil && g.runtime.Snapshot() != nil {
 		snapshot := g.runtime.Snapshot()
 		status.Set("built_at", snapshot.BuiltAt)
+		status.Set("fingerprint", snapshot.Fingerprint)
 		status.Set("entrypoints", snapshot.Entrypoints.Len())
 		status.Set("services", snapshot.Services.Len())
 		status.Set("routes", snapshot.Routes().Len())
 	}
+	status.Set("reload", g.reload)
 	if g.cluster != nil {
 		status.Set("cluster", g.cluster.Status())
 	} else {

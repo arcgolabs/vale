@@ -112,6 +112,7 @@ func (p *Provider) loadSnapshot(ctx context.Context) (*runtime.CompiledSnapshot,
 	if err != nil {
 		return nil, "", oops.In("provider.merged").Wrapf(err, "compile merged config")
 	}
+	snapshot.Fingerprint = fingerprint
 	return snapshot, fingerprint, nil
 }
 

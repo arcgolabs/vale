@@ -60,6 +60,7 @@ type Gateway struct {
 	watcher     io.Closer
 	watchCancel context.CancelFunc
 	servers     *collectionlist.List[*http.Server]
+	reload      ReloadStatusView
 }
 
 // New applies options onto DefaultConfig then NewFromConfig.

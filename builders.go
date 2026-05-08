@@ -152,3 +152,15 @@ func MiddlewareResponseHeader(key, value string) MiddlewareOption {
 func MiddlewareMaxBodyBytes(maxBodyBytes int64) MiddlewareOption {
 	return provider.MiddlewareMaxBodyBytes(maxBodyBytes)
 }
+
+func MiddlewareBasicAuth(realm string, users map[string]string) MiddlewareOption {
+	return provider.MiddlewareBasicAuth(realm, users)
+}
+
+func MiddlewareCompress(minBytes int) MiddlewareOption {
+	return provider.MiddlewareCompress(minBytes)
+}
+
+func MiddlewareIPAllowList(trustForwardHeader bool, sourceRange ...string) MiddlewareOption {
+	return provider.MiddlewareIPAllowList(trustForwardHeader, sourceRange...)
+}

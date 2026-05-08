@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- No changes yet.
+- Expanded Traefik-compatible Docker labels for basic auth, compression, IP allow lists, CORS, and rate limits.
+- Added builtin basic auth, gzip compression, and IP allow list middleware.
+- Added reload status admin view with route/service/endpoint diff information.
+- Added Raft applied-state persistence regression coverage.
 
 ## v0.1.0 - 2026-05-08
 

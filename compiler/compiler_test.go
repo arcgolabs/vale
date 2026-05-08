@@ -37,6 +37,18 @@ func TestCompileTLSMiddlewareAndSecurity(t *testing.T) {
 			Name:         "strip-api",
 			StripPrefix:  "/api",
 			MaxBodyBytes: 1024,
+			BasicAuth: &config.BasicAuth{
+				Realm: "private",
+				Users: map[string]string{"admin": "secret"},
+			},
+			Compress: &config.Compress{
+				Enabled:  true,
+				MinBytes: 128,
+			},
+			IPAllowList: &config.IPAllowList{
+				SourceRange:        []string{"127.0.0.1"},
+				TrustForwardHeader: true,
+			},
 		}},
 		Routes: []config.Route{{
 			Name:        "api",
@@ -79,6 +91,15 @@ func assertCompiledMiddleware(t *testing.T, snapshot *runtime.CompiledSnapshot) 
 	middleware, _ := routes[0].Middlewares.Get(0)
 	if middleware.StripPrefix != "/api" {
 		t.Fatalf("middleware = %#v", middleware)
+	}
+	if !middleware.BasicAuth.Enabled || middleware.BasicAuth.Users == nil {
+		t.Fatalf("basic auth middleware = %#v", middleware.BasicAuth)
+	}
+	if !middleware.Compress.Enabled || middleware.Compress.MinBytes != 128 {
+		t.Fatalf("compress middleware = %#v", middleware.Compress)
+	}
+	if !middleware.IPAllowList.Enabled || !middleware.IPAllowList.TrustForwardHeader {
+		t.Fatalf("ip allow list middleware = %#v", middleware.IPAllowList)
 	}
 }
 

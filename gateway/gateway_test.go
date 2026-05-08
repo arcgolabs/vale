@@ -82,6 +82,10 @@ func TestAdminAPIWritesPlainJSONViews(t *testing.T) {
 		t.Fatalf("services = %#v, want one service with one endpoint", services)
 	}
 	assertAdminJSONLen[runtime.EndpointView](t, adminAddr, "/admin/endpoints", 1)
+	status := assertAdminJSON[gateway.ReloadStatusView](t, adminAddr, "/admin/reload/status")
+	if status.State != "loaded" || status.Routes != 1 || status.Services != 1 {
+		t.Fatalf("reload status = %#v", status)
+	}
 }
 
 func TestStartLoadsStaticTLSCertificate(t *testing.T) {

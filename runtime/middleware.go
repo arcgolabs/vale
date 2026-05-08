@@ -110,6 +110,9 @@ func wrapBuiltinMiddleware(next http.Handler, middleware MiddlewareRuntime) http
 	}))
 	handler = wrapCircuitBreakerMiddleware(handler, middleware)
 	handler = wrapRateLimitMiddleware(handler, middleware)
+	handler = wrapIPAllowListMiddleware(handler, middleware)
+	handler = wrapBasicAuthMiddleware(handler, middleware)
+	handler = wrapCompressMiddleware(handler, middleware)
 	handler = wrapCORSMiddleware(handler, middleware)
 	handler = wrapSecureMiddleware(handler, middleware)
 	return handler

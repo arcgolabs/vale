@@ -38,5 +38,7 @@ embedded users; subpackages remain available for advanced wiring and optional mo
 - `config` DTO structs intentionally use native Go collections because HCL/JSON decoding is their boundary.
 - Compiled runtime structs intentionally use `collectionx` containers.
 - Runtime route catalog queries return collectionx lists and keep request matching on the optimized matcher.
+- Runtime snapshot diff helpers return collectionx-backed route/service/endpoint change sets for reload observability.
 - Admin HTTP responses are stable plain JSON DTOs and should not expose collectionx serialization details.
 - Middleware config type is strict: empty type means builtin, non-empty unknown values fail compilation.
+- Builtin middleware covers path transforms, redirects, headers, secure headers, CORS, rate limit, circuit breaker, basic auth, gzip compression, IP allow list, body limits, and chains.

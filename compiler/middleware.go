@@ -53,6 +53,9 @@ func compileMiddleware(middleware *config.Middleware) (runtime.MiddlewareRuntime
 		CORS:                   compileCORSMiddleware(middleware.CORS),
 		RateLimit:              compileRateLimit(middleware.RateLimit),
 		CircuitBreaker:         compileCircuitBreaker(middleware.CircuitBreaker),
+		BasicAuth:              compileBasicAuth(middleware.BasicAuth),
+		Compress:               compileCompress(middleware.Compress),
+		IPAllowList:            compileIPAllowList(middleware.IPAllowList),
 	}, nil
 }
 
@@ -169,6 +172,51 @@ func hasCircuitBreakerOptions(circuitBreaker *config.CircuitBreaker) bool {
 	))
 }
 
+func compileBasicAuth(basicAuth *config.BasicAuth) runtime.BasicAuthRuntime {
+	if basicAuth == nil {
+		return runtime.BasicAuthRuntime{}
+	}
+	users := normalizeStringMap(basicAuth.Users)
+	return runtime.BasicAuthRuntime{
+		Enabled: basicAuth.Enabled || !users.IsEmpty(),
+		Realm:   strings.TrimSpace(basicAuth.Realm),
+		Users:   users,
+	}
+}
+
+func normalizeStringMap(values map[string]string) *mapping.Map[string, string] {
+	normalized := mapping.NewMapWithCapacity[string, string](len(values))
+	for key, value := range values {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			normalized.Set(key, strings.TrimSpace(value))
+		}
+	}
+	return normalized
+}
+
+func compileCompress(compress *config.Compress) runtime.CompressRuntime {
+	if compress == nil {
+		return runtime.CompressRuntime{}
+	}
+	return runtime.CompressRuntime{
+		Enabled:  compress.Enabled || compress.MinBytes > 0,
+		MinBytes: compress.MinBytes,
+	}
+}
+
+func compileIPAllowList(ipAllowList *config.IPAllowList) runtime.IPAllowListRuntime {
+	if ipAllowList == nil {
+		return runtime.IPAllowListRuntime{}
+	}
+	sourceRange := cleanStringList(ipAllowList.SourceRange)
+	return runtime.IPAllowListRuntime{
+		Enabled:            ipAllowList.Enabled || !sourceRange.IsEmpty(),
+		SourceRange:        sourceRange,
+		TrustForwardHeader: ipAllowList.TrustForwardHeader,
+	}
+}
+
 func compileRouteMiddlewares(names []string, middlewares *mapping.Map[string, runtime.MiddlewareRuntime]) *collectionlist.List[runtime.MiddlewareRuntime] {
 	compiled := collectionlist.NewListWithCapacity[runtime.MiddlewareRuntime](len(names))
 	if len(names) == 0 || middlewares == nil {
@@ -212,9 +260,15 @@ func normalizeMiddlewareType(middlewareType string) string {
 	case "",
 		"builtin",
 		"add_prefix",
+		"basic_auth",
+		"basicauth",
 		"buffering",
 		"chain",
+		"compress",
 		"headers",
+		"ip_allow_list",
+		"ipallowlist",
+		"ipwhitelist",
 		"redirect_regex",
 		"redirect_scheme",
 		"replace_path",

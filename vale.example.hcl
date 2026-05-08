@@ -25,8 +25,28 @@ service "echo" {
   }
 }
 
+middleware "secure-defaults" {
+  secure {
+    enabled = true
+  }
+}
+
+middleware "compress" {
+  compress {
+    enabled   = true
+    min_bytes = 128
+  }
+}
+
+middleware "local-only" {
+  ip_allow_list {
+    source_range = ["127.0.0.1", "::1"]
+  }
+}
+
 route "echo-route" {
   entrypoint  = "web"
   service     = "echo"
   path_prefix = "/"
+  middlewares = ["secure-defaults", "compress", "local-only"]
 }

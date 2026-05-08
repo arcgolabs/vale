@@ -33,6 +33,10 @@ type adminEndpointsOutput struct {
 	Body []runtime.EndpointView `json:"body"`
 }
 
+type adminReloadStatusOutput struct {
+	Body ReloadStatusView `json:"body"`
+}
+
 type adminClusterStatusOutput struct {
 	Body *mapping.Map[string, any] `json:"body"`
 }
@@ -85,6 +89,7 @@ func (g *Gateway) registerAdminRoutes(server httpx.ServerRuntime) {
 	httpx.MustGet(server, "/admin/routes", g.handleAdminRoutes)
 	httpx.MustGet(server, "/admin/services", g.handleAdminServices)
 	httpx.MustGet(server, "/admin/endpoints", g.handleAdminEndpoints)
+	httpx.MustGet(server, "/admin/reload/status", g.handleAdminReloadStatus)
 	httpx.MustGet(server, "/admin/cluster/status", g.handleAdminClusterStatus)
 	httpx.MustGet(server, "/admin/cluster/peers", g.handleAdminClusterPeers)
 	httpx.MustPost(server, "/admin/cluster/join", g.handleAdminClusterJoin)
@@ -118,6 +123,10 @@ func (g *Gateway) handleAdminEndpoints(context.Context, *struct{}) (*adminEndpoi
 		return nil, err
 	}
 	return &adminEndpointsOutput{Body: adminEndpointsView(snapshot)}, nil
+}
+
+func (g *Gateway) handleAdminReloadStatus(context.Context, *struct{}) (*adminReloadStatusOutput, error) {
+	return &adminReloadStatusOutput{Body: g.reloadStatus()}, nil
 }
 
 func (g *Gateway) handleAdminClusterStatus(context.Context, *struct{}) (*adminClusterStatusOutput, error) {

@@ -32,6 +32,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 		return err
 	}
 	g.runtime = runtime.NewGatewayWithMiddlewareRegistry(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled), g.config.Middleware)
+	g.recordInitialSnapshotLocked(snapshot)
 	g.publishClusterUpdate(snapshot)
 
 	servers, listeners, entrypointNames, err := g.buildServers(ctx, snapshot)
@@ -188,6 +189,7 @@ func (g *Gateway) startWatcher(ctx context.Context) error {
 	watcher, err := g.provider.Watch(watchCtx, func(snapshot *runtime.CompiledSnapshot) {
 		g.applyReloadSnapshot(watchCtx, snapshot)
 	}, func(watchErr error) {
+		g.recordReloadError(watchErr)
 		g.config.OnWatchError(watchErr)
 	})
 	if err != nil {

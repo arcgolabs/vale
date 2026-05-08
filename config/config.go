@@ -75,6 +75,9 @@ type Middleware struct {
 	CORS                   *CORSMiddleware   `hcl:"cors,block"`
 	RateLimit              *RateLimit        `hcl:"rate_limit,block"`
 	CircuitBreaker         *CircuitBreaker   `hcl:"circuit_breaker,block"`
+	BasicAuth              *BasicAuth        `hcl:"basic_auth,block"`
+	Compress               *Compress         `hcl:"compress,block"`
+	IPAllowList            *IPAllowList      `hcl:"ip_allow_list,block"`
 }
 
 type SecureMiddleware struct {
@@ -121,6 +124,23 @@ type CircuitBreaker struct {
 	Interval         string `hcl:"interval,optional"`
 	Timeout          string `hcl:"timeout,optional"`
 	FailureThreshold uint32 `hcl:"failure_threshold,optional"`
+}
+
+type BasicAuth struct {
+	Enabled bool              `hcl:"enabled,optional"`
+	Realm   string            `hcl:"realm,optional"`
+	Users   map[string]string `hcl:"users,optional"`
+}
+
+type Compress struct {
+	Enabled  bool `hcl:"enabled,optional"`
+	MinBytes int  `hcl:"min_bytes,optional"`
+}
+
+type IPAllowList struct {
+	Enabled            bool     `hcl:"enabled,optional"`
+	SourceRange        []string `hcl:"source_range,optional"`
+	TrustForwardHeader bool     `hcl:"trust_forward_header,optional"`
 }
 
 type Admin struct {

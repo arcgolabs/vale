@@ -28,6 +28,17 @@ func TestParseTraefikLabelsProjectsHTTPResources(t *testing.T) {
 		"traefik.http.middlewares.redirect.redirectscheme.port":                       "443",
 		"traefik.http.middlewares.redirect.redirectscheme.permanent":                  "true",
 		"traefik.http.middlewares.chain.chain.middlewares":                            "strip@docker,headers,redirect",
+		"traefik.http.middlewares.auth.basicauth.realm":                               "private",
+		"traefik.http.middlewares.auth.basicauth.users":                               "admin:secret,ops:deploy",
+		"traefik.http.middlewares.compress.compress":                                  "true",
+		"traefik.http.middlewares.compress.compress.minresponsebodybytes":             "128",
+		"traefik.http.middlewares.allow.ipallowlist.sourcerange":                      "127.0.0.1,10.0.0.0/8",
+		"traefik.http.middlewares.allow.ipallowlist.trustforwardheader":               "true",
+		"traefik.http.middlewares.limit.ratelimit.average":                            "10",
+		"traefik.http.middlewares.limit.ratelimit.burst":                              "20",
+		"traefik.http.middlewares.cors.headers.accesscontrolalloworiginlist":          "https://ui.example.com,https://admin.example.com",
+		"traefik.http.middlewares.cors.headers.accesscontrolallowmethods":             "GET,POST",
+		"traefik.http.middlewares.cors.headers.accesscontrolallowcredentials":         "true",
 		"traefik.http.middlewares.security.headers.framedeny":                         "true",
 		"traefik.http.middlewares.security.headers.contenttypenosniff":                "true",
 		"traefik.http.middlewares.security.headers.stsseconds":                        "31536000",
@@ -80,6 +91,7 @@ func assertTraefikMiddlewares(t *testing.T, labels provider.TraefikLabels) {
 	assertTraefikRewriteMiddleware(t, labels)
 	assertTraefikRedirectMiddleware(t, labels)
 	assertTraefikChainMiddleware(t, labels)
+	assertTraefikPolicyMiddlewares(t, labels)
 	assertTraefikSecurityMiddleware(t, labels)
 }
 
@@ -120,6 +132,55 @@ func assertTraefikChainMiddleware(t *testing.T, labels provider.TraefikLabels) {
 	middleware, _ := labels.Middlewares.Get("chain")
 	if len(middleware.Chain) != 3 || middleware.Chain[0] != "strip" || middleware.Chain[2] != "redirect" {
 		t.Fatalf("chain = %#v", middleware.Chain)
+	}
+}
+
+func assertTraefikPolicyMiddlewares(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	assertTraefikBasicAuthMiddleware(t, labels)
+	assertTraefikCompressMiddleware(t, labels)
+	assertTraefikIPAllowListMiddleware(t, labels)
+	assertTraefikRateLimitMiddleware(t, labels)
+	assertTraefikCORSMiddleware(t, labels)
+}
+
+func assertTraefikBasicAuthMiddleware(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	auth, _ := labels.Middlewares.Get("auth")
+	if auth.BasicAuth == nil || auth.BasicAuth.Realm != "private" || auth.BasicAuth.Users["admin"] != "secret" {
+		t.Fatalf("basic auth = %#v", auth.BasicAuth)
+	}
+}
+
+func assertTraefikCompressMiddleware(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	compress, _ := labels.Middlewares.Get("compress")
+	if compress.Compress == nil || !compress.Compress.Enabled || compress.Compress.MinBytes != 128 {
+		t.Fatalf("compress = %#v", compress.Compress)
+	}
+}
+
+func assertTraefikIPAllowListMiddleware(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	allow, _ := labels.Middlewares.Get("allow")
+	if allow.IPAllowList == nil || !allow.IPAllowList.TrustForwardHeader || len(allow.IPAllowList.SourceRange) != 2 {
+		t.Fatalf("ip allow list = %#v", allow.IPAllowList)
+	}
+}
+
+func assertTraefikRateLimitMiddleware(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	limit, _ := labels.Middlewares.Get("limit")
+	if limit.RateLimit == nil || limit.RateLimit.Rate != 10 || limit.RateLimit.Burst != 20 {
+		t.Fatalf("rate limit = %#v", limit.RateLimit)
+	}
+}
+
+func assertTraefikCORSMiddleware(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	cors, _ := labels.Middlewares.Get("cors")
+	if cors.CORS == nil || len(cors.CORS.AllowedOrigins) != 2 || !cors.CORS.AllowCredentials {
+		t.Fatalf("cors = %#v", cors.CORS)
 	}
 }
 

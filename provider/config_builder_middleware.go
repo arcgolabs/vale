@@ -153,6 +153,41 @@ func MiddlewareMaxBodyBytes(maxBodyBytes int64) MiddlewareOption {
 	}
 }
 
+func MiddlewareBasicAuth(realm string, users map[string]string) MiddlewareOption {
+	return func(middleware *config.Middleware) {
+		if middleware != nil {
+			middleware.BasicAuth = &config.BasicAuth{
+				Enabled: true,
+				Realm:   strings.TrimSpace(realm),
+				Users:   users,
+			}
+		}
+	}
+}
+
+func MiddlewareCompress(minBytes int) MiddlewareOption {
+	return func(middleware *config.Middleware) {
+		if middleware != nil {
+			middleware.Compress = &config.Compress{
+				Enabled:  true,
+				MinBytes: minBytes,
+			}
+		}
+	}
+}
+
+func MiddlewareIPAllowList(trustForwardHeader bool, sourceRange ...string) MiddlewareOption {
+	return func(middleware *config.Middleware) {
+		if middleware != nil {
+			middleware.IPAllowList = &config.IPAllowList{
+				Enabled:            true,
+				SourceRange:        cleanStrings(collectionlist.NewList(sourceRange...)).Values(),
+				TrustForwardHeader: trustForwardHeader,
+			}
+		}
+	}
+}
+
 func cleanStrings(values *collectionlist.List[string]) *collectionlist.List[string] {
 	return collectionlist.FilterMapList(values, func(_ int, value string) (string, bool) {
 		trimmed := strings.TrimSpace(value)

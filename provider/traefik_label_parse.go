@@ -121,6 +121,19 @@ func setHeader(headers map[string]string, key, value string) {
 	})
 }
 
+func parseTraefikBasicAuthUsers(value string) map[string]string {
+	users := map[string]string{}
+	SplitCSV(value).Range(func(_ int, item string) bool {
+		username, password, ok := strings.Cut(item, ":")
+		username = strings.TrimSpace(username)
+		if ok && username != "" {
+			users[username] = strings.ReplaceAll(strings.TrimSpace(password), "$$", "$")
+		}
+		return true
+	})
+	return users
+}
+
 func applyTraefikSecurityHeader(middleware *config.Middleware, option, value string) {
 	switch option {
 	case "headers.framedeny":
@@ -136,7 +149,7 @@ func applyTraefikSecurityHeader(middleware *config.Middleware, option, value str
 			middleware.ResponseHeaders["x-xss-protection"] = "1; mode=block"
 		}
 	case "headers.stsseconds":
-		if seconds := parseTraefikInt(value, 0); seconds > 0 {
+		if seconds := parseTraefikInt(value); seconds > 0 {
 			middleware.ResponseHeaders["strict-transport-security"] = fmt.Sprintf("max-age=%d", seconds)
 		}
 	case "headers.referrerpolicy":
@@ -149,7 +162,7 @@ func parseTraefikBool(value string) bool {
 	return mo.TupleToOption(parsed, err == nil).OrElse(false)
 }
 
-func parseTraefikInt(value string, fallback int) int {
+func parseTraefikInt(value string) int {
 	parsed, err := strconv.Atoi(strings.TrimSpace(value))
-	return mo.TupleToOption(parsed, err == nil).OrElse(fallback)
+	return mo.TupleToOption(parsed, err == nil).OrElse(0)
 }

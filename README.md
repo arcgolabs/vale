@@ -18,17 +18,18 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 - File-based config watching with invalid-config rollback behavior
 - JSON access logging and Prometheus metrics
 - Admin API for routes/services/endpoints and `/metrics`
-- Control-plane route catalog backed by `go-memdb` for admin queries and future reload diffing
+- Control-plane route catalog backed by `go-memdb` for admin queries and reload diffing
 - Active endpoint health checks
 - Library-first builders for runtime snapshots and config source assembly
 - Provider reload coalescing with stable config fingerprints
 - Built-in middleware plus a runtime middleware registry for embedded extensions
+- Built-in basic auth, gzip compression, IP allow list, CORS, rate limit, circuit breaker, security headers, path/header/redirect policies
 - Static TLS and ACME with secure defaults
 
 ## Status
 
-The project is in v0.1.0 release-candidate state. The public import path follows
-the current git remote: `github.com/arcgolabs/vale`.
+The project has published `v0.1.0`. The public import path follows the current
+git remote: `github.com/arcgolabs/vale`.
 
 ## Architecture Boundary
 
@@ -144,6 +145,7 @@ Verify:
 - `http://127.0.0.1:19090/admin/routes?service=echo`
 - `http://127.0.0.1:19090/admin/services`
 - `http://127.0.0.1:19090/admin/endpoints`
+- `http://127.0.0.1:19090/admin/reload/status`
 - `http://127.0.0.1:19090/admin/cluster/status`
 - `http://127.0.0.1:19090/admin/cluster/peers`
 
@@ -285,10 +287,27 @@ Merged providers coalesce rapid watch events and compare stable config fingerpri
 publishing a reload. Unchanged updates publish `provider.snapshot.unchanged` and do not
 swap the runtime snapshot.
 
+Reload state is exposed at `/admin/reload/status` with the latest state,
+fingerprint, error, route/service/endpoint diff, and static fields that required
+a server restart.
+
 ### Middleware Extensions
 
-Built-in middleware supports path prefix rewriting, request/response headers, and body
-limits. Embedded users can register runtime middleware factories:
+Built-in middleware supports:
+
+- path transforms: `strip_prefix`, `add_prefix`, `replace_path`, `replace_path_regex`
+- redirects: `redirect_scheme`, `redirect_regex`
+- headers and secure headers
+- CORS
+- rate limit
+- circuit breaker
+- basic auth
+- gzip compression
+- IP allow list
+- request body limits
+- middleware chains
+
+Embedded users can register runtime middleware factories:
 
 ```go
 registry := vale.DefaultMiddlewareRegistry()
@@ -318,7 +337,9 @@ The default `observabilityx` metrics recorder exposes:
   It accepts native `vale.*` labels and a Traefik-compatible HTTP label subset:
   `traefik.enable`, `traefik.http.routers.*.rule`, `entrypoints`, `middlewares`,
   `service`, `traefik.http.services.*.loadbalancer.server.port/scheme`, and
-  `addPrefix`, `stripPrefix`, headers, and buffering middleware labels.
+  `addPrefix`, `stripPrefix`, `replacePath`, `redirectScheme`, `redirectRegex`,
+  chain, headers, CORS headers, buffering, basicAuth, compress, ipAllowList,
+  ipWhiteList, and rateLimit middleware labels.
 - `provider/k8s`: optional module, route/endpoint projection from k8s-like source model (source pluggable).
 - both packages include `MemorySource` for local embedding/tests and can be replaced by real API clients later.
 
@@ -347,6 +368,8 @@ Raft apply payloads are structured commands. Route sync commands store snapshot
 metadata and route records in the FSM as typed JSON and persist the applied
 state through `github.com/arcgolabs/storx/bboltx`, so the adapter can evolve
 toward replicated config state without changing the gateway cluster interface.
+Restarted nodes load the last applied FSM state from the bboltx state store
+before Raft replay catches up.
 
 ## Bootstrap Env Variables
 

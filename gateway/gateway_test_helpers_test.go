@@ -87,6 +87,31 @@ func assertAdminJSONLen[T any](t *testing.T, adminAddr, path string, want int) [
 	return rows
 }
 
+func assertAdminJSON[T any](t *testing.T, adminAddr, path string) T {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+adminAddr+path, http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Timeout: time.Second}
+	response, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	var row T
+	if err := json.NewDecoder(response.Body).Decode(&row); err != nil {
+		t.Fatalf("%s json decode failed: %v", path, err)
+	}
+	return row
+}
+
 func listenOnLocalhost(t *testing.T) net.Listener {
 	t.Helper()
 

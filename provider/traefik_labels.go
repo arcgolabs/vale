@@ -117,7 +117,7 @@ func (labels *TraefikLabels) applyServiceLabel(rest, value string) {
 	labels.updateService(name, func(service *TraefikService) {
 		switch option {
 		case "loadbalancer.server.port":
-			service.Port = parseTraefikInt(value, 0)
+			service.Port = parseTraefikInt(value)
 		case "loadbalancer.server.scheme":
 			service.Scheme = strings.TrimSpace(value)
 		}
@@ -141,7 +141,10 @@ func applyTraefikMiddlewareOption(middleware *config.Middleware, option, value s
 	if applyTraefikRedirectMiddleware(middleware, option, value) {
 		return
 	}
-	if applyTraefikHeaderMiddleware(middleware, option, value) {
+	if applyTraefikChainOrBufferingMiddleware(middleware, option, value) {
+		return
+	}
+	if applyTraefikPolicyMiddleware(middleware, option, value) {
 		return
 	}
 	applyTraefikSecurityHeader(middleware, option, value)
@@ -188,17 +191,13 @@ func applyTraefikRedirectMiddleware(middleware *config.Middleware, option, value
 	return true
 }
 
-func applyTraefikHeaderMiddleware(middleware *config.Middleware, option, value string) bool {
-	switch {
-	case option == "chain.middlewares":
+func applyTraefikChainOrBufferingMiddleware(middleware *config.Middleware, option, value string) bool {
+	switch option {
+	case "chain.middlewares":
 		middleware.Type = "chain"
 		middleware.Chain = traefikCSVList(value, true).Values()
-	case option == "buffering.maxrequestbodybytes":
-		middleware.MaxBodyBytes = int64(parseTraefikInt(value, 0))
-	case strings.HasPrefix(option, "headers.customrequestheaders."):
-		setHeader(middleware.RequestHeaders, strings.TrimPrefix(option, "headers.customrequestheaders."), value)
-	case strings.HasPrefix(option, "headers.customresponseheaders."):
-		setHeader(middleware.ResponseHeaders, strings.TrimPrefix(option, "headers.customresponseheaders."), value)
+	case "buffering.maxrequestbodybytes":
+		middleware.MaxBodyBytes = int64(parseTraefikInt(value))
 	default:
 		return false
 	}

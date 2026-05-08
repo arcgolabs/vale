@@ -44,6 +44,31 @@ func TestNodeAppliesRouteSyncCommand(t *testing.T) {
 	}
 }
 
+func TestNodeLoadsPersistedAppliedState(t *testing.T) {
+	dataDir := t.TempDir()
+	node := newTestNodeWithDataDir(t, dataDir, true)
+
+	mustApply(t, node, []byte(`{"type":"route_sync","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":1,"routes":1,"proxy_engine":"oxy"},"routes":[{"name":"api","entrypoint":"web","path_prefix":"/api","service":"svc"}]}`))
+	if err := node.Shutdown(); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted := newTestNodeWithDataDir(t, dataDir, false)
+	t.Cleanup(func() {
+		if err := restarted.Shutdown(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	state := restarted.AppliedState()
+	if state.Snapshot == nil || state.Snapshot.Routes != 1 {
+		t.Fatalf("persisted snapshot = %#v", state.Snapshot)
+	}
+	if state.Routes == nil || state.Routes.Len() != 1 {
+		t.Fatalf("persisted routes = %#v", state.Routes)
+	}
+}
+
 func TestNodeAppliesLegacyPayloadAsRawState(t *testing.T) {
 	node := newTestNode(t)
 
@@ -77,22 +102,31 @@ func TestNodePeersReturnsBootstrapVoter(t *testing.T) {
 func newTestNode(t *testing.T) *raftnode.Node {
 	t.Helper()
 
-	node, err := raftnode.New(raftnode.Config{
-		Enabled:   true,
-		NodeID:    "node-1",
-		BindAddr:  freeAddr(t),
-		DataDir:   t.TempDir(),
-		Bootstrap: true,
-	}, discardLogger())
-	if err != nil {
-		t.Fatal(err)
-	}
+	node := newTestNodeWithDataDir(t, t.TempDir(), true)
 	t.Cleanup(func() {
 		if err := node.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 	})
-	waitForLeader(t, node)
+	return node
+}
+
+func newTestNodeWithDataDir(t *testing.T, dataDir string, bootstrap bool) *raftnode.Node {
+	t.Helper()
+
+	node, err := raftnode.New(raftnode.Config{
+		Enabled:   true,
+		NodeID:    "node-1",
+		BindAddr:  freeAddr(t),
+		DataDir:   dataDir,
+		Bootstrap: bootstrap,
+	}, discardLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bootstrap {
+		waitForLeader(t, node)
+	}
 	return node
 }
 

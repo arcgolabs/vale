@@ -25,6 +25,7 @@ type CompiledSnapshot struct {
 	HealthTimeout      string
 	Security           SecurityRuntime
 	ProxyEngine        string
+	Fingerprint        string
 	BuiltAt            time.Time
 }
 
@@ -91,6 +92,9 @@ type MiddlewareRuntime struct {
 	CORS                   CORSMiddlewareRuntime
 	RateLimit              RateLimitRuntime
 	CircuitBreaker         CircuitBreakerRuntime
+	BasicAuth              BasicAuthRuntime
+	Compress               CompressRuntime
+	IPAllowList            IPAllowListRuntime
 }
 
 type SecureMiddlewareRuntime struct {
@@ -137,6 +141,23 @@ type CircuitBreakerRuntime struct {
 	Interval         string
 	Timeout          string
 	FailureThreshold uint32
+}
+
+type BasicAuthRuntime struct {
+	Enabled bool
+	Realm   string
+	Users   *mapping.Map[string, string]
+}
+
+type CompressRuntime struct {
+	Enabled  bool
+	MinBytes int
+}
+
+type IPAllowListRuntime struct {
+	Enabled            bool
+	SourceRange        *collectionlist.List[string]
+	TrustForwardHeader bool
 }
 
 type ServiceRuntime struct {

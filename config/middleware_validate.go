@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
+	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	collectionset "github.com/arcgolabs/collectionx/set"
@@ -14,6 +16,8 @@ var middlewareValidators = collectionlist.NewList[middlewareValidator](
 	validateRateLimitPolicy,
 	validateCORSPolicy,
 	validateSecurePolicy,
+	validateCompressPolicy,
+	validateIPAllowListPolicy,
 )
 
 func validateMiddleware(middleware *Middleware, middlewareSet *collectionset.Set[string]) error {
@@ -63,4 +67,30 @@ func validateSecurePolicy(middleware *Middleware) error {
 		return nil
 	}
 	return fmt.Errorf("middleware %q secure sts_seconds cannot be negative", middleware.Name)
+}
+
+func validateCompressPolicy(middleware *Middleware) error {
+	if middleware.Compress == nil || middleware.Compress.MinBytes >= 0 {
+		return nil
+	}
+	return fmt.Errorf("middleware %q compress min_bytes cannot be negative", middleware.Name)
+}
+
+func validateIPAllowListPolicy(middleware *Middleware) error {
+	if middleware.IPAllowList == nil {
+		return nil
+	}
+	for _, source := range middleware.IPAllowList.SourceRange {
+		source = strings.TrimSpace(source)
+		if source == "" {
+			continue
+		}
+		if ip := net.ParseIP(source); ip != nil {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(source); err != nil {
+			return fmt.Errorf("middleware %q ip_allow_list source_range %q is not an IP or CIDR", middleware.Name, source)
+		}
+	}
+	return nil
 }

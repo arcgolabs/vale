@@ -211,5 +211,11 @@ func NewMiddleware(name string) MiddlewareRuntime {
 		RequestHeaders:  mapping.NewMap[string, string](),
 		ResponseHeaders: mapping.NewMap[string, string](),
 		Chain:           collectionlist.NewList[string](),
+		BasicAuth: BasicAuthRuntime{
+			Users: mapping.NewMap[string, string](),
+		},
+		IPAllowList: IPAllowListRuntime{
+			SourceRange: collectionlist.NewList[string](),
+		},
 	}
 }
