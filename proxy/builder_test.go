@@ -1,6 +1,9 @@
 package proxy_test
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -73,6 +76,66 @@ func TestRewriteTargetURLPreservesRequestPathAndQuery(t *testing.T) {
 			assertRewrittenURL(t, got, tt.wantScheme, tt.wantHost, tt.wantPath, tt.wantQuery)
 		})
 	}
+}
+
+func TestOxyEngineForwardsToTargetHostAndPreservesForwardedHost(t *testing.T) {
+	t.Parallel()
+
+	var gotHost string
+	var gotForwardedHost string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHost = r.Host
+		gotForwardedHost = r.Header.Get("X-Forwarded-Host")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(upstream.Close)
+
+	targetURL, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := proxy.Build(targetURL)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://gateway.local/api?q=1", http.NoBody)
+	req.Host = "gateway.local"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	result := rec.Result()
+	defer func() {
+		if err := result.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	if _, err := io.Copy(io.Discard, result.Body); err != nil {
+		t.Fatal(err)
+	}
+	if result.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusNoContent)
+	}
+	if gotHost != targetURL.Host {
+		t.Fatalf("upstream host = %q, want %q", gotHost, targetURL.Host)
+	}
+	if gotForwardedHost != "gateway.local" {
+		t.Fatalf("x-forwarded-host = %q, want gateway.local", gotForwardedHost)
+	}
+}
+
+func TestRewriteRequestURLMutatesRequestURL(t *testing.T) {
+	t.Parallel()
+
+	targetURL, err := url.Parse("http://upstream.local/base?tenant=default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestURL, err := url.Parse("http://gateway.local/api/v1/users?active=true")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	proxy.RewriteRequestURL(targetURL, requestURL)
+
+	assertRewrittenURL(t, requestURL, "http", "upstream.local", "/base/api/v1/users", "tenant=default&active=true")
 }
 
 func assertRewrittenURL(t *testing.T, got *url.URL, wantScheme, wantHost, wantPath, wantQuery string) {

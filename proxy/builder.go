@@ -25,14 +25,15 @@ func (OxyEngine) Name() string {
 }
 
 func (OxyEngine) Build(target *url.URL) http.Handler {
-	fwd := oxyforward.New(true)
+	fwd := oxyforward.New(false)
 	fwd.Transport = NewOxyTransport()
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		proxyReq := r.Clone(r.Context())
-		proxyReq.URL = RewriteTargetURL(target, r.URL)
-		proxyReq.Host = target.Host
-		fwd.ServeHTTP(w, proxyReq)
-	})
+	director := fwd.Director
+	fwd.Director = func(request *http.Request) {
+		RewriteRequestURL(target, request.URL)
+		request.RequestURI = ""
+		director(request)
+	}
+	return fwd
 }
 
 func Build(target *url.URL) http.Handler {
@@ -64,6 +65,15 @@ func RewriteTargetURL(target, requestURL *url.URL) *url.URL {
 	rewritten.Path = joinURLPath(target.Path, requestURL.Path)
 	rewritten.RawQuery = joinRawQuery(target.RawQuery, requestURL.RawQuery)
 	return &rewritten
+}
+
+func RewriteRequestURL(target, requestURL *url.URL) {
+	requestPath := requestURL.Path
+	requestQuery := requestURL.RawQuery
+	*requestURL = *target
+	requestURL.Path = joinURLPath(target.Path, requestPath)
+	requestURL.RawPath = ""
+	requestURL.RawQuery = joinRawQuery(target.RawQuery, requestQuery)
 }
 
 func joinURLPath(base, requestPath string) string {

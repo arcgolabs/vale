@@ -46,6 +46,32 @@ func TestServiceRuntimePickSkipsUnhealthyEndpoints(t *testing.T) {
 	}
 }
 
+func TestServiceRuntimePickSingleEndpoint(t *testing.T) {
+	t.Parallel()
+
+	endpointURL, err := url.Parse("http://127.0.0.1:8081")
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := &valeruntime.EndpointRuntime{URL: endpointURL, Weight: 1}
+	endpoint.Healthy.Store(true)
+	service := &valeruntime.ServiceRuntime{
+		Name:      "api",
+		Strategy:  "round_robin",
+		Endpoints: collectionlist.NewList(endpoint),
+	}
+
+	for range 4 {
+		got, err := service.Pick()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != endpoint {
+			t.Fatalf("picked endpoint = %v, want single endpoint", got)
+		}
+	}
+}
+
 func TestServiceRuntimeWeightedRoundRobinUsesWeights(t *testing.T) {
 	t.Parallel()
 

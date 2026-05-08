@@ -33,6 +33,12 @@ func (s *ServiceRuntime) Pick() (*EndpointRuntime, error) {
 			With("service", s.Name).
 			New("service has no endpoints")
 	}
+	if endpointCount == 1 {
+		if endpoint := s.pickOnlyEndpoint(); endpoint != nil {
+			return endpoint, nil
+		}
+		return nil, noHealthyEndpointError(s, endpointCount)
+	}
 	if s.Strategy == "weighted_round_robin" && !s.weightedSlots.IsEmpty() {
 		if endpoint := s.pickWeightedEndpoint(); endpoint != nil {
 			return endpoint, nil
@@ -40,10 +46,22 @@ func (s *ServiceRuntime) Pick() (*EndpointRuntime, error) {
 	} else if endpoint := s.pickRoundRobinEndpoint(endpointCount); endpoint != nil {
 		return endpoint, nil
 	}
-	return nil, oops.
+	return nil, noHealthyEndpointError(s, endpointCount)
+}
+
+func noHealthyEndpointError(s *ServiceRuntime, endpointCount int) error {
+	return oops.
 		In("runtime").
 		With("service", s.Name, "endpoints", endpointCount, "strategy", s.Strategy).
 		New("no healthy endpoint")
+}
+
+func (s *ServiceRuntime) pickOnlyEndpoint() *EndpointRuntime {
+	endpoint, _ := s.Endpoints.GetFirst()
+	if endpoint.Healthy.Load() {
+		return endpoint
+	}
+	return nil
 }
 
 func (s *ServiceRuntime) pickWeightedEndpoint() *EndpointRuntime {
