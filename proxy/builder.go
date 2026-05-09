@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"strings"
 	"time"
@@ -25,15 +26,22 @@ func (OxyEngine) Name() string {
 }
 
 func (OxyEngine) Build(target *url.URL) http.Handler {
-	fwd := oxyforward.New(false)
-	fwd.Transport = NewOxyTransport()
-	director := fwd.Director
-	fwd.Director = func(request *http.Request) {
-		RewriteRequestURL(target, request.URL)
-		request.RequestURI = ""
-		director(request)
+	base := oxyforward.New(false)
+	return &httputil.ReverseProxy{
+		Transport:    NewOxyTransport(),
+		BufferPool:   defaultProxyBufferPool,
+		ErrorHandler: base.ErrorHandler,
+		Rewrite: func(rewrite *httputil.ProxyRequest) {
+			originalHost := rewrite.In.Host
+			RewriteRequestURL(target, rewrite.Out.URL)
+			rewrite.Out.Host = target.Host
+			rewrite.Out.RequestURI = ""
+			rewrite.Out.Proto = "HTTP/1.1"
+			rewrite.Out.ProtoMajor = 1
+			rewrite.Out.ProtoMinor = 1
+			rewriteForwardedHeaders(rewrite.Out, originalHost, rewrite.In.TLS != nil)
+		},
 	}
-	return fwd
 }
 
 func Build(target *url.URL) http.Handler {
@@ -49,6 +57,7 @@ func NewOxyTransport() *http.Transport {
 	transport.IdleConnTimeout = 90 * time.Second
 	transport.TLSHandshakeTimeout = 10 * time.Second
 	transport.ExpectContinueTimeout = time.Second
+	transport.DisableCompression = true
 	return transport
 }
 
@@ -74,6 +83,20 @@ func RewriteRequestURL(target, requestURL *url.URL) {
 	requestURL.Path = joinURLPath(target.Path, requestPath)
 	requestURL.RawPath = ""
 	requestURL.RawQuery = joinRawQuery(target.RawQuery, requestQuery)
+}
+
+func rewriteForwardedHeaders(request *http.Request, originalHost string, inboundTLS bool) {
+	if request.Header.Get("X-Forwarded-Host") == "" && originalHost != "" {
+		request.Header.Set("X-Forwarded-Host", originalHost)
+	}
+	if request.Header.Get("X-Forwarded-Proto") != "" {
+		return
+	}
+	if inboundTLS {
+		request.Header.Set("X-Forwarded-Proto", "https")
+		return
+	}
+	request.Header.Set("X-Forwarded-Proto", "http")
 }
 
 func joinURLPath(base, requestPath string) string {

@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1.7
+
+FROM --platform=$BUILDPLATFORM alpine:3 AS optimize
+
+ARG TARGETARCH
+
+RUN apk add --no-cache upx
+
+COPY linux_${TARGETARCH}/valed /out/valed
+
+RUN chmod +x /out/valed && \
+    upx --best --lzma /out/valed
+
+FROM alpine:3
+
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY --from=optimize /out/valed /usr/local/bin/valed
+
+USER 65532:65532
+EXPOSE 8080 19090
+
+ENTRYPOINT ["/usr/local/bin/valed"]

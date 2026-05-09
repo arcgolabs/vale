@@ -18,8 +18,10 @@ config-to-runtime snapshot compilation.
 ## Proxy Comparison
 
 The Docker Compose scenario compares Vale, Traefik, and Caddy against the same
-upstream service. Access logs and metrics are disabled where possible so the
-numbers focus on reverse proxy overhead.
+upstream service. By default it uses the published Vale image from GitHub
+Container Registry (`ghcr.io/arcgolabs/vale:latest`) so pressure tests exercise
+the release binary container. Access logs and metrics are disabled where
+possible so the numbers focus on reverse proxy overhead.
 
 Default host ports:
 
@@ -33,11 +35,51 @@ Run on PowerShell:
 ./benchmarks/bench-compare.ps1 -Duration 30s -Warmup 5s -Concurrency 64 -LogLevel info
 ```
 
+Use a specific GitHub-published Vale image:
+
+```powershell
+./benchmarks/bench-compare.ps1 -ValeImage ghcr.io/arcgolabs/vale:v0.1.0
+```
+
+Use an already-built local image:
+
+```powershell
+./benchmarks/bench-compare.ps1 -ValeImage vale-upx-test:upx -SkipPull
+```
+
+Use a local source build instead:
+
+```powershell
+./benchmarks/bench-compare.ps1 -LocalBuild
+```
+
+Local source builds run UPX through the repository Dockerfile.
+
 Run on POSIX shells:
 
 ```bash
 DURATION=30s WARMUP=5s CONCURRENCY=64 LOG_LEVEL=info ./benchmarks/bench-compare.sh
 ```
+
+Use a specific GitHub-published Vale image:
+
+```bash
+VALE_IMAGE=ghcr.io/arcgolabs/vale:v0.1.0 ./benchmarks/bench-compare.sh
+```
+
+Use an already-built local image:
+
+```bash
+VALE_IMAGE=vale-upx-test:upx SKIP_PULL=1 ./benchmarks/bench-compare.sh
+```
+
+Use a local source build instead:
+
+```bash
+LOCAL_BUILD=1 ./benchmarks/bench-compare.sh
+```
+
+Local source builds run UPX through the repository Dockerfile.
 
 Benchmark progress logs are written to stderr. Use `-LogLevel off` on
 PowerShell or `LOG_LEVEL=off` on POSIX shells to keep only the result table.

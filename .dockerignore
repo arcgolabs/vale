@@ -3,6 +3,8 @@
 .idea
 dist
 .tmp-release-check
+.tmp-release-image
+benchmarks/results
 *.test
 *.out
 coverage.*

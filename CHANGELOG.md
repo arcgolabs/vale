@@ -8,6 +8,8 @@
 - Added Raft applied-state persistence regression coverage.
 - Added GHCR container image publishing for `valed` release tags.
 - Added internal Go benchmarks plus a Docker-based Vale/Traefik/Caddy comparison harness.
+- Switched Docker comparison benchmarks to use the GitHub-published Vale image by default, with explicit local-build opt-in.
+- Added fixed UPX optimization to source-built and release container images.
 
 ## v0.1.0 - 2026-05-08
 

@@ -44,3 +44,7 @@ func (l *AccessLogger) Log(event AccessEvent) {
 		slog.String("remote_addr", event.RemoteAddr),
 	)
 }
+
+func (l *AccessLogger) Enabled() bool {
+	return l != nil && l.enabled && l.logger != nil
+}

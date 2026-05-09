@@ -4,8 +4,11 @@ param(
     [string]$Warmup = "3s",
     [int]$Concurrency = 32,
     [int]$TimeoutSeconds = 60,
+    [string]$ValeImage = "ghcr.io/arcgolabs/vale:latest",
     [string]$LogLevel = "info",
     [string]$OutputDir = "",
+    [switch]$LocalBuild,
+    [switch]$SkipPull,
     [switch]$Keep
 )
 
@@ -14,11 +17,21 @@ $ErrorActionPreference = "Stop"
 $BenchDir = $PSScriptRoot
 $Root = Resolve-Path (Join-Path $BenchDir "..")
 $ComposeFile = Join-Path $BenchDir "docker-compose.yml"
+$LocalComposeFile = Join-Path $BenchDir "docker-compose.local.yml"
 if ([string]::IsNullOrWhiteSpace($OutputDir)) {
     $Stamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $OutputDir = Join-Path $BenchDir "results\$Stamp"
 }
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+if ($LocalBuild -and -not $PSBoundParameters.ContainsKey("ValeImage")) {
+    $ValeImage = "vale-bench-vale:latest"
+}
+$env:VALE_IMAGE = $ValeImage
+
+$ComposeArgs = @("-f", $ComposeFile)
+if ($LocalBuild) {
+    $ComposeArgs += @("-f", $LocalComposeFile)
+}
 
 function Write-BenchLog {
     param([string]$Message)
@@ -49,7 +62,15 @@ function Wait-BenchEndpoint {
 Push-Location $Root
 try {
     Write-BenchLog "starting compose stack"
-    docker compose -f $ComposeFile up -d --build
+    if ($LocalBuild) {
+        docker compose @ComposeArgs up -d --build
+    } else {
+        if (-not $SkipPull) {
+            Write-BenchLog "pulling vale image $ValeImage"
+            docker compose @ComposeArgs pull vale
+        }
+        docker compose @ComposeArgs up -d
+    }
 
     Write-BenchLog "waiting for vale"
     Wait-BenchEndpoint -Name "vale" -Url "http://127.0.0.1:18080/"
@@ -59,7 +80,7 @@ try {
     Wait-BenchEndpoint -Name "caddy" -Url "http://127.0.0.1:18082/"
 
     Write-BenchLog "recording image metadata in $OutputDir"
-    docker compose -f $ComposeFile images | Out-File -FilePath (Join-Path $OutputDir "images.txt") -Encoding utf8
+    docker compose @ComposeArgs images | Out-File -FilePath (Join-Path $OutputDir "images.txt") -Encoding utf8
 
     Write-BenchLog "running proxybench"
     go run ./benchmarks/cmd/proxybench `
@@ -73,7 +94,7 @@ try {
 } finally {
     if (-not $Keep) {
         Write-BenchLog "stopping compose stack"
-        docker compose -f $ComposeFile down -v
+        docker compose @ComposeArgs down -v
     }
     Pop-Location
 }

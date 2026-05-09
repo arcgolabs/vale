@@ -13,11 +13,19 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -C cmd -trimpath -ldflags="-s -w" -o /out/valed .
 
+FROM --platform=$BUILDPLATFORM alpine:3 AS optimize
+
+RUN apk add --no-cache upx
+
+COPY --from=build /out/valed /out/valed
+
+RUN upx --best --lzma /out/valed
+
 FROM alpine:3
 
 RUN apk add --no-cache ca-certificates tzdata
 
-COPY --from=build /out/valed /usr/local/bin/valed
+COPY --from=optimize /out/valed /usr/local/bin/valed
 
 USER 65532:65532
 EXPOSE 8080 19090

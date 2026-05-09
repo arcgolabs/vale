@@ -1,0 +1,8 @@
+name: vale-bench
+
+services:
+  vale:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ${VALE_IMAGE:-vale-bench-vale:latest}

@@ -20,6 +20,10 @@ func NewNoopMetrics() MetricsRecorder {
 	return noopMetrics{}
 }
 
+func (noopMetrics) Enabled() bool {
+	return false
+}
+
 func (noopMetrics) Observe(_ *CompiledRoute, _ *EndpointRuntime, _ int, _ time.Duration) {}
 
 func (noopMetrics) Handler() http.Handler {
@@ -105,6 +109,10 @@ func (m *observabilityMetrics) Observe(route *CompiledRoute, endpoint *EndpointR
 		observabilityx.String("route", route.Name),
 		observabilityx.String("service", route.Service.Name),
 	)
+}
+
+func (m *observabilityMetrics) Enabled() bool {
+	return m != nil && m.enabled
 }
 
 func (m *observabilityMetrics) Handler() http.Handler {

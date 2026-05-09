@@ -17,6 +17,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/hashicorp/go-memdb v1.3.5
 	github.com/hashicorp/golang-lru/v2 v2.0.7
+	github.com/libp2p/go-buffer-pool v0.1.0
 	github.com/rs/cors v1.11.1
 	github.com/samber/mo v1.16.0
 	github.com/samber/oops v1.21.0

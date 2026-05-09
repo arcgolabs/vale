@@ -10,9 +10,7 @@ services:
       - "8080"
 
   vale:
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: ${VALE_IMAGE:-ghcr.io/arcgolabs/vale:latest}
     command: ["--config", "/etc/vale/vale.hcl", "--log-level", "error"]
     volumes:
       - ./vale.hcl:/etc/vale/vale.hcl:ro

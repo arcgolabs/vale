@@ -13,7 +13,7 @@ import (
 	valeruntime "github.com/arcgolabs/vale/runtime"
 )
 
-func TestGatewayLogsFailedRequestWhenAccessLogDisabled(t *testing.T) {
+func TestGatewayLogsFailedRequestWhenAccessLogEnabled(t *testing.T) {
 	t.Parallel()
 
 	var logs bytes.Buffer
@@ -38,7 +38,7 @@ func TestGatewayLogsFailedRequestWhenAccessLogDisabled(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://api.example.com/", http.NoBody)
 	recorder := httptest.NewRecorder()
 
-	valeruntime.NewGateway(snapshot, logger, false, valeruntime.NewNoopMetrics()).
+	valeruntime.NewGateway(snapshot, logger, true, valeruntime.NewNoopMetrics()).
 		Handler("web").
 		ServeHTTP(recorder, req)
 

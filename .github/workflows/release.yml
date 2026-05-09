@@ -179,19 +179,7 @@ jobs:
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
 
-          cat > dist/image/Dockerfile <<'DOCKERFILE'
-          FROM alpine:3
-
-          RUN apk add --no-cache ca-certificates tzdata
-
-          ARG TARGETARCH
-          COPY linux_${TARGETARCH}/valed /usr/local/bin/valed
-
-          USER 65532:65532
-          EXPOSE 8080 19090
-
-          ENTRYPOINT ["/usr/local/bin/valed"]
-          DOCKERFILE
+          cp Dockerfile.release dist/image/Dockerfile
 
       - name: Set up QEMU
         if: steps.release.outputs.skip != 'true'

@@ -399,6 +399,11 @@ Release workflow publishes multi-arch Linux images to GHCR:
 - `ghcr.io/arcgolabs/vale:<semver-without-v>`
 - `ghcr.io/arcgolabs/vale:latest` for non-prerelease tags
 
+The release image is assembled from the Linux `valed` binary artifacts through
+[`Dockerfile.release`](./Dockerfile.release). It does not compile from source
+inside the runtime image. Both source-built and release images run the binary
+through UPX in the optimize stage to keep the runtime image small.
+
 For example:
 
 ```bash
@@ -416,8 +421,8 @@ go test ./compiler -run '^$' -bench BenchmarkCompileByRouteCount -benchmem
 ```
 
 The Docker comparison harness under [`benchmarks/`](./benchmarks/README.md)
-runs Vale, Traefik, and Caddy against the same upstream service and writes JSON
-and Markdown reports:
+runs the GitHub-published Vale container image, Traefik, and Caddy against the
+same upstream service and writes JSON and Markdown reports:
 
 ```bash
 ./benchmarks/bench-compare.sh
