@@ -1,84 +1,103 @@
 package raftnode
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
-	"sync"
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	"github.com/hashicorp/raft"
+	sm "github.com/lni/dragonboat/v3/statemachine"
 	"github.com/samber/oops"
 )
 
+const lookupState = "state"
+
 type fsm struct {
-	mu    sync.RWMutex
-	state State
-	store *stateStore
+	group     string
+	clusterID uint64
+	state     State
+	store     *stateStore
 }
 
-func newFSM(store *stateStore) *fsm {
+func newFSM(group string, clusterID uint64, store *stateStore) *fsm {
+	if group == "" {
+		group = groupNameFromClusterID(clusterID)
+	}
 	state := State{}
 	if store != nil {
-		if loaded, ok, err := store.LoadState(context.Background()); err == nil && ok {
+		if loaded, ok, err := store.LoadState(context.Background(), group); err == nil && ok {
 			state = loaded
 		}
 	}
 	return &fsm{
-		state: cloneState(state),
-		store: store,
+		group:     group,
+		clusterID: clusterID,
+		state:     cloneState(state),
+		store:     store,
 	}
 }
 
-func (f *fsm) Apply(log *raft.Log) any {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	state, err := applyCommand(f.state, log.Index, log.Data)
+func (f *fsm) Update(data []byte) (sm.Result, error) {
+	state, err := applyCommand(f.state, data)
 	if err != nil {
-		return oops.
+		return sm.Result{}, oops.
 			In("raftnode").
-			With("index", log.Index, "bytes", len(log.Data)).
+			With("group", f.group, "cluster_id", f.clusterID, "bytes", len(data)).
 			Wrapf(err, "apply raft fsm command")
 	}
 	if f.store != nil {
-		if err := f.store.SaveState(context.Background(), state); err != nil {
-			return oops.
+		if err := f.store.SaveState(context.Background(), f.group, state); err != nil {
+			return sm.Result{}, oops.
 				In("raftnode").
-				With("index", log.Index, "version", state.Version).
+				With("group", f.group, "cluster_id", f.clusterID, "version", state.Version).
 				Wrapf(err, "persist raft fsm state")
 		}
 	}
 	f.state = state
-	return state
+	return sm.Result{Value: state.Version}, nil
 }
 
-func (f *fsm) Snapshot() (raft.FSMSnapshot, error) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
+func (f *fsm) Lookup(query any) (any, error) {
+	if value, ok := query.(string); ok && value == lookupState {
+		return cloneState(f.state), nil
+	}
+	return cloneState(f.state), nil
+}
+
+func (f *fsm) SaveSnapshot(writer io.Writer, _ sm.ISnapshotFileCollection, done <-chan struct{}) error {
 	data, err := json.Marshal(f.state)
 	if err != nil {
-		return nil, oops.
+		return oops.
 			In("raftnode").
+			With("group", f.group, "cluster_id", f.clusterID).
 			Wrapf(err, "marshal raft fsm snapshot")
 	}
-	return &fsmSnapshot{data: data}, nil
+	select {
+	case <-done:
+		return sm.ErrSnapshotStopped
+	default:
+	}
+	if _, err := writer.Write(data); err != nil {
+		return oops.
+			In("raftnode").
+			With("group", f.group, "cluster_id", f.clusterID).
+			Wrapf(err, "write raft fsm snapshot")
+	}
+	return nil
 }
 
-func (f *fsm) Restore(reader io.ReadCloser) (restoreErr error) {
-	defer func() {
-		if closeErr := reader.Close(); closeErr != nil && restoreErr == nil {
-			restoreErr = oops.
-				In("raftnode").
-				Wrapf(closeErr, "close raft fsm snapshot reader")
-		}
-	}()
+func (f *fsm) RecoverFromSnapshot(reader io.Reader, _ []sm.SnapshotFile, done <-chan struct{}) error {
+	select {
+	case <-done:
+		return sm.ErrSnapshotStopped
+	default:
+	}
 	data, err := io.ReadAll(reader)
 	if err != nil {
 		return oops.
 			In("raftnode").
+			With("group", f.group, "cluster_id", f.clusterID).
 			Wrapf(err, "read raft fsm snapshot")
 	}
 	var state State
@@ -86,62 +105,33 @@ func (f *fsm) Restore(reader io.ReadCloser) (restoreErr error) {
 		if err := json.Unmarshal(data, &state); err != nil {
 			return oops.
 				In("raftnode").
+				With("group", f.group, "cluster_id", f.clusterID).
 				Wrapf(err, "unmarshal raft fsm snapshot")
 		}
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.state = cloneState(state)
 	if f.store != nil {
-		if err := f.store.SaveState(context.Background(), f.state); err != nil {
+		if err := f.store.SaveState(context.Background(), f.group, f.state); err != nil {
 			return oops.
 				In("raftnode").
-				With("version", f.state.Version).
+				With("group", f.group, "cluster_id", f.clusterID, "version", f.state.Version).
 				Wrapf(err, "persist restored raft fsm state")
 		}
 	}
 	return nil
 }
 
-func (f *fsm) State() State {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	return cloneState(f.state)
-}
-
-type fsmSnapshot struct {
-	data []byte
-}
-
-func (s *fsmSnapshot) Persist(sink raft.SnapshotSink) error {
-	if _, err := io.Copy(sink, bytes.NewReader(s.data)); err != nil {
-		if cancelErr := sink.Cancel(); cancelErr != nil {
-			return oops.
-				In("raftnode").
-				Wrapf(errors.Join(err, cancelErr), "persist raft fsm snapshot and cancel sink")
-		}
-		return oops.
-			In("raftnode").
-			Wrapf(err, "persist raft fsm snapshot")
-	}
-	if err := sink.Close(); err != nil {
-		return oops.
-			In("raftnode").
-			Wrapf(err, "close raft fsm snapshot sink")
-	}
+func (f *fsm) Close() error {
 	return nil
 }
 
-func (s *fsmSnapshot) Release() {}
-
-func applyCommand(current State, index uint64, data []byte) (State, error) {
+func applyCommand(current State, data []byte) (State, error) {
 	if !json.Valid(data) {
 		return State{
-			Version:   index,
-			AppliedAt: time.Now().UTC(),
-			Snapshot:  cloneSnapshot(current.Snapshot),
-			Routes:    cloneRoutes(current.Routes),
-			Raw:       append(json.RawMessage(nil), data...),
+			Version:  current.Version + 1,
+			Snapshot: cloneSnapshot(current.Snapshot),
+			Routes:   cloneRoutes(current.Routes),
+			Raw:      append(json.RawMessage(nil), data...),
 		}, nil
 	}
 	var envelope struct {
@@ -150,29 +140,27 @@ func applyCommand(current State, index uint64, data []byte) (State, error) {
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return current, oops.
 			In("raftnode").
-			With("index", index).
 			Wrapf(err, "decode raft command envelope")
 	}
 	if envelope.Type == "" {
 		return State{
-			Version:   index,
-			AppliedAt: time.Now().UTC(),
-			Snapshot:  cloneSnapshot(current.Snapshot),
-			Routes:    cloneRoutes(current.Routes),
-			Raw:       append(json.RawMessage(nil), data...),
+			Version:  current.Version + 1,
+			Snapshot: cloneSnapshot(current.Snapshot),
+			Routes:   cloneRoutes(current.Routes),
+			Raw:      append(json.RawMessage(nil), data...),
 		}, nil
 	}
 	command := Command{}
 	if err := json.Unmarshal(data, &command); err != nil {
 		return current, oops.
 			In("raftnode").
-			With("index", index, "command_type", envelope.Type).
+			With("command_type", envelope.Type).
 			Wrapf(err, "decode raft command")
 	}
 
 	next := State{
-		Version:   index,
-		AppliedAt: time.Now().UTC(),
+		Version:   current.Version + 1,
+		AppliedAt: time.Time{},
 		Snapshot:  cloneSnapshot(current.Snapshot),
 		Routes:    cloneRoutes(current.Routes),
 		Raw:       append(json.RawMessage(nil), command.Raw...),
@@ -188,7 +176,7 @@ func applyCommand(current State, index uint64, data []byte) (State, error) {
 	default:
 		return current, oops.
 			In("raftnode").
-			With("command_type", command.Type, "index", index).
+			With("command_type", command.Type).
 			Errorf("unsupported raft command type %q", command.Type)
 	}
 }

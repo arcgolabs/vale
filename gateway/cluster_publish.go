@@ -6,6 +6,7 @@ import (
 
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vale/runtime"
+	"github.com/samber/oops"
 )
 
 func (g *Gateway) publishClusterUpdate(snapshot *runtime.CompiledSnapshot) {
@@ -26,7 +27,26 @@ func (g *Gateway) publishClusterUpdate(snapshot *runtime.CompiledSnapshot) {
 		g.logger.Error("raft payload marshal failed", "error", err)
 		return
 	}
-	if err := g.cluster.Apply(data, 2*time.Second); err != nil {
+	if err := g.applyClusterGroup(ClusterGroupRoutes, data, 2*time.Second); err != nil {
 		g.logger.Error("raft apply failed", "error", err)
 	}
+}
+
+func (g *Gateway) applyClusterGroup(group string, data []byte, timeout time.Duration) error {
+	if groupCluster, ok := g.cluster.(GroupCluster); ok {
+		if err := groupCluster.ApplyGroup(group, data, timeout); err != nil {
+			return oops.
+				In("gateway").
+				With("group", group, "bytes", len(data), "timeout", timeout.String()).
+				Wrapf(err, "apply raft group update")
+		}
+		return nil
+	}
+	if err := g.cluster.Apply(data, timeout); err != nil {
+		return oops.
+			In("gateway").
+			With("bytes", len(data), "timeout", timeout.String()).
+			Wrapf(err, "apply raft update")
+	}
+	return nil
 }

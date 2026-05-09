@@ -12,6 +12,7 @@ import (
 	httpxstd "github.com/arcgolabs/httpx/adapter/std"
 	"github.com/arcgolabs/vale/runtime"
 	"github.com/go-chi/chi/v5"
+	"github.com/samber/oops"
 )
 
 type adminRoutesInput struct {
@@ -41,8 +42,12 @@ type adminClusterStatusOutput struct {
 	Body *mapping.Map[string, any] `json:"body"`
 }
 
+type adminClusterPeersInput struct {
+	Group string `query:"group"`
+}
+
 type adminClusterPeersOutput struct {
-	Body *collectionlist.List[ClusterPeer] `json:"body"`
+	Body *collectionlist.List[*ClusterPeer] `json:"body"`
 }
 
 type adminJoinInput struct {
@@ -52,6 +57,7 @@ type adminJoinInput struct {
 type adminJoinRequest struct {
 	ID      string `json:"id"`
 	Address string `json:"address"`
+	Group   string `json:"group,omitempty"`
 }
 
 type adminLeaveInput struct {
@@ -59,7 +65,8 @@ type adminLeaveInput struct {
 }
 
 type adminLeaveRequest struct {
-	ID string `json:"id"`
+	ID    string `json:"id"`
+	Group string `json:"group,omitempty"`
 }
 
 type adminOKOutput struct {
@@ -136,11 +143,11 @@ func (g *Gateway) handleAdminClusterStatus(context.Context, *struct{}) (*adminCl
 	return &adminClusterStatusOutput{Body: g.cluster.Status()}, nil
 }
 
-func (g *Gateway) handleAdminClusterPeers(context.Context, *struct{}) (*adminClusterPeersOutput, error) {
+func (g *Gateway) handleAdminClusterPeers(_ context.Context, input *adminClusterPeersInput) (*adminClusterPeersOutput, error) {
 	if g.cluster == nil {
-		return &adminClusterPeersOutput{Body: collectionlist.NewList[ClusterPeer]()}, nil
+		return &adminClusterPeersOutput{Body: collectionlist.NewList[*ClusterPeer]()}, nil
 	}
-	peers, err := g.cluster.Peers()
+	peers, err := g.clusterPeers(input.Group)
 	if err != nil {
 		return nil, httpx.NewError(http.StatusInternalServerError, err.Error(), err)
 	}
@@ -148,20 +155,20 @@ func (g *Gateway) handleAdminClusterPeers(context.Context, *struct{}) (*adminClu
 }
 
 func (g *Gateway) handleAdminClusterJoin(_ context.Context, input *adminJoinInput) (*adminOKOutput, error) {
-	if err := g.requireClusterLeader("join peers"); err != nil {
+	if err := g.requireClusterLeader(input.Body.Group, "join peers"); err != nil {
 		return nil, err
 	}
-	if err := g.cluster.AddVoter(input.Body.ID, input.Body.Address, 5*time.Second); err != nil {
+	if err := g.addClusterVoter(input.Body.Group, input.Body.ID, input.Body.Address, 5*time.Second); err != nil {
 		return nil, httpx.NewError(http.StatusBadRequest, err.Error(), err)
 	}
 	return adminOK(), nil
 }
 
 func (g *Gateway) handleAdminClusterLeave(_ context.Context, input *adminLeaveInput) (*adminOKOutput, error) {
-	if err := g.requireClusterLeader("remove peers"); err != nil {
+	if err := g.requireClusterLeader(input.Body.Group, "remove peers"); err != nil {
 		return nil, err
 	}
-	if err := g.cluster.RemoveServer(input.Body.ID, 5*time.Second); err != nil {
+	if err := g.removeClusterServer(input.Body.Group, input.Body.ID, 5*time.Second); err != nil {
 		return nil, httpx.NewError(http.StatusBadRequest, err.Error(), err)
 	}
 	return adminOK(), nil
@@ -178,14 +185,79 @@ func (g *Gateway) adminSnapshot() (*runtime.CompiledSnapshot, error) {
 	return snapshot, nil
 }
 
-func (g *Gateway) requireClusterLeader(action string) error {
+func (g *Gateway) requireClusterLeader(group, action string) error {
 	if g.cluster == nil {
 		return httpx.NewError(http.StatusBadRequest, "raft is not enabled")
 	}
-	if !g.cluster.IsLeader() {
+	if !g.clusterLeader(group) {
 		return httpx.NewError(http.StatusConflict, "only leader can "+action)
 	}
 	return nil
+}
+
+func (g *Gateway) clusterPeers(group string) (*collectionlist.List[*ClusterPeer], error) {
+	if groupCluster, ok := g.cluster.(GroupCluster); ok && group != "" {
+		peers, err := groupCluster.GroupPeers(group)
+		if err != nil {
+			return nil, oops.
+				In("gateway").
+				With("group", group).
+				Wrapf(err, "get raft group peers")
+		}
+		return peers, nil
+	}
+	peers, err := g.cluster.Peers()
+	if err != nil {
+		return nil, oops.
+			In("gateway").
+			Wrapf(err, "get raft peers")
+	}
+	return peers, nil
+}
+
+func (g *Gateway) addClusterVoter(group, id, address string, timeout time.Duration) error {
+	if groupCluster, ok := g.cluster.(GroupCluster); ok && group != "" {
+		if err := groupCluster.AddGroupVoter(group, id, address, timeout); err != nil {
+			return oops.
+				In("gateway").
+				With("group", group, "id", id, "address", address).
+				Wrapf(err, "add raft group voter")
+		}
+		return nil
+	}
+	if err := g.cluster.AddVoter(id, address, timeout); err != nil {
+		return oops.
+			In("gateway").
+			With("id", id, "address", address).
+			Wrapf(err, "add raft voter")
+	}
+	return nil
+}
+
+func (g *Gateway) removeClusterServer(group, id string, timeout time.Duration) error {
+	if groupCluster, ok := g.cluster.(GroupCluster); ok && group != "" {
+		if err := groupCluster.RemoveGroupServer(group, id, timeout); err != nil {
+			return oops.
+				In("gateway").
+				With("group", group, "id", id).
+				Wrapf(err, "remove raft group server")
+		}
+		return nil
+	}
+	if err := g.cluster.RemoveServer(id, timeout); err != nil {
+		return oops.
+			In("gateway").
+			With("id", id).
+			Wrapf(err, "remove raft server")
+	}
+	return nil
+}
+
+func (g *Gateway) clusterLeader(group string) bool {
+	if groupCluster, ok := g.cluster.(GroupCluster); ok && group != "" {
+		return groupCluster.IsGroupLeader(group)
+	}
+	return g.cluster.IsLeader()
 }
 
 func adminOK() *adminOKOutput {

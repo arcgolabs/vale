@@ -86,12 +86,14 @@ func provideClusterOptions(cfg valedConfig) valedClusterOptions {
 		return nil
 	}
 	return valedClusterOptions{
-		raftnode.WithCluster(raftnode.Config{
-			Enabled:   true,
-			NodeID:    cfg.RaftNodeID,
-			BindAddr:  cfg.RaftBind,
-			DataDir:   cfg.RaftDataDir,
-			Bootstrap: cfg.RaftBoot,
+		vale.WithClusterFactory(func(logger *slog.Logger) (vale.Cluster, error) {
+			return raftnode.New(raftnode.Config{
+				Enabled:   true,
+				NodeID:    cfg.RaftNodeID,
+				BindAddr:  cfg.RaftBind,
+				DataDir:   cfg.RaftDataDir,
+				Bootstrap: cfg.RaftBoot,
+			}, logger)
 		}),
 	}
 }

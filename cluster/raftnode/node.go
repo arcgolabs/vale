@@ -1,230 +1,260 @@
-// Package raftnode provides an optional HashiCorp Raft cluster adapter for Vale.
+// Package raftnode provides an optional Dragonboat multi-group Raft adapter for Vale.
 package raftnode
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
-	"io"
 	"log/slog"
-	"strings"
+	"path/filepath"
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
-	"github.com/arcgolabs/vale/gateway"
-	"github.com/hashicorp/raft"
+	dragonboat "github.com/lni/dragonboat/v3"
 	"github.com/samber/oops"
 )
 
-type Config struct {
-	Enabled   bool
-	NodeID    string
-	BindAddr  string
-	DataDir   string
-	Bootstrap bool
-}
-
-var ErrDisabled = errors.New("raft disabled")
-
-const (
-	CommandTypeSnapshotUpdate = "snapshot_update"
-	CommandTypeRouteSync      = "route_sync"
-)
-
-type Command struct {
-	Type     string                            `json:"type"`
-	Snapshot *SnapshotUpdate                   `json:"snapshot,omitempty"`
-	Routes   *collectionlist.List[RouteRecord] `json:"routes,omitempty"`
-	Raw      json.RawMessage                   `json:"raw,omitempty"`
-}
-
-type SnapshotUpdate struct {
-	BuiltAt     string `json:"built_at"`
-	Services    int    `json:"services"`
-	Routes      int    `json:"routes"`
-	ProxyEngine string `json:"proxy_engine"`
-}
-
-type State struct {
-	Version   uint64                            `json:"version"`
-	AppliedAt time.Time                         `json:"applied_at"`
-	Snapshot  *SnapshotUpdate                   `json:"snapshot,omitempty"`
-	Routes    *collectionlist.List[RouteRecord] `json:"routes,omitempty"`
-	Raw       json.RawMessage                   `json:"raw,omitempty"`
-}
-
-type RouteRecord struct {
-	Name       string `json:"name"`
-	Entrypoint string `json:"entrypoint"`
-	Host       string `json:"host,omitempty"`
-	PathPrefix string `json:"path_prefix,omitempty"`
-	Method     string `json:"method,omitempty"`
-	Service    string `json:"service"`
-}
-
-func DefaultConfig() Config {
-	return Config{
-		Enabled:   false,
-		NodeID:    "node-1",
-		BindAddr:  "127.0.0.1:17000",
-		DataDir:   "./data/raft",
-		Bootstrap: true,
-	}
-}
-
-func WithCluster(config Config) gateway.Option {
-	return gateway.WithClusterFactory(func(logger *slog.Logger) (gateway.Cluster, error) {
-		node, err := New(config, logger)
-		if errors.Is(err, ErrDisabled) {
-			return nil, nil
-		}
-		return node, err
-	})
-}
-
 type Node struct {
-	raft        *raft.Raft
-	fsm         *fsm
-	store       *stateStore
-	logStore    io.Closer
-	stableStore io.Closer
-	logger      *slog.Logger
+	nodeHost *dragonboat.NodeHost
+	store    *stateStore
+	groups   *mapping.Map[string, *raftGroup]
+	nodeID   uint64
+	nodeName string
+	logger   *slog.Logger
+}
+
+func New(config Config, logger *slog.Logger) (*Node, error) {
+	if !config.Enabled {
+		return nil, ErrDisabled
+	}
+	if err := prepareConfig(&config); err != nil {
+		return nil, err
+	}
+	nodeID := stableNodeID(config.NodeID)
+	nodeHost, err := dragonboat.NewNodeHost(nodeHostConfig(config))
+	if err != nil {
+		return nil, oops.
+			In("raftnode").
+			With("node_id", config.NodeID, "bind_addr", config.BindAddr).
+			Wrapf(err, "create dragonboat nodehost")
+	}
+	store, err := openStateStore(filepath.Join(config.DataDir, "vale-state.bbolt"), logger)
+	if err != nil {
+		nodeHost.Stop()
+		return nil, err
+	}
+	node := &Node{
+		nodeHost: nodeHost,
+		store:    store,
+		groups:   mapping.NewMap[string, *raftGroup](),
+		nodeID:   nodeID,
+		nodeName: config.NodeID,
+		logger:   logger,
+	}
+	if err := node.startGroups(config); err != nil {
+		closeErr := node.Shutdown()
+		return nil, oops.
+			In("raftnode").
+			Wrapf(errors.Join(err, closeErr), "start raft groups")
+	}
+	return node, nil
 }
 
 func (n *Node) IsEnabled() bool {
-	return n != nil && n.raft != nil
+	return n != nil && n.nodeHost != nil
 }
 
 func (n *Node) IsLeader() bool {
-	if !n.IsEnabled() {
+	return n.IsGroupLeader(DefaultGroupName)
+}
+
+func (n *Node) IsGroupLeader(group string) bool {
+	raftGroup, ok := n.group(group)
+	if !ok {
 		return false
 	}
-	return n.raft.State() == raft.Leader
+	leader, ready, err := n.nodeHost.GetLeaderID(raftGroup.id)
+	return err == nil && ready && leader == n.nodeID
 }
 
 func (n *Node) Apply(data []byte, timeout time.Duration) error {
+	return n.ApplyGroup(DefaultGroupName, data, timeout)
+}
+
+func (n *Node) ApplyGroup(group string, data []byte, timeout time.Duration) error {
 	if !n.IsEnabled() {
 		return nil
 	}
+	raftGroup, ok := n.group(group)
+	if !ok {
+		return oops.
+			In("raftnode").
+			With("group", group).
+			New("raft group is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	if n.logger != nil {
-		n.logger.Info("raft apply started", "bytes", len(data), "timeout", timeout)
+		n.logger.Info("raft apply started", "group", raftGroup.name, "bytes", len(data), "timeout", timeout)
 	}
-	future := n.raft.Apply(data, timeout)
-	err := future.Error()
-	if err == nil {
-		if responseErr, ok := future.Response().(error); ok {
-			err = responseErr
-		}
-	}
+	session := n.nodeHost.GetNoOPSession(raftGroup.id)
+	_, err := n.nodeHost.SyncPropose(ctx, session, data)
 	if err != nil && n.logger != nil {
-		n.logger.Error("raft apply failed", "error", err)
+		n.logger.Error("raft apply failed", "group", raftGroup.name, "error", err)
 	}
 	if err != nil {
 		return oops.
 			In("raftnode").
-			With("bytes", len(data), "timeout", timeout.String()).
+			With("group", raftGroup.name, "bytes", len(data), "timeout", timeout.String()).
 			Wrapf(err, "apply raft command")
 	}
 	return nil
 }
 
 func (n *Node) AppliedState() State {
-	if n == nil || n.fsm == nil {
+	return n.AppliedGroupState(DefaultGroupName)
+}
+
+func (n *Node) AppliedGroupState(group string) State {
+	if n == nil || n.store == nil {
 		return State{}
 	}
-	return n.fsm.State()
+	state, ok, err := n.store.LoadState(context.Background(), group)
+	if err != nil && n.logger != nil {
+		n.logger.Error("load applied raft state failed", "group", group, "error", err)
+	}
+	if !ok {
+		return State{}
+	}
+	return state
 }
 
 func (n *Node) Status() *mapping.Map[string, any] {
+	status := mapping.NewMap[string, any]()
 	if !n.IsEnabled() {
-		status := mapping.NewMap[string, any]()
 		status.Set("enabled", false)
 		return status
 	}
-	stats := n.raft.Stats()
-	status := mapping.NewMap[string, any]()
 	status.Set("enabled", true)
-	status.Set("state", n.raft.State().String())
-	status.Set("leader", string(n.raft.Leader()))
-	status.Set("stats", stats)
-	status.Set("applied", n.fsm.State())
+	status.Set("node_id", n.nodeName)
+	status.Set("numeric_node_id", n.nodeID)
+	groups := mapping.NewMap[string, any]()
+	n.groups.Range(func(name string, group *raftGroup) bool {
+		groupStatus := mapping.NewMap[string, any]()
+		leader, ready, err := n.nodeHost.GetLeaderID(group.id)
+		groupStatus.Set("cluster_id", group.id)
+		groupStatus.Set("leader_ready", ready)
+		groupStatus.Set("leader", leader)
+		groupStatus.Set("is_leader", err == nil && ready && leader == n.nodeID)
+		groupStatus.Set("applied", n.AppliedGroupState(name))
+		if err != nil {
+			groupStatus.Set("leader_error", err.Error())
+		}
+		groups.Set(name, groupStatus)
+		return true
+	})
+	status.Set("groups", groups)
 	return status
 }
 
-type Peer struct {
-	ID       string `json:"id"`
-	Address  string `json:"address"`
-	Suffrage string `json:"suffrage"`
+func (n *Node) Peers() (*collectionlist.List[*Peer], error) {
+	return n.GroupPeers(DefaultGroupName)
 }
 
-func (n *Node) Peers() (*collectionlist.List[gateway.ClusterPeer], error) {
+func (n *Node) GroupPeers(group string) (*collectionlist.List[*Peer], error) {
 	if !n.IsEnabled() {
-		return collectionlist.NewList[gateway.ClusterPeer](), nil
+		return collectionlist.NewList[*Peer](), nil
 	}
-	future := n.raft.GetConfiguration()
-	if err := future.Error(); err != nil {
+	raftGroup, ok := n.group(group)
+	if !ok {
 		return nil, oops.
 			In("raftnode").
-			Wrapf(err, "get raft configuration")
+			With("group", group).
+			New("raft group is not configured")
 	}
-	peers := collectionlist.NewListWithCapacity[gateway.ClusterPeer](len(future.Configuration().Servers))
-	collectionlist.NewList(future.Configuration().Servers...).Range(func(_ int, server raft.Server) bool {
-		peers.Add(gateway.ClusterPeer{
-			ID:       string(server.ID),
-			Address:  string(server.Address),
-			Suffrage: server.Suffrage.String(),
-		})
-		return true
-	})
-	return peers, nil
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	membership, err := n.nodeHost.SyncGetClusterMembership(ctx, raftGroup.id)
+	if err != nil {
+		return nil, oops.
+			In("raftnode").
+			With("group", raftGroup.name).
+			Wrapf(err, "get raft group membership")
+	}
+	raftGroup.configChangeID = membership.ConfigChangeID
+	return membershipPeers(raftGroup, membership), nil
 }
 
 func (n *Node) AddVoter(id, address string, timeout time.Duration) error {
+	return n.AddGroupVoter(DefaultGroupName, id, address, timeout)
+}
+
+func (n *Node) AddGroupVoter(group, id, address string, timeout time.Duration) error {
 	if !n.IsEnabled() {
 		return ErrDisabled
 	}
 	if id == "" || address == "" {
 		return oops.
 			In("raftnode").
-			With("id", id, "address", address).
+			With("group", group, "id", id, "address", address).
 			New("id and address are required")
 	}
-	if n.logger != nil {
-		n.logger.Info("raft add voter started", "id", id, "address", address, "timeout", timeout)
+	raftGroup, ok := n.group(group)
+	if !ok {
+		return oops.
+			In("raftnode").
+			With("group", group).
+			New("raft group is not configured")
 	}
-	err := n.raft.AddVoter(raft.ServerID(id), raft.ServerAddress(address), 0, timeout).Error()
-	if err != nil && n.logger != nil {
-		n.logger.Error("raft add voter failed", "id", id, "address", address, "error", err)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	configChangeID, err := n.syncConfigChangeID(ctx, raftGroup)
+	if err != nil {
+		return err
 	}
+	err = n.nodeHost.SyncRequestAddNode(ctx, raftGroup.id, stableNodeID(id), address, configChangeID)
 	if err != nil {
 		return oops.
 			In("raftnode").
-			With("id", id, "address", address, "timeout", timeout.String()).
+			With("group", raftGroup.name, "id", id, "address", address, "timeout", timeout.String()).
 			Wrapf(err, "add raft voter")
 	}
+	raftGroup.memberNames.Set(stableNodeID(id), id)
 	return nil
 }
 
 func (n *Node) RemoveServer(id string, timeout time.Duration) error {
+	return n.RemoveGroupServer(DefaultGroupName, id, timeout)
+}
+
+func (n *Node) RemoveGroupServer(group, id string, timeout time.Duration) error {
 	if !n.IsEnabled() {
 		return ErrDisabled
 	}
 	if id == "" {
 		return oops.
 			In("raftnode").
+			With("group", group).
 			New("id is required")
 	}
-	if n.logger != nil {
-		n.logger.Info("raft remove server started", "id", id, "timeout", timeout)
+	raftGroup, ok := n.group(group)
+	if !ok {
+		return oops.
+			In("raftnode").
+			With("group", group).
+			New("raft group is not configured")
 	}
-	err := n.raft.RemoveServer(raft.ServerID(id), 0, timeout).Error()
-	if err != nil && n.logger != nil {
-		n.logger.Error("raft remove server failed", "id", id, "error", err)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	configChangeID, err := n.syncConfigChangeID(ctx, raftGroup)
+	if err != nil {
+		return err
 	}
+	err = n.nodeHost.SyncRequestDeleteNode(ctx, raftGroup.id, stableNodeID(id), configChangeID)
 	if err != nil {
 		return oops.
 			In("raftnode").
-			With("id", id, "timeout", timeout.String()).
+			With("group", raftGroup.name, "id", id, "timeout", timeout.String()).
 			Wrapf(err, "remove raft server")
 	}
 	return nil
@@ -237,58 +267,25 @@ func (n *Node) Shutdown() error {
 	if n.logger != nil {
 		n.logger.Info("raft shutdown started")
 	}
-	err := n.raft.Shutdown().Error()
-	if err != nil && n.logger != nil {
-		n.logger.Error("raft shutdown failed", "error", err)
-	}
-	err = errors.Join(err,
-		closeRaftResource("state store", n.store),
-		closeRaftResource("log store", n.logStore),
-		closeRaftResource("stable store", n.stableStore),
-	)
-	if err != nil {
+	n.nodeHost.Stop()
+	n.nodeHost = nil
+	if err := n.store.Close(); err != nil {
 		return oops.
 			In("raftnode").
 			Wrapf(err, "shutdown raft node")
 	}
+	n.store = nil
 	return nil
 }
 
-func closerFrom(value any) io.Closer {
-	if closer, ok := value.(io.Closer); ok {
-		return closer
-	}
-	return nil
-}
-
-func closeRaftResource(name string, closer io.Closer) error {
-	if closer == nil {
-		return nil
-	}
-	if err := closer.Close(); err != nil {
-		return oops.
+func (n *Node) syncConfigChangeID(ctx context.Context, group *raftGroup) (uint64, error) {
+	membership, err := n.nodeHost.SyncGetClusterMembership(ctx, group.id)
+	if err != nil {
+		return 0, oops.
 			In("raftnode").
-			With("resource", name).
-			Wrapf(err, "close raft resource")
+			With("group", group.name).
+			Wrapf(err, "get raft group config change id")
 	}
-	return nil
-}
-
-type raftLogWriter struct {
-	logger *slog.Logger
-}
-
-func newRaftLogWriter(logger *slog.Logger) io.Writer {
-	if logger == nil {
-		return io.Discard
-	}
-	return &raftLogWriter{logger: logger.With("component", "raft")}
-}
-
-func (w *raftLogWriter) Write(data []byte) (int, error) {
-	line := strings.TrimSpace(string(data))
-	if line != "" {
-		w.logger.Info("raft log", "line", line)
-	}
-	return len(data), nil
+	group.configChangeID = membership.ConfigChangeID
+	return membership.ConfigChangeID, nil
 }
