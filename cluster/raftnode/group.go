@@ -169,6 +169,8 @@ func stableGroupID(name string) uint64 {
 		return MetadataGroupID
 	case DataGroupName:
 		return DefaultGroupID
+	case CertificatesGroupName:
+		return CertificatesGroupID
 	default:
 		return stableNodeID(name)
 	}
@@ -196,6 +198,8 @@ func groupNameFromClusterID(clusterID uint64) string {
 		return MetadataGroupName
 	case DataGroupID:
 		return DefaultGroupName
+	case CertificatesGroupID:
+		return CertificatesGroupName
 	default:
 		return fmt.Sprintf("group-%d", clusterID)
 	}

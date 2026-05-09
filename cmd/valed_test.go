@@ -4,8 +4,11 @@ import (
 	"log/slog"
 	"testing"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/dix"
-	"github.com/arcgolabs/vale"
+	"github.com/arcgolabs/dix/testx"
+	"github.com/arcgolabs/eventx"
+	"github.com/arcgolabs/observabilityx"
 	"github.com/spf13/pflag"
 )
 
@@ -13,22 +16,31 @@ func TestValedDefaultOptionsCreateGatewayWithoutConfigFile(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultValedConfig()
-	registry, err := providePluginRegistry()
+	obs := observabilityx.Nop()
+	registry, err := providePluginRegistry(obs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	clusterOptions, err := provideClusterOptions(cfg)
+	clusterOption, err := provideClusterOption(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	options := provideGatewayOptions(
-		provideBaseOptions(cfg, slog.New(slog.DiscardHandler)),
-		provideMetricsOptions(registry),
-		provideConfigSourceOptions(cfg),
-		clusterOptions,
-		nil,
+	bus := eventx.New()
+	t.Cleanup(func() {
+		if closeErr := bus.Close(); closeErr != nil {
+			t.Fatalf("close bus: %v", closeErr)
+		}
+	})
+	options := collectionlist.NewList(
+		provideWatchOption(cfg),
+		provideLoggerOption(slog.New(slog.DiscardHandler)),
+		provideObservabilityOption(obs),
+		provideMetricsOption(registry),
+		provideConfigSourceOption(cfg),
+		clusterOption,
+		provideEventBusOption(bus),
 	)
-	gateway, err := vale.New(options...)
+	gateway, err := provideGateway(options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,13 +52,19 @@ func TestValedDefaultOptionsCreateGatewayWithoutConfigFile(t *testing.T) {
 func TestValedStandaloneAppResolvesRunner(t *testing.T) {
 	t.Parallel()
 
-	rt, err := valedStandaloneApp(pflag.NewFlagSet("valed-test", pflag.ContinueOnError)).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := testx.Build(t, valedStandaloneApp(pflag.NewFlagSet("valed-test", pflag.ContinueOnError)))
 	if _, err := dix.ResolveAs[*valedRunner](rt.Container()); err != nil {
 		t.Fatal(err)
 	}
+	if rt.EventRecorder() == nil {
+		t.Fatal("expected dix recent event recorder")
+	}
+}
+
+func TestValedStandaloneAppValidatesDependencyGraph(t *testing.T) {
+	t.Parallel()
+
+	testx.Validate(t, valedStandaloneApp(pflag.NewFlagSet("valed-test", pflag.ContinueOnError)))
 }
 
 func TestDefaultValedConfigDoesNotRequireConfigPath(t *testing.T) {

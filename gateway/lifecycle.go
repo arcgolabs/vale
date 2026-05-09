@@ -7,6 +7,7 @@ import (
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/vale/certstore"
 	"github.com/arcgolabs/vale/runtime"
 	"github.com/samber/oops"
 )
@@ -72,9 +73,25 @@ func (g *Gateway) initializeCluster() error {
 	}
 	g.cluster = cluster
 	if g.cluster != nil {
+		g.configureClusterCertificateStorage()
 		g.logger.Info("cluster initialized", "status", g.cluster.Status())
 	}
 	return nil
+}
+
+func (g *Gateway) configureClusterCertificateStorage() {
+	if g.config.CertificateStorage != nil {
+		return
+	}
+	client, ok := g.cluster.(certstore.RaftClient)
+	if !ok {
+		return
+	}
+	g.config.CertificateStorage = certstore.NewRaftStorage(certstore.RaftStorageConfig{
+		Client: client,
+		Group:  ClusterGroupCertificates,
+	})
+	g.logger.Info("cluster certificate storage enabled", "group", ClusterGroupCertificates)
 }
 
 func (g *Gateway) loadInitialSnapshot(ctx context.Context) (*runtime.CompiledSnapshot, error) {

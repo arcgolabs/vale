@@ -9,6 +9,7 @@ import (
 )
 
 const ClusterGroupRoutes = "data"
+const ClusterGroupCertificates = "certificates"
 
 type ClusterPeer = mapping.Map[string, string]
 

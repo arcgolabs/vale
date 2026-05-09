@@ -139,7 +139,7 @@ The reverse proxy engine is built in and uses `oxy`.
 TLS and ACME defaults:
 
 - TLS listeners use Go's secure TLS defaults with minimum TLS 1.2.
-- ACME uses `golang.org/x/crypto/acme/autocert`.
+- ACME uses CertMagic. Library users can provide a custom certificate storage implementation.
 - When ACME is enabled and `cache_dir` is omitted, Vale uses `.vale/acme`.
 - ACME config requires explicit domains and email in file config.
 
@@ -333,9 +333,22 @@ The default `observabilityx` metrics recorder exposes:
 - `vale_http_request_duration_seconds`
 - `vale_runtime_reloads_total`
 - `vale_health_checks_total`
+- `vale_health_check_duration_seconds`
+- `vale_route_match_cache_total`
 - `vale_active_routes`
 - `vale_active_services`
 - `vale_active_endpoints`
+- `vale_dix_events_total`
+- `vale_dix_event_duration_seconds`
+- `vale_dix_provider_events_total`
+- `vale_dix_provider_duration_seconds`
+- `vale_dix_resolve_events_total`
+- `vale_dix_resolve_duration_seconds`
+- `vale_dix_lifecycle_hook_events_total`
+- `vale_dix_lifecycle_hook_duration_seconds`
+- `vale_dix_state_transitions_total`
+- `vale_dix_health_checks_total`
+- `vale_dix_health_check_duration_seconds`
 
 ### Provider Expansion Notes
 

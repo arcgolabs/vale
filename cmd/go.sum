@@ -1,3 +1,5 @@
+github.com/arcgolabs/collectionx/graph v0.8.0 h1:6suvPNa02DvRD1mHAY2xL6bsuOKx8T0iivFd2rbtnBs=
+github.com/arcgolabs/collectionx/graph v0.8.0/go.mod h1:ed6tV9GiiLzvSajUwyaEYt4c5R2m8itI3FKfkHSRv80=
 github.com/arcgolabs/collectionx/list v0.7.0 h1:1BBQD0tB6cPr2rFBHgBM1Orqs9wH+OH/QrfEmMJ+fLE=
 github.com/arcgolabs/collectionx/list v0.7.0/go.mod h1:IjX8ZRyMZbJspx+VppjyrOaibDnHSY8/jkygk9Mmws4=
 github.com/arcgolabs/collectionx/list v0.8.0 h1:Nld94yYmNaIPRSSt4Hyb4p5bo8X3TcTrFVEnzoppPeo=
@@ -14,6 +16,8 @@ github.com/arcgolabs/configx v0.3.2 h1:3bCS+hLenLF/jErdxqGeU+vSkjeZxAUT8OVRViZV8
 github.com/arcgolabs/configx v0.3.2/go.mod h1:RHryBzLrfeyMWhSaDBZkiFsAuQ4MyvkiQkCt4Bo2fWI=
 github.com/arcgolabs/dix v0.7.2 h1:qSYXpYaYJ0wfXVtizC+8xDgk3BjzE76DVHp7eDRs3zU=
 github.com/arcgolabs/dix v0.7.2/go.mod h1:ZzbS1xMp1E0a4tPWmhho3GEIt9NIoDm/OyqSSPqqjog=
+github.com/arcgolabs/dix v0.10.0 h1:hudJ1V0oqNYL/P6iOhVAApFmEelarmXk5eFDGxw4T2E=
+github.com/arcgolabs/dix v0.10.0/go.mod h1:976qdvz/PsMhDT6zzwtnoo5OiMuEzWbcMcM2XOT3HRs=
 github.com/arcgolabs/eventx v0.1.2 h1:ikt4Cw+GW9Q1NsJVmmen74rQkNZBCdpqlwIfryYrGuk=
 github.com/arcgolabs/eventx v0.1.2/go.mod h1:8pvEz7hCLMyC8Y1VdX8+s7RjnY0haFLau4aiRmrkJkw=
 github.com/arcgolabs/logx v0.1.2 h1:+VJF7T/mfI482CpbIQ4tSBXbxTVcOkmBaTOj+DaCom0=

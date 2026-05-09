@@ -5,18 +5,19 @@ go 1.26.2
 require (
 	github.com/arcgolabs/collectionx/list v0.8.0
 	github.com/arcgolabs/configx v0.3.2
-	github.com/arcgolabs/dix v0.7.2
+	github.com/arcgolabs/dix v0.10.0
 	github.com/arcgolabs/eventx v0.1.2
 	github.com/arcgolabs/logx v0.1.2
+	github.com/arcgolabs/observabilityx v0.4.0
 	github.com/samber/oops v1.21.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 )
 
 require (
+	github.com/arcgolabs/collectionx/graph v0.8.0 // indirect
 	github.com/arcgolabs/collectionx/mapping v0.8.0 // indirect
 	github.com/arcgolabs/collectionx/set v0.8.0 // indirect
-	github.com/arcgolabs/observabilityx v0.4.0 // indirect
 	github.com/arcgolabs/pkg/option v0.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
@@ -46,6 +47,7 @@ require (
 	github.com/rs/zerolog v1.35.1 // indirect
 	github.com/samber/do/v2 v2.0.0 // indirect
 	github.com/samber/go-type-to-string v1.8.0 // indirect
+	github.com/samber/lo v1.53.0 // indirect
 	github.com/samber/mo v1.16.0 // indirect
 	github.com/samber/oops/loggers/zerolog v0.0.0-20260412154111-1460827f264f // indirect
 	github.com/samber/slog-common v0.22.0 // indirect

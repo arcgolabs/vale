@@ -7,6 +7,7 @@ import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/logx"
+	"github.com/arcgolabs/observabilityx"
 	"github.com/arcgolabs/vale"
 	raftnode "github.com/arcgolabs/vale/cluster/raftnode"
 	prometheusmetrics "github.com/arcgolabs/vale/observability/prometheus"
@@ -15,15 +16,6 @@ import (
 )
 
 const defaultMetricsName = "prometheus"
-
-type (
-	valedBaseOptions         []vale.Option
-	valedMetricsOptions      []vale.Option
-	valedConfigSourceOptions []vale.Option
-	valedClusterOptions      []vale.Option
-	valedEventBusOptions     []vale.Option
-	valedGatewayOptions      []vale.Option
-)
 
 func provideLogger(cfg valedConfig) (*slog.Logger, error) {
 	logger, err := logx.New(
@@ -46,9 +38,13 @@ func provideEventBus() eventx.BusRuntime {
 	return eventx.New()
 }
 
-func providePluginRegistry() (*vale.Registry, error) {
+func provideObservability(logger *slog.Logger) observabilityx.Observability {
+	return prometheusmetrics.NewObservability(logger)
+}
+
+func providePluginRegistry(obs observabilityx.Observability) (*vale.Registry, error) {
 	registry := vale.NewRegistry()
-	if err := registry.RegisterMetricsFactory(defaultMetricsName, prometheusmetrics.New); err != nil {
+	if err := registry.RegisterMetricsFactory(defaultMetricsName, prometheusmetrics.NewFactory(obs)); err != nil {
 		return nil, oops.
 			In("cmd").
 			With("metrics", defaultMetricsName).
@@ -57,32 +53,35 @@ func providePluginRegistry() (*vale.Registry, error) {
 	return registry, nil
 }
 
-func provideBaseOptions(cfg valedConfig, logger *slog.Logger) valedBaseOptions {
-	return valedBaseOptions{
-		vale.WithWatch(cfg.Watch),
-		vale.WithLogger(logger),
-	}
+func provideWatchOption(cfg valedConfig) vale.Option {
+	return vale.WithWatch(cfg.Watch)
 }
 
-func provideMetricsOptions(registry *vale.Registry) valedMetricsOptions {
-	return valedMetricsOptions{
-		vale.WithMetricsFromRegistry(registry, defaultMetricsName),
-	}
+func provideLoggerOption(logger *slog.Logger) vale.Option {
+	return vale.WithLogger(logger)
 }
 
-func provideConfigSourceOptions(cfg valedConfig) valedConfigSourceOptions {
+func provideObservabilityOption(obs observabilityx.Observability) vale.Option {
+	return vale.WithObservability(obs)
+}
+
+func provideMetricsOption(registry *vale.Registry) vale.Option {
+	return vale.WithMetricsFromRegistry(registry, defaultMetricsName)
+}
+
+func provideConfigSourceOption(cfg valedConfig) vale.Option {
 	files := parseCSV(cfg.ConfigFiles)
 	switch {
 	case !files.IsEmpty():
-		return valedConfigSourceOptions{fileconfig.WithConfigFileList(files)}
+		return fileconfig.WithConfigFileList(files)
 	case strings.TrimSpace(cfg.ConfigPath) != "":
-		return valedConfigSourceOptions{fileconfig.WithConfigPath(cfg.ConfigPath)}
+		return fileconfig.WithConfigPath(cfg.ConfigPath)
 	default:
-		return nil
+		return noopGatewayOption
 	}
 }
 
-func provideClusterOptions(cfg valedConfig) (valedClusterOptions, error) {
+func provideClusterOption(cfg valedConfig) (vale.Option, error) {
 	initialMembers, err := parseRaftInitialMembers(cfg.RaftMembers)
 	if err != nil {
 		return nil, oops.
@@ -106,42 +105,34 @@ func provideClusterOptions(cfg valedConfig) (valedClusterOptions, error) {
 				Name:           raftnode.DataGroupName,
 				InitialMembers: initialMembers,
 			},
+			raftnode.GroupConfig{
+				Name:           raftnode.CertificatesGroupName,
+				InitialMembers: initialMembers,
+			},
 		)
 	}
-	return valedClusterOptions{
-		vale.WithClusterFactory(func(logger *slog.Logger) (vale.Cluster, error) {
-			return raftnode.New(raftConfig, logger)
-		}),
-	}, nil
+	return vale.WithClusterFactory(func(logger *slog.Logger) (vale.Cluster, error) {
+		return raftnode.New(raftConfig, logger)
+	}), nil
 }
 
-func provideEventBusOptions(bus eventx.BusRuntime) valedEventBusOptions {
-	return valedEventBusOptions{vale.WithEventBus(bus)}
+func provideEventBusOption(bus eventx.BusRuntime) vale.Option {
+	return vale.WithEventBus(bus)
 }
 
-func provideGatewayOptions(
-	base valedBaseOptions,
-	metrics valedMetricsOptions,
-	configSource valedConfigSourceOptions,
-	cluster valedClusterOptions,
-	eventBus valedEventBusOptions,
-) valedGatewayOptions {
-	size := len(base) + len(metrics) + len(configSource) + len(cluster) + len(eventBus)
-	options := make([]vale.Option, 0, size)
-	options = append(options, base...)
-	options = append(options, metrics...)
-	options = append(options, configSource...)
-	options = append(options, cluster...)
-	options = append(options, eventBus...)
-	return options
-}
-
-func provideGateway(options valedGatewayOptions) (*vale.Gateway, error) {
-	gateway, err := vale.New(options...)
+func provideGateway(options *collectionlist.List[vale.Option]) (*vale.Gateway, error) {
+	if options == nil {
+		options = collectionlist.NewList[vale.Option]()
+	}
+	gateway, err := vale.New(options.Values()...)
 	if err != nil {
 		return nil, oops.
 			In("cmd").
 			Wrapf(err, "create gateway")
 	}
 	return gateway, nil
+}
+
+func noopGatewayOption(*vale.Config) error {
+	return nil
 }

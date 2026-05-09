@@ -30,7 +30,7 @@ func newFSM(group string, clusterID uint64) *fsm {
 }
 
 func (f *fsm) Update(data []byte) (sm.Result, error) {
-	state, err := applyCommand(f.state, data)
+	state, result, err := applyCommand(f.state, data)
 	if err != nil {
 		return sm.Result{}, oops.
 			In("raftnode").
@@ -38,7 +38,10 @@ func (f *fsm) Update(data []byte) (sm.Result, error) {
 			Wrapf(err, "apply raft fsm command")
 	}
 	f.state = state
-	return sm.Result{Value: state.Version}, nil
+	if result.Value == 0 {
+		result.Value = state.Version
+	}
+	return result, nil
 }
 
 func (f *fsm) Lookup(query any) (any, error) {
@@ -100,56 +103,74 @@ func (f *fsm) Close() error {
 	return nil
 }
 
-func applyCommand(current State, data []byte) (State, error) {
+func applyCommand(current State, data []byte) (State, sm.Result, error) {
 	if !json.Valid(data) {
-		return State{
-			Version:  current.Version + 1,
-			Snapshot: cloneSnapshot(current.Snapshot),
-			Routes:   cloneRoutes(current.Routes),
-			Raw:      append(json.RawMessage(nil), data...),
-		}, nil
+		return rawState(current, data), sm.Result{}, nil
 	}
 	var envelope struct {
 		Type string `json:"type"`
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
-		return current, oops.
+		return current, sm.Result{}, oops.
 			In("raftnode").
 			Wrapf(err, "decode raft command envelope")
 	}
 	if envelope.Type == "" {
-		return State{
-			Version:  current.Version + 1,
-			Snapshot: cloneSnapshot(current.Snapshot),
-			Routes:   cloneRoutes(current.Routes),
-			Raw:      append(json.RawMessage(nil), data...),
-		}, nil
+		return rawState(current, data), sm.Result{}, nil
 	}
 	command := Command{}
 	if err := json.Unmarshal(data, &command); err != nil {
-		return current, oops.
+		return current, sm.Result{}, oops.
 			In("raftnode").
 			With("command_type", envelope.Type).
 			Wrapf(err, "decode raft command")
 	}
 
-	next := State{
-		Version:   current.Version + 1,
-		AppliedAt: time.Time{},
-		Snapshot:  cloneSnapshot(current.Snapshot),
-		Routes:    cloneRoutes(current.Routes),
-		Raw:       append(json.RawMessage(nil), command.Raw...),
+	return applyTypedCommand(current, nextState(current, command), command)
+}
+
+func rawState(current State, data []byte) State {
+	return State{
+		Version:      current.Version + 1,
+		Snapshot:     cloneSnapshot(current.Snapshot),
+		Routes:       cloneRoutes(current.Routes),
+		Certificates: cloneCertificates(current.Certificates),
+		Locks:        cloneCertificateLocks(current.Locks),
+		Raw:          append(json.RawMessage(nil), data...),
 	}
+}
+
+func nextState(current State, command Command) State {
+	return State{
+		Version:      current.Version + 1,
+		AppliedAt:    time.Time{},
+		Snapshot:     cloneSnapshot(current.Snapshot),
+		Routes:       cloneRoutes(current.Routes),
+		Certificates: cloneCertificates(current.Certificates),
+		Locks:        cloneCertificateLocks(current.Locks),
+		Raw:          append(json.RawMessage(nil), command.Raw...),
+	}
+}
+
+func applyTypedCommand(current, next State, command Command) (State, sm.Result, error) {
 	switch command.Type {
 	case CommandTypeSnapshotUpdate:
 		next.Snapshot = cloneSnapshot(command.Snapshot)
-		return next, nil
+		return next, sm.Result{}, nil
 	case CommandTypeRouteSync:
 		next.Snapshot = cloneSnapshot(command.Snapshot)
 		next.Routes = cloneRoutes(command.Routes)
-		return next, nil
+		return next, sm.Result{}, nil
+	case CommandTypeCertificateStore:
+		return applyCertificateStore(next, command.Certificate)
+	case CommandTypeCertificateDelete:
+		return applyCertificateDelete(next, command.Certificate)
+	case CommandTypeCertificateLockAcquire:
+		return applyCertificateLockAcquire(next, command.Lock)
+	case CommandTypeCertificateLockRelease:
+		return applyCertificateLockRelease(next, command.Lock)
 	default:
-		return current, oops.
+		return current, sm.Result{}, oops.
 			In("raftnode").
 			With("command_type", command.Type).
 			Errorf("unsupported raft command type %q", command.Type)
@@ -158,11 +179,13 @@ func applyCommand(current State, data []byte) (State, error) {
 
 func cloneState(state State) State {
 	return State{
-		Version:   state.Version,
-		AppliedAt: state.AppliedAt,
-		Snapshot:  cloneSnapshot(state.Snapshot),
-		Routes:    cloneRoutes(state.Routes),
-		Raw:       append(json.RawMessage(nil), state.Raw...),
+		Version:      state.Version,
+		AppliedAt:    state.AppliedAt,
+		Snapshot:     cloneSnapshot(state.Snapshot),
+		Routes:       cloneRoutes(state.Routes),
+		Certificates: cloneCertificates(state.Certificates),
+		Locks:        cloneCertificateLocks(state.Locks),
+		Raw:          append(json.RawMessage(nil), state.Raw...),
 	}
 }
 

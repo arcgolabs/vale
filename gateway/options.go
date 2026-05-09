@@ -3,6 +3,7 @@ package gateway
 import (
 	"log/slog"
 
+	"github.com/arcgolabs/vale/certstore"
 	"github.com/arcgolabs/vale/config"
 	"github.com/arcgolabs/vale/provider"
 	staticprovider "github.com/arcgolabs/vale/provider/static"
@@ -57,6 +58,18 @@ func WithMiddlewareRegistry(registry *runtime.MiddlewareRegistry) Option {
 				New("middleware registry cannot be nil")
 		}
 		cfg.Middleware = registry
+		return nil
+	}
+}
+
+func WithCertificateStorage(storage certstore.Storage) Option {
+	return func(cfg *Config) error {
+		if storage == nil {
+			return oops.
+				In("gateway").
+				New("certificate storage cannot be nil")
+		}
+		cfg.CertificateStorage = storage
 		return nil
 	}
 }

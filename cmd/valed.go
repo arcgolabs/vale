@@ -10,6 +10,7 @@ import (
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/configx"
 	"github.com/arcgolabs/dix"
+	"github.com/arcgolabs/vale"
 	"github.com/samber/oops"
 	"github.com/spf13/pflag"
 )
@@ -29,24 +30,31 @@ type valedConfig struct {
 
 // valedStandaloneApp is the sole DI assembly entry for this process.
 func valedStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
-	return dix.NewApp("valed", dix.NewModule(
+	return dix.New(
 		"valed",
-		dix.Providers(
-			dix.Value(cliFlags),
-			dix.ProviderErr1(provideValedConfig),
-			dix.ProviderErr1(provideLogger),
-			dix.Provider0(provideEventBus),
-			dix.ProviderErr0(providePluginRegistry),
-			dix.Provider2(provideBaseOptions),
-			dix.Provider1(provideMetricsOptions),
-			dix.Provider1(provideConfigSourceOptions),
-			dix.ProviderErr1(provideClusterOptions),
-			dix.Provider1(provideEventBusOptions),
-			dix.Provider5(provideGatewayOptions),
-			dix.ProviderErr1(provideGateway),
-			dix.Provider3(provideRunner),
-		),
-	))
+		dix.RecentEvents(256),
+		dix.Modules(dix.NewModule(
+			"valed",
+			dix.Providers(
+				dix.Value(cliFlags),
+				dix.ProviderErr1(provideValedConfig, dix.Eager()),
+				dix.ProviderErr1(provideLogger, dix.Eager()),
+				dix.Provider0(provideEventBus, dix.Eager()),
+				dix.Provider1(provideObservability, dix.Eager()),
+				dix.Provider1(provideDixObserver),
+				dix.ProviderErr1(providePluginRegistry, dix.Eager()),
+				dix.Contribute1[vale.Option](provideWatchOption, dix.Order(0)),
+				dix.Contribute1[vale.Option](provideLoggerOption, dix.Order(10)),
+				dix.Contribute1[vale.Option](provideObservabilityOption, dix.Order(20)),
+				dix.Contribute1[vale.Option](provideMetricsOption, dix.Order(30)),
+				dix.Contribute1[vale.Option](provideConfigSourceOption, dix.Order(40)),
+				dix.ContributeErr1[vale.Option](provideClusterOption, dix.Order(50)),
+				dix.Contribute1[vale.Option](provideEventBusOption, dix.Order(60)),
+				dix.ProviderErr1(provideGateway, dix.Eager()),
+				dix.Provider3(provideRunner),
+			),
+		)),
+	)
 }
 
 func provideValedConfig(fs *pflag.FlagSet) (valedConfig, error) {

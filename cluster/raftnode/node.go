@@ -4,7 +4,6 @@ package raftnode
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -73,78 +72,6 @@ func (n *Node) IsGroupLeader(group string) bool {
 	}
 	leader, ready, err := n.nodeHost.GetLeaderID(raftGroup.id)
 	return err == nil && ready && leader == n.nodeID
-}
-
-func (n *Node) Apply(data []byte, timeout time.Duration) error {
-	return n.ApplyGroup(DefaultGroupName, data, timeout)
-}
-
-func (n *Node) ApplyGroup(group string, data []byte, timeout time.Duration) error {
-	if !n.IsEnabled() {
-		return ErrNotRunning
-	}
-	raftGroup, ok := n.group(group)
-	if !ok {
-		return oops.
-			In("raftnode").
-			With("group", group).
-			New("raft group is not configured")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	if n.logger != nil {
-		n.logger.Info("raft apply started", "group", raftGroup.name, "bytes", len(data), "timeout", timeout)
-	}
-	session := n.nodeHost.GetNoOPSession(raftGroup.id)
-	_, err := n.nodeHost.SyncPropose(ctx, session, data)
-	if err != nil && n.logger != nil {
-		n.logger.Error("raft apply failed", "group", raftGroup.name, "error", err)
-	}
-	if err != nil {
-		return oops.
-			In("raftnode").
-			With("group", raftGroup.name, "bytes", len(data), "timeout", timeout.String()).
-			Wrapf(err, "apply raft command")
-	}
-	return nil
-}
-
-func (n *Node) AppliedState() State {
-	return n.AppliedGroupState(DefaultGroupName)
-}
-
-func (n *Node) AppliedGroupState(group string) State {
-	if !n.IsEnabled() {
-		return State{}
-	}
-	raftGroup, ok := n.group(group)
-	if !ok {
-		return State{}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	result, err := n.nodeHost.SyncRead(ctx, raftGroup.id, lookupState)
-	if err != nil {
-		if n.logger != nil {
-			n.logger.Error("read applied raft state failed", "group", raftGroup.name, "error", err)
-		}
-		return State{}
-	}
-	state, ok := result.(State)
-	if !ok {
-		if n.logger != nil {
-			n.logger.Error("read applied raft state returned unexpected type", "group", raftGroup.name, "type", stateType(result))
-		}
-		return State{}
-	}
-	return cloneState(state)
-}
-
-func stateType(value any) string {
-	if value == nil {
-		return "<nil>"
-	}
-	return fmt.Sprintf("%T", value)
 }
 
 func (n *Node) Status() *mapping.Map[string, any] {

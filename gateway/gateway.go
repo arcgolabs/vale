@@ -11,6 +11,7 @@ import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/observabilityx"
+	"github.com/arcgolabs/vale/certstore"
 	"github.com/arcgolabs/vale/config"
 	"github.com/arcgolabs/vale/provider"
 	mergedprovider "github.com/arcgolabs/vale/provider/merged"
@@ -21,16 +22,17 @@ import (
 
 // Config holds construction-time settings for Gateway.
 type Config struct {
-	Watch         bool
-	Cluster       ClusterFactory
-	Logger        *slog.Logger
-	EventBus      provider.EventBus
-	Observability observabilityx.Observability
-	Provider      provider.SnapshotProvider
-	ConfigSource  *collectionlist.List[provider.ConfigProvider]
-	Metrics       MetricsFactory
-	Middleware    *runtime.MiddlewareRegistry
-	OnWatchError  func(error)
+	Watch              bool
+	Cluster            ClusterFactory
+	Logger             *slog.Logger
+	EventBus           provider.EventBus
+	Observability      observabilityx.Observability
+	Provider           provider.SnapshotProvider
+	ConfigSource       *collectionlist.List[provider.ConfigProvider]
+	CertificateStorage certstore.Storage
+	Metrics            MetricsFactory
+	Middleware         *runtime.MiddlewareRegistry
+	OnWatchError       func(error)
 }
 
 // DefaultConfig returns defaults used by New/NewFromConfig when paths or watch are unspecified.

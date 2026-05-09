@@ -13,12 +13,14 @@ import (
 )
 
 const (
-	MetadataGroupName = "metadata"
-	MetadataGroupID   = uint64(1)
-	DataGroupName     = "data"
-	DataGroupID       = uint64(2)
-	DefaultGroupName  = DataGroupName
-	DefaultGroupID    = DataGroupID
+	MetadataGroupName     = "metadata"
+	MetadataGroupID       = uint64(1)
+	DataGroupName         = "data"
+	DataGroupID           = uint64(2)
+	CertificatesGroupName = "certificates"
+	CertificatesGroupID   = uint64(3)
+	DefaultGroupName      = DataGroupName
+	DefaultGroupID        = DataGroupID
 )
 
 type Config struct {
@@ -127,6 +129,7 @@ func defaultGroups(bootstrap bool) *collectionlist.List[GroupConfig] {
 	return collectionlist.NewList(
 		GroupConfig{Name: MetadataGroupName, ID: MetadataGroupID, Bootstrap: bootstrap},
 		GroupConfig{Name: DataGroupName, ID: DataGroupID, Bootstrap: bootstrap},
+		GroupConfig{Name: CertificatesGroupName, ID: CertificatesGroupID, Bootstrap: bootstrap},
 	)
 }
 

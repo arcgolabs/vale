@@ -31,7 +31,7 @@ func (g *Gateway) buildTLSConfig(tlsRuntime runtime.TLSRuntime) (*tls.Config, bo
 		tlsConfig.Certificates = []tls.Certificate{certificate}
 	}
 	if tlsRuntime.ACME.Enabled {
-		acmeConfig, err := buildACMETLSConfig(tlsRuntime.ACME)
+		acmeConfig, err := g.buildACMETLSConfig(tlsRuntime.ACME)
 		if err != nil {
 			return nil, false, err
 		}
@@ -54,7 +54,7 @@ func loadStaticTLSCertificate(tlsRuntime runtime.TLSRuntime) (tls.Certificate, e
 	return certificate, nil
 }
 
-func buildACMETLSConfig(acmeRuntime runtime.ACMERuntime) (*tls.Config, error) {
+func (g *Gateway) buildACMETLSConfig(acmeRuntime runtime.ACMERuntime) (*tls.Config, error) {
 	if acmeRuntime.Domains == nil || acmeRuntime.Domains.IsEmpty() {
 		return nil, oops.
 			In("gateway").
@@ -67,7 +67,7 @@ func buildACMETLSConfig(acmeRuntime runtime.ACMERuntime) (*tls.Config, error) {
 
 	logger := zap.NewNop()
 	cfg := certmagic.NewDefault()
-	cfg.Storage = &certmagic.FileStorage{Path: cacheDir}
+	cfg.Storage = g.acmeStorage(cacheDir)
 	cfg.Logger = logger
 	cfg.OnDemand = &certmagic.OnDemandConfig{
 		DecisionFunc: func(_ context.Context, serverName string) error {
@@ -86,6 +86,13 @@ func buildACMETLSConfig(acmeRuntime runtime.ACMERuntime) (*tls.Config, error) {
 	tlsConfig := cfg.TLSConfig()
 	tlsConfig.MinVersion = tls.VersionTLS12
 	return tlsConfig, nil
+}
+
+func (g *Gateway) acmeStorage(cacheDir string) certmagic.Storage {
+	if g != nil && g.config.CertificateStorage != nil {
+		return newCertMagicStorage(g.config.CertificateStorage)
+	}
+	return &certmagic.FileStorage{Path: cacheDir}
 }
 
 func acmeDomainAllowed(serverName string, domains *collectionlist.List[string]) bool {
