@@ -5,18 +5,12 @@ go 1.26.2
 require (
 	github.com/arcgolabs/collectionx/list v0.8.0
 	github.com/arcgolabs/collectionx/mapping v0.8.0
-	github.com/arcgolabs/storx/bboltx v0.5.0
-	github.com/arcgolabs/storx/codec v0.1.0
-	github.com/arcgolabs/storx/keycodec v0.2.0
 	github.com/lni/dragonboat/v3 v3.3.8
 	github.com/samber/oops v1.21.0
 )
 
 require (
 	github.com/VictoriaMetrics/metrics v1.6.2 // indirect
-	github.com/arcgolabs/collectionx/set v0.8.0 // indirect
-	github.com/arcgolabs/storx v0.2.0 // indirect
-	github.com/arcgolabs/storx/observer v0.1.0 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cockroachdb/errors v1.7.5 // indirect
@@ -48,7 +42,6 @@ require (
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect
 	github.com/valyala/fastrand v1.0.0 // indirect
 	github.com/valyala/histogram v1.0.1 // indirect
-	go.etcd.io/bbolt v1.4.3 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	golang.org/x/exp v0.0.0-20200513190911-00229845015e // indirect

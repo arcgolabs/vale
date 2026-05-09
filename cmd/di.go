@@ -83,9 +83,6 @@ func provideConfigSourceOptions(cfg valedConfig) valedConfigSourceOptions {
 }
 
 func provideClusterOptions(cfg valedConfig) (valedClusterOptions, error) {
-	if !cfg.RaftEnabled {
-		return nil, nil
-	}
 	initialMembers, err := parseRaftInitialMembers(cfg.RaftMembers)
 	if err != nil {
 		return nil, oops.
@@ -94,17 +91,22 @@ func provideClusterOptions(cfg valedConfig) (valedClusterOptions, error) {
 			Wrapf(err, "parse raft initial members")
 	}
 	raftConfig := raftnode.Config{
-		Enabled:   true,
 		NodeID:    cfg.RaftNodeID,
 		BindAddr:  cfg.RaftBind,
 		DataDir:   cfg.RaftDataDir,
 		Bootstrap: cfg.RaftBoot,
 	}
 	if !initialMembers.IsEmpty() {
-		raftConfig.Groups = collectionlist.NewList(raftnode.GroupConfig{
-			Name:           raftnode.DefaultGroupName,
-			InitialMembers: initialMembers,
-		})
+		raftConfig.Groups = collectionlist.NewList(
+			raftnode.GroupConfig{
+				Name:           raftnode.MetadataGroupName,
+				InitialMembers: initialMembers,
+			},
+			raftnode.GroupConfig{
+				Name:           raftnode.DataGroupName,
+				InitialMembers: initialMembers,
+			},
+		)
 	}
 	return valedClusterOptions{
 		vale.WithClusterFactory(func(logger *slog.Logger) (vale.Cluster, error) {

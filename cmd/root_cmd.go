@@ -13,7 +13,6 @@ func init() {
 	f.String("config-files", "", "comma-separated config files (merge order: left to right)")
 	f.Bool("watch", false, "watch config and hot reload")
 	f.String("log-level", "", "log level")
-	f.Bool("raft-enabled", false, "enable raft control-plane node")
 	f.String("raft-node-id", "", "raft node id")
 	f.String("raft-bind", "", "raft bind address")
 	f.String("raft-data-dir", "", "raft data directory")

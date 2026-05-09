@@ -24,7 +24,7 @@ embedded users; subpackages remain available for advanced wiring and optional mo
 | Module | Purpose |
 | --- | --- |
 | `github.com/arcgolabs/vale/cmd` | Standalone `valed` binary. |
-| `github.com/arcgolabs/vale/cluster/raftnode` | Optional HashiCorp Raft control-plane adapter. |
+| `github.com/arcgolabs/vale/cluster/raftnode` | Optional Dragonboat multi-group Raft control-plane adapter. |
 | `github.com/arcgolabs/vale/observability/prometheus` | Optional Prometheus adapter for metrics exposition. |
 | `github.com/arcgolabs/vale/provider/docker` | Optional Docker label-driven config source. |
 | `github.com/arcgolabs/vale/provider/file` | Optional HCL snapshot provider. |
@@ -42,3 +42,4 @@ embedded users; subpackages remain available for advanced wiring and optional mo
 - Admin HTTP responses are stable plain JSON DTOs and should not expose collectionx serialization details.
 - Middleware config type is strict: empty type means builtin, non-empty unknown values fail compilation.
 - Builtin middleware covers path transforms, redirects, headers, secure headers, CORS, rate limit, circuit breaker, basic auth, gzip compression, IP allow list, body limits, and chains.
+- `cluster/raftnode` can use an externally owned Dragonboat `NodeHost`; callers own the data directories and must isolate Dragonboat `DeploymentID`, group IDs, node IDs, and NodeHost/WAL directories.

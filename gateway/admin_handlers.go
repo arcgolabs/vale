@@ -186,7 +186,7 @@ func (g *Gateway) adminSnapshot() (*runtime.CompiledSnapshot, error) {
 
 func (g *Gateway) requireClusterLeader(group, action string) error {
 	if g.cluster == nil {
-		return httpx.NewError(http.StatusBadRequest, "raft is not enabled")
+		return httpx.NewError(http.StatusBadRequest, "cluster is not configured")
 	}
 	if !g.clusterLeader(group) {
 		return httpx.NewError(http.StatusConflict, "only leader can "+action)

@@ -62,7 +62,7 @@ Current workspace modules:
 
 - `github.com/arcgolabs/vale`: library-first core module.
 - `github.com/arcgolabs/vale/cmd`: standalone `valed` binary wiring.
-- `github.com/arcgolabs/vale/cluster/raftnode`: optional HashiCorp Raft cluster adapter.
+- `github.com/arcgolabs/vale/cluster/raftnode`: optional Dragonboat multi-group Raft cluster adapter.
 - `github.com/arcgolabs/vale/observability/prometheus`: optional Prometheus metrics adapter.
 - `github.com/arcgolabs/vale/provider/docker`: optional Docker config provider.
 - `github.com/arcgolabs/vale/provider/file`: optional HCL snapshot provider.
@@ -353,14 +353,13 @@ The default `observabilityx` metrics recorder exposes:
 
 Standalone flags:
 
-- `--raft-enabled`
 - `--raft-node-id`
 - `--raft-bind`
 - `--raft-data-dir`
 - `--raft-bootstrap`
 
-When enabled, `cmd` wires the optional `cluster/raftnode` module into the gateway via
-`raftnode.WithCluster(...)`, starts an embedded HashiCorp Raft node, and exposes status at:
+`cmd` wires the optional `cluster/raftnode` module into the gateway by default,
+starts an embedded Dragonboat node, and exposes status at:
 
 - `/admin/cluster/status`
 - `/admin/cluster/peers`
@@ -371,11 +370,19 @@ Leader-only membership APIs:
 - `POST /admin/cluster/leave` body: `{"id":"node-2"}`
 
 Raft apply payloads are structured commands. Route sync commands store snapshot
-metadata and route records in the FSM as typed JSON and persist the applied
-state through `github.com/arcgolabs/storx/bboltx`, so the adapter can evolve
-toward replicated config state without changing the gateway cluster interface.
-Restarted nodes load the last applied FSM state from the bboltx state store
-before Raft replay catches up.
+metadata and route records in the FSM as typed JSON. Dragonboat owns the raft
+log, snapshot, and replay path, so the adapter does not maintain a separate
+applied-state database by default.
+Without `--raft-initial-members`, `valed` starts a single-replica Dragonboat
+cluster with `metadata` and `data` groups. Supplying initial members starts the
+same groups with the provided voters so the node can be expanded into a
+multi-node cluster.
+Embedded users can keep using `vale.WithClusterFactory` for a custom cluster
+implementation or pass an externally owned Dragonboat `NodeHost` to
+`cluster/raftnode`. When a `NodeHost` is supplied, its owner keeps responsibility
+for data directories and Vale reuses `NodeHost.RaftAddress()` when no bind
+address is set. Avoid sharing the same Dragonboat `DeploymentID`, group IDs,
+node IDs, and NodeHost/WAL directories across independent owners.
 
 ## Bootstrap Env Variables
 
@@ -383,7 +390,6 @@ before Raft replay catches up.
 - `VALE_CONFIG_FILES` (comma-separated)
 - `VALE_WATCH`
 - `VALE_LOG_LEVEL`
-- `VALE_RAFT_ENABLED`
 - `VALE_RAFT_NODE_ID`
 - `VALE_RAFT_BIND`
 - `VALE_RAFT_DATA_DIR`

@@ -20,7 +20,6 @@ type valedConfig struct {
 	ConfigFiles string `koanf:"config_files"`
 	Watch       bool   `koanf:"watch"`
 	LogLevel    string `koanf:"log_level"`
-	RaftEnabled bool   `koanf:"raft_enabled"`
 	RaftNodeID  string `koanf:"raft_node_id"`
 	RaftBind    string `koanf:"raft_bind"`
 	RaftDataDir string `koanf:"raft_data_dir"`
@@ -71,7 +70,6 @@ func defaultValedConfig() valedConfig {
 		ConfigFiles: "",
 		Watch:       true,
 		LogLevel:    "info",
-		RaftEnabled: false,
 		RaftNodeID:  "node-1",
 		RaftBind:    "127.0.0.1:17000",
 		RaftDataDir: "./data/raft",

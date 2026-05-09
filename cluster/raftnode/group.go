@@ -46,7 +46,7 @@ func (n *Node) startGroup(config Config, groupConfig GroupConfig) (*raftGroup, e
 	}
 	raftConfig := configForGroup(groupConfig.ID, n.nodeID)
 	createSM := func(clusterID, _ uint64) sm.IStateMachine {
-		return newFSM(groupConfig.Name, clusterID, n.store)
+		return newFSM(groupConfig.Name, clusterID)
 	}
 	if err := n.nodeHost.StartCluster(group.initialMembers, groupConfig.Join, createSM, raftConfig); err != nil {
 		return nil, oops.
@@ -164,10 +164,14 @@ func peerID(group *raftGroup, id uint64) string {
 }
 
 func stableGroupID(name string) uint64 {
-	if name == DefaultGroupName {
+	switch name {
+	case MetadataGroupName:
+		return MetadataGroupID
+	case DataGroupName:
 		return DefaultGroupID
+	default:
+		return stableNodeID(name)
 	}
-	return stableNodeID(name)
 }
 
 func stableNodeID(id string) uint64 {
@@ -187,8 +191,12 @@ func stableNodeID(id string) uint64 {
 }
 
 func groupNameFromClusterID(clusterID uint64) string {
-	if clusterID == DefaultGroupID {
+	switch clusterID {
+	case MetadataGroupID:
+		return MetadataGroupName
+	case DataGroupID:
 		return DefaultGroupName
+	default:
+		return fmt.Sprintf("group-%d", clusterID)
 	}
-	return fmt.Sprintf("group-%d", clusterID)
 }

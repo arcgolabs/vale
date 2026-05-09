@@ -4,8 +4,8 @@ package raftnode
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
-	"path/filepath"
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
@@ -15,41 +15,39 @@ import (
 )
 
 type Node struct {
-	nodeHost *dragonboat.NodeHost
-	store    *stateStore
-	groups   *mapping.Map[string, *raftGroup]
-	nodeID   uint64
-	nodeName string
-	logger   *slog.Logger
+	nodeHost     *dragonboat.NodeHost
+	ownsNodeHost bool
+	groups       *mapping.Map[string, *raftGroup]
+	nodeID       uint64
+	nodeName     string
+	logger       *slog.Logger
 }
 
 func New(config Config, logger *slog.Logger) (*Node, error) {
-	if !config.Enabled {
-		return nil, ErrDisabled
-	}
+	configureDragonboatLogger(logger)
 	if err := prepareConfig(&config); err != nil {
 		return nil, err
 	}
 	nodeID := stableNodeID(config.NodeID)
-	nodeHost, err := dragonboat.NewNodeHost(nodeHostConfig(config))
-	if err != nil {
-		return nil, oops.
-			In("raftnode").
-			With("node_id", config.NodeID, "bind_addr", config.BindAddr).
-			Wrapf(err, "create dragonboat nodehost")
-	}
-	store, err := openStateStore(filepath.Join(config.DataDir, "vale-state.bbolt"), logger)
-	if err != nil {
-		nodeHost.Stop()
-		return nil, err
+	nodeHost := config.NodeHost
+	ownsNodeHost := nodeHost == nil
+	if ownsNodeHost {
+		var err error
+		nodeHost, err = dragonboat.NewNodeHost(nodeHostConfig(config))
+		if err != nil {
+			return nil, oops.
+				In("raftnode").
+				With("node_id", config.NodeID, "bind_addr", config.BindAddr).
+				Wrapf(err, "create dragonboat nodehost")
+		}
 	}
 	node := &Node{
-		nodeHost: nodeHost,
-		store:    store,
-		groups:   mapping.NewMap[string, *raftGroup](),
-		nodeID:   nodeID,
-		nodeName: config.NodeID,
-		logger:   logger,
+		nodeHost:     nodeHost,
+		ownsNodeHost: ownsNodeHost,
+		groups:       mapping.NewMap[string, *raftGroup](),
+		nodeID:       nodeID,
+		nodeName:     config.NodeID,
+		logger:       logger,
 	}
 	if err := node.startGroups(config); err != nil {
 		closeErr := node.Shutdown()
@@ -83,7 +81,7 @@ func (n *Node) Apply(data []byte, timeout time.Duration) error {
 
 func (n *Node) ApplyGroup(group string, data []byte, timeout time.Duration) error {
 	if !n.IsEnabled() {
-		return nil
+		return ErrNotRunning
 	}
 	raftGroup, ok := n.group(group)
 	if !ok {
@@ -116,17 +114,37 @@ func (n *Node) AppliedState() State {
 }
 
 func (n *Node) AppliedGroupState(group string) State {
-	if n == nil || n.store == nil {
+	if !n.IsEnabled() {
 		return State{}
 	}
-	state, ok, err := n.store.LoadState(context.Background(), group)
-	if err != nil && n.logger != nil {
-		n.logger.Error("load applied raft state failed", "group", group, "error", err)
-	}
+	raftGroup, ok := n.group(group)
 	if !ok {
 		return State{}
 	}
-	return state
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result, err := n.nodeHost.SyncRead(ctx, raftGroup.id, lookupState)
+	if err != nil {
+		if n.logger != nil {
+			n.logger.Error("read applied raft state failed", "group", raftGroup.name, "error", err)
+		}
+		return State{}
+	}
+	state, ok := result.(State)
+	if !ok {
+		if n.logger != nil {
+			n.logger.Error("read applied raft state returned unexpected type", "group", raftGroup.name, "type", stateType(result))
+		}
+		return State{}
+	}
+	return cloneState(state)
+}
+
+func stateType(value any) string {
+	if value == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("%T", value)
 }
 
 func (n *Node) Status() *mapping.Map[string, any] {
@@ -191,7 +209,7 @@ func (n *Node) AddVoter(id, address string, timeout time.Duration) error {
 
 func (n *Node) AddGroupVoter(group, id, address string, timeout time.Duration) error {
 	if !n.IsEnabled() {
-		return ErrDisabled
+		return ErrNotRunning
 	}
 	if id == "" || address == "" {
 		return oops.
@@ -229,7 +247,7 @@ func (n *Node) RemoveServer(id string, timeout time.Duration) error {
 
 func (n *Node) RemoveGroupServer(group, id string, timeout time.Duration) error {
 	if !n.IsEnabled() {
-		return ErrDisabled
+		return ErrNotRunning
 	}
 	if id == "" {
 		return oops.
@@ -257,24 +275,6 @@ func (n *Node) RemoveGroupServer(group, id string, timeout time.Duration) error 
 			With("group", raftGroup.name, "id", id, "timeout", timeout.String()).
 			Wrapf(err, "remove raft server")
 	}
-	return nil
-}
-
-func (n *Node) Shutdown() error {
-	if !n.IsEnabled() {
-		return nil
-	}
-	if n.logger != nil {
-		n.logger.Info("raft shutdown started")
-	}
-	n.nodeHost.Stop()
-	n.nodeHost = nil
-	if err := n.store.Close(); err != nil {
-		return oops.
-			In("raftnode").
-			Wrapf(err, "shutdown raft node")
-	}
-	n.store = nil
 	return nil
 }
 

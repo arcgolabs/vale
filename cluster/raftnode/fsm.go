@@ -1,7 +1,6 @@
 package raftnode
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"time"
@@ -17,24 +16,16 @@ type fsm struct {
 	group     string
 	clusterID uint64
 	state     State
-	store     *stateStore
 }
 
-func newFSM(group string, clusterID uint64, store *stateStore) *fsm {
+func newFSM(group string, clusterID uint64) *fsm {
 	if group == "" {
 		group = groupNameFromClusterID(clusterID)
-	}
-	state := State{}
-	if store != nil {
-		if loaded, ok, err := store.LoadState(context.Background(), group); err == nil && ok {
-			state = loaded
-		}
 	}
 	return &fsm{
 		group:     group,
 		clusterID: clusterID,
-		state:     cloneState(state),
-		store:     store,
+		state:     State{},
 	}
 }
 
@@ -45,14 +36,6 @@ func (f *fsm) Update(data []byte) (sm.Result, error) {
 			In("raftnode").
 			With("group", f.group, "cluster_id", f.clusterID, "bytes", len(data)).
 			Wrapf(err, "apply raft fsm command")
-	}
-	if f.store != nil {
-		if err := f.store.SaveState(context.Background(), f.group, state); err != nil {
-			return sm.Result{}, oops.
-				In("raftnode").
-				With("group", f.group, "cluster_id", f.clusterID, "version", state.Version).
-				Wrapf(err, "persist raft fsm state")
-		}
 	}
 	f.state = state
 	return sm.Result{Value: state.Version}, nil
@@ -110,14 +93,6 @@ func (f *fsm) RecoverFromSnapshot(reader io.Reader, _ []sm.SnapshotFile, done <-
 		}
 	}
 	f.state = cloneState(state)
-	if f.store != nil {
-		if err := f.store.SaveState(context.Background(), f.group, f.state); err != nil {
-			return oops.
-				In("raftnode").
-				With("group", f.group, "cluster_id", f.clusterID, "version", f.state.Version).
-				Wrapf(err, "persist restored raft fsm state")
-		}
-	}
 	return nil
 }
 

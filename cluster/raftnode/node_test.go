@@ -8,6 +8,7 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/vale/cluster/raftnode"
+	dragonboat "github.com/lni/dragonboat/v3"
 )
 
 func TestNodeAppliesSnapshotUpdateCommand(t *testing.T) {
@@ -61,6 +62,7 @@ func TestNodeLoadsPersistedAppliedState(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+	waitForLeader(t, restarted)
 
 	state := restarted.AppliedState()
 	if state.Snapshot == nil || state.Snapshot.Routes != 1 {
@@ -88,7 +90,7 @@ func TestNodeAppliesLegacyPayloadAsRawState(t *testing.T) {
 func TestNodeAppliesMultiGroupCommands(t *testing.T) {
 	node := newTestNodeWithGroups(t, collectionlist.NewList(
 		raftnode.GroupConfig{Name: raftnode.DefaultGroupName, ID: raftnode.DefaultGroupID, Bootstrap: true},
-		raftnode.GroupConfig{Name: "providers", ID: 2, Bootstrap: true},
+		raftnode.GroupConfig{Name: "providers", ID: 3, Bootstrap: true},
 	))
 	waitForGroupLeader(t, node, "providers")
 
@@ -125,6 +127,34 @@ func TestNodePeersReturnsBootstrapVoter(t *testing.T) {
 	}
 }
 
+func TestNodeCanUseExternalDragonboatNodeHost(t *testing.T) {
+	dataDir := t.TempDir()
+	bindAddr := freeAddr(t)
+	config := raftnode.Config{
+		NodeID:    "node-1",
+		BindAddr:  bindAddr,
+		DataDir:   dataDir,
+		Bootstrap: true,
+	}
+	quietDragonboatLogs()
+	nodeHost, err := dragonboat.NewNodeHost(raftnode.NodeHostConfig(config))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(nodeHost.Stop)
+
+	node := newTestNodeWithConfig(t, raftnode.Config{
+		NodeID:    config.NodeID,
+		NodeHost:  nodeHost,
+		Bootstrap: true,
+	})
+
+	mustApply(t, node, []byte(`{"type":"snapshot_update","snapshot":{"built_at":"2026-05-07T00:00:00Z","services":2,"routes":3,"proxy_engine":"oxy"}}`))
+	if state := node.AppliedState(); state.Snapshot == nil || state.Snapshot.Services != 2 {
+		t.Fatalf("state = %#v", state)
+	}
+}
+
 func newTestNode(t *testing.T) *raftnode.Node {
 	t.Helper()
 
@@ -141,7 +171,6 @@ func newTestNodeWithDataDirAndBind(t *testing.T, dataDir, bindAddr string, boots
 	t.Helper()
 
 	return newTestNodeWithConfig(t, raftnode.Config{
-		Enabled:   true,
 		NodeID:    "node-1",
 		BindAddr:  bindAddr,
 		DataDir:   dataDir,
@@ -153,7 +182,6 @@ func newTestNodeWithGroups(t *testing.T, groups *collectionlist.List[raftnode.Gr
 	t.Helper()
 
 	return newTestNodeWithConfig(t, raftnode.Config{
-		Enabled:   true,
 		NodeID:    "node-1",
 		BindAddr:  freeAddr(t),
 		DataDir:   t.TempDir(),
@@ -167,13 +195,13 @@ func newTestNodeWithConfig(t *testing.T, config raftnode.Config) *raftnode.Node 
 
 	quietDragonboatLogs()
 	node, err := raftnode.New(raftnode.Config{
-		Enabled:        config.Enabled,
 		NodeID:         config.NodeID,
 		BindAddr:       config.BindAddr,
 		DataDir:        config.DataDir,
 		Bootstrap:      config.Bootstrap,
 		DeploymentID:   config.DeploymentID,
 		RTTMillisecond: config.RTTMillisecond,
+		NodeHost:       config.NodeHost,
 		LogDB:          config.LogDB,
 		Groups:         config.Groups,
 	}, discardLogger())

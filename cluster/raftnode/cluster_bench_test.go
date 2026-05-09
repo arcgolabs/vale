@@ -49,7 +49,6 @@ func newBenchmarkCluster(b *testing.B, groupCount int) benchmarkCluster {
 	nodes := collectionlist.NewListWithCapacity[*raftnode.Node](3)
 	addresses.Range(func(index int, address string) bool {
 		node, err := raftnode.New(raftnode.Config{
-			Enabled:   true,
 			NodeID:    fmt.Sprintf("node-%d", index+1),
 			BindAddr:  address,
 			DataDir:   filepath.Join(b.TempDir(), fmt.Sprintf("node-%d", index+1)),

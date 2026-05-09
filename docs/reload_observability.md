@@ -31,6 +31,7 @@ embedding hook for external controllers.
 
 ## Raft State
 
-The optional `cluster/raftnode` module persists the last applied typed FSM state
-through `storx/bboltx`. Restarted nodes load that applied state before Raft log
-replay catches up, which keeps admin status useful during node recovery.
+The optional `cluster/raftnode` module keeps the last applied typed FSM state in
+Dragonboat. Restarted nodes recover state through Dragonboat log replay and
+snapshots; the adapter does not maintain a second bbolt applied-state database
+by default.

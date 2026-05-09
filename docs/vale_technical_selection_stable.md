@@ -31,7 +31,7 @@ Vale 的技术路线建议定为：
 Provider：自研接口 + File/Docker/Orch 内置
 插件：HashiCorp go-plugin + gRPC + Protobuf
 插件分发：File/HTTP/OCI Registry，OCI 使用 ORAS
-集群：HashiCorp Raft，后置阶段实现
+集群：Dragonboat multi-group Raft
 可观测：Prometheus + OpenTelemetry + slog
 TLS：静态证书起步，CertMagic adapter 后置
 arcgolabs：复用 logx/configx/collectionx/observabilityx/httpx，但不污染 runtime core
@@ -582,7 +582,7 @@ vale plugin install oci://registry.example.com/vale/plugins/authz:1.0.0
 
 | 方向 | 选型 |
 |---|---|
-| 一致性 | HashiCorp Raft |
+| 一致性 | Dragonboat multi-group Raft |
 | 成员发现 | memberlist 后置 |
 | Manager/Proxy | 自研 |
 | Snapshot 分发 | gRPC stream |
@@ -1351,7 +1351,7 @@ Router：自研 compiled matcher
 Provider：自研接口
 插件：HashiCorp go-plugin + gRPC
 插件分发：OCI / HTTP / File Registry
-集群：HashiCorp Raft，后置
+集群：Dragonboat multi-group Raft
 可观测：Prometheus + OpenTelemetry + slog
 TLS：静态证书起步，CertMagic adapter 后置
 arcgolabs：复用外围能力，不污染 core runtime

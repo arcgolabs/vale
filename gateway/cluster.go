@@ -8,7 +8,7 @@ import (
 	"github.com/arcgolabs/collectionx/mapping"
 )
 
-const ClusterGroupRoutes = "routes"
+const ClusterGroupRoutes = "data"
 
 type ClusterPeer = mapping.Map[string, string]
 
