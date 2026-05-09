@@ -83,14 +83,18 @@ func TestOxyEngineForwardsToTargetHostAndPreservesForwardedHost(t *testing.T) {
 
 	var gotHost string
 	var gotForwardedHost string
+	var gotPath string
+	var gotQuery string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotHost = r.Host
 		gotForwardedHost = r.Header.Get("X-Forwarded-Host")
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(upstream.Close)
 
-	targetURL, err := url.Parse(upstream.URL)
+	targetURL, err := url.Parse(upstream.URL + "/base?tenant=default")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,6 +122,12 @@ func TestOxyEngineForwardsToTargetHostAndPreservesForwardedHost(t *testing.T) {
 	}
 	if gotForwardedHost != "gateway.local" {
 		t.Fatalf("x-forwarded-host = %q, want gateway.local", gotForwardedHost)
+	}
+	if gotPath != "/base/api" {
+		t.Fatalf("upstream path = %q, want /base/api", gotPath)
+	}
+	if gotQuery != "tenant=default&q=1" {
+		t.Fatalf("upstream query = %q, want tenant=default&q=1", gotQuery)
 	}
 }
 

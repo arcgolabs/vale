@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/samber/oops"
+	"golang.org/x/sync/errgroup"
 )
+
+const defaultHealthCheckConcurrency = 32
 
 type HealthChecker struct {
 	interval time.Duration
@@ -66,20 +69,43 @@ func (h *HealthChecker) check(ctx context.Context, gateway *Gateway) {
 	if snapshot == nil {
 		return
 	}
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(defaultHealthCheckConcurrency)
 	snapshot.Services.Range(func(_ string, service *ServiceRuntime) bool {
-		h.checkService(ctx, gateway, service)
+		h.checkService(groupCtx, group, gateway, service)
 		return true
 	})
+	if err := group.Wait(); err != nil && h.logger != nil {
+		h.logger.Error("health check cycle failed", "error", oops.
+			In("runtime").
+			Wrapf(err, "run health check cycle"))
+	}
 }
 
-func (h *HealthChecker) checkService(ctx context.Context, gateway *Gateway, service *ServiceRuntime) {
+func (h *HealthChecker) checkService(ctx context.Context, group *errgroup.Group, gateway *Gateway, service *ServiceRuntime) {
+	if group == nil || service == nil || service.Endpoints == nil {
+		return
+	}
 	service.Endpoints.Range(func(_ int, endpoint *EndpointRuntime) bool {
-		h.checkEndpoint(ctx, gateway, endpoint)
+		checkedEndpoint := endpoint
+		group.Go(func() error {
+			h.checkEndpoint(ctx, gateway, checkedEndpoint)
+			return nil
+		})
 		return true
 	})
 }
 
 func (h *HealthChecker) checkEndpoint(ctx context.Context, gateway *Gateway, endpoint *EndpointRuntime) {
+	if endpoint == nil || endpoint.URL == nil {
+		return
+	}
+	start := time.Now()
+	healthy := false
+	defer func() {
+		gateway.ObserveHealthCheck(endpoint, healthy, time.Since(start))
+	}()
+
 	requestCtx, cancel := context.WithTimeout(ctx, h.client.Timeout)
 	defer cancel()
 
@@ -105,7 +131,7 @@ func (h *HealthChecker) checkEndpoint(ctx context.Context, gateway *Gateway, end
 			With("url", endpoint.URL.String()).
 			Wrapf(err, "close health check response body"))
 	}
-	healthy := resp.StatusCode < http.StatusInternalServerError
+	healthy = resp.StatusCode < http.StatusInternalServerError
 	h.setEndpointHealth(endpoint, healthy, "status_checked", nil)
 	gateway.ObserveHealth(endpoint, healthy)
 	endpoint.LastChecked.Store(time.Now().Unix())

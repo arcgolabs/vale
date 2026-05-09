@@ -5,8 +5,14 @@ import (
 	"github.com/samber/oops"
 )
 
+type weightedEndpointRange struct {
+	index        int
+	maxExclusive uint64
+}
+
 func (s *ServiceRuntime) BuildSlots() {
-	s.weightedSlots = collectionlist.NewList[int]()
+	s.weightedRanges = collectionlist.NewList[weightedEndpointRange]()
+	s.totalWeight = 0
 	if s.Strategy != "weighted_round_robin" {
 		return
 	}
@@ -18,9 +24,8 @@ func (s *ServiceRuntime) BuildSlots() {
 		if weight <= 0 {
 			weight = 1
 		}
-		for range weight {
-			s.weightedSlots.Add(idx)
-		}
+		s.totalWeight += uint64(weight)
+		s.weightedRanges.Add(weightedEndpointRange{index: idx, maxExclusive: s.totalWeight})
 		return true
 	})
 }
@@ -39,7 +44,7 @@ func (s *ServiceRuntime) Pick() (*EndpointRuntime, error) {
 		}
 		return nil, noHealthyEndpointError(s, endpointCount)
 	}
-	if s.Strategy == "weighted_round_robin" && !s.weightedSlots.IsEmpty() {
+	if s.Strategy == "weighted_round_robin" && !s.weightedRanges.IsEmpty() && s.totalWeight > 0 {
 		if endpoint := s.pickWeightedEndpoint(); endpoint != nil {
 			return endpoint, nil
 		}
@@ -65,16 +70,28 @@ func (s *ServiceRuntime) pickOnlyEndpoint() *EndpointRuntime {
 }
 
 func (s *ServiceRuntime) pickWeightedEndpoint() *EndpointRuntime {
-	slotCount := s.weightedSlots.Len()
-	start := s.nextStart(slotCount)
-	for offset := range slotCount {
-		slot, _ := s.weightedSlots.Get((start + offset) % slotCount)
-		endpoint, _ := s.Endpoints.Get(slot)
+	rangeCount := s.weightedRanges.Len()
+	start := s.weightedRangeIndex(s.nextTicket(s.totalWeight))
+	for offset := range rangeCount {
+		weightedRange, _ := s.weightedRanges.Get((start + offset) % rangeCount)
+		endpoint, _ := s.Endpoints.Get(weightedRange.index)
 		if endpoint.Healthy.Load() {
 			return endpoint
 		}
 	}
 	return nil
+}
+
+func (s *ServiceRuntime) weightedRangeIndex(ticket uint64) int {
+	idx := 0
+	s.weightedRanges.Range(func(index int, weightedRange weightedEndpointRange) bool {
+		if ticket >= weightedRange.maxExclusive {
+			return true
+		}
+		idx = index
+		return false
+	})
+	return idx
 }
 
 func (s *ServiceRuntime) pickRoundRobinEndpoint(endpointCount int) *EndpointRuntime {
@@ -99,4 +116,11 @@ func (s *ServiceRuntime) nextStart(count int) int {
 		}
 	}
 	return 0
+}
+
+func (s *ServiceRuntime) nextTicket(totalWeight uint64) uint64 {
+	if totalWeight == 0 {
+		return 0
+	}
+	return s.rrCounter.Add(1) % totalWeight
 }

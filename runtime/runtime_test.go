@@ -138,6 +138,18 @@ func TestGatewayInvokesExtendedMetricsRecorder(t *testing.T) {
 	if metrics.healthChecks != 1 {
 		t.Fatalf("health checks = %d, want 1", metrics.healthChecks)
 	}
+	gateway.ObserveHealthCheck(endpoint, true, time.Millisecond)
+	if metrics.healthCheckDurations != 1 {
+		t.Fatalf("health check durations = %d, want 1", metrics.healthCheckDurations)
+	}
+	gateway.ObserveRouteCache(true)
+	if metrics.routeCacheHits != 1 {
+		t.Fatalf("route cache hits = %d, want 1", metrics.routeCacheHits)
+	}
+	gateway.ObserveRouteCache(false)
+	if metrics.routeCacheMisses != 1 {
+		t.Fatalf("route cache misses = %d, want 1", metrics.routeCacheMisses)
+	}
 
 	gateway.ObserveReload("swapped")
 	if metrics.reloads != 1 || metrics.lastReloadResult != "swapped" {
@@ -146,10 +158,13 @@ func TestGatewayInvokesExtendedMetricsRecorder(t *testing.T) {
 }
 
 type testExtendedMetricsRecorder struct {
-	snapshots        int
-	reloads          int
-	healthChecks     int
-	lastReloadResult string
+	snapshots            int
+	reloads              int
+	healthChecks         int
+	healthCheckDurations int
+	routeCacheHits       int
+	routeCacheMisses     int
+	lastReloadResult     string
 }
 
 func (r *testExtendedMetricsRecorder) Observe(_ *valeruntime.CompiledRoute, _ *valeruntime.EndpointRuntime, _ int, _ time.Duration) {
@@ -170,4 +185,16 @@ func (r *testExtendedMetricsRecorder) ObserveReload(result string) {
 
 func (r *testExtendedMetricsRecorder) ObserveHealth(_ *valeruntime.EndpointRuntime, _ bool) {
 	r.healthChecks++
+}
+
+func (r *testExtendedMetricsRecorder) ObserveHealthCheck(_ *valeruntime.EndpointRuntime, _ bool, _ time.Duration) {
+	r.healthCheckDurations++
+}
+
+func (r *testExtendedMetricsRecorder) ObserveRouteCache(hit bool) {
+	if hit {
+		r.routeCacheHits++
+		return
+	}
+	r.routeCacheMisses++
 }

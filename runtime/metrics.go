@@ -33,15 +33,17 @@ func (noopMetrics) Handler() http.Handler {
 }
 
 type observabilityMetrics struct {
-	enabled      bool
-	requests     observabilityx.Counter
-	latency      observabilityx.Histogram
-	reloads      observabilityx.Counter
-	healthChecks observabilityx.Counter
-	routes       observabilityx.Gauge
-	services     observabilityx.Gauge
-	endpoints    observabilityx.Gauge
-	handler      http.Handler
+	enabled       bool
+	requests      observabilityx.Counter
+	latency       observabilityx.Histogram
+	reloads       observabilityx.Counter
+	healthChecks  observabilityx.Counter
+	healthLatency observabilityx.Histogram
+	routeCache    observabilityx.Counter
+	routes        observabilityx.Gauge
+	services      observabilityx.Gauge
+	endpoints     observabilityx.Gauge
+	handler       http.Handler
 }
 
 type metricsHandler interface {
@@ -80,6 +82,15 @@ func NewObservabilityMetrics(enabled bool, obs observabilityx.Observability, han
 		healthChecks: obs.Counter(observabilityx.NewCounterSpec("vale_health_checks_total",
 			observabilityx.WithDescription("Total endpoint health check results."),
 			observabilityx.WithLabelKeys("endpoint", "healthy"),
+		)),
+		healthLatency: obs.Histogram(observabilityx.NewHistogramSpec("vale_health_check_duration_seconds",
+			observabilityx.WithDescription("Endpoint health check duration in seconds."),
+			observabilityx.WithUnit("s"),
+			observabilityx.WithLabelKeys("endpoint", "healthy"),
+		)),
+		routeCache: obs.Counter(observabilityx.NewCounterSpec("vale_route_match_cache_total",
+			observabilityx.WithDescription("Total route match cache lookups."),
+			observabilityx.WithLabelKeys("result"),
 		)),
 		routes: obs.Gauge(observabilityx.NewGaugeSpec("vale_active_routes",
 			observabilityx.WithDescription("Current compiled route count."),
@@ -136,21 +147,56 @@ type HealthMetricsRecorder interface {
 	ObserveHealth(endpoint *EndpointRuntime, healthy bool)
 }
 
+type HealthCheckMetricsRecorder interface {
+	ObserveHealthCheck(endpoint *EndpointRuntime, healthy bool, duration time.Duration)
+}
+
+type RouteCacheMetricsRecorder interface {
+	ObserveRouteCache(hit bool)
+}
+
 func (g *Gateway) ObserveSnapshot(snapshot *CompiledSnapshot) {
+	if g == nil {
+		return
+	}
 	if recorder, ok := g.metrics.(SnapshotMetricsRecorder); ok {
 		recorder.ObserveSnapshot(snapshot)
 	}
 }
 
 func (g *Gateway) ObserveReload(result string) {
+	if g == nil {
+		return
+	}
 	if recorder, ok := g.metrics.(ReloadMetricsRecorder); ok {
 		recorder.ObserveReload(result)
 	}
 }
 
 func (g *Gateway) ObserveHealth(endpoint *EndpointRuntime, healthy bool) {
+	if g == nil {
+		return
+	}
 	if recorder, ok := g.metrics.(HealthMetricsRecorder); ok {
 		recorder.ObserveHealth(endpoint, healthy)
+	}
+}
+
+func (g *Gateway) ObserveHealthCheck(endpoint *EndpointRuntime, healthy bool, duration time.Duration) {
+	if g == nil {
+		return
+	}
+	if recorder, ok := g.metrics.(HealthCheckMetricsRecorder); ok {
+		recorder.ObserveHealthCheck(endpoint, healthy, duration)
+	}
+}
+
+func (g *Gateway) ObserveRouteCache(hit bool) {
+	if g == nil {
+		return
+	}
+	if recorder, ok := g.metrics.(RouteCacheMetricsRecorder); ok {
+		recorder.ObserveRouteCache(hit)
 	}
 }
 
@@ -184,4 +230,25 @@ func (m *observabilityMetrics) ObserveHealth(endpoint *EndpointRuntime, healthy 
 		observabilityx.String("endpoint", endpoint.URL.String()),
 		observabilityx.String("healthy", strconv.FormatBool(healthy)),
 	)
+}
+
+func (m *observabilityMetrics) ObserveHealthCheck(endpoint *EndpointRuntime, healthy bool, duration time.Duration) {
+	if !m.enabled || endpoint == nil || endpoint.URL == nil {
+		return
+	}
+	m.healthLatency.Record(context.Background(), duration.Seconds(),
+		observabilityx.String("endpoint", endpoint.URL.String()),
+		observabilityx.String("healthy", strconv.FormatBool(healthy)),
+	)
+}
+
+func (m *observabilityMetrics) ObserveRouteCache(hit bool) {
+	if !m.enabled {
+		return
+	}
+	result := "miss"
+	if hit {
+		result = "hit"
+	}
+	m.routeCache.Add(context.Background(), 1, observabilityx.String("result", result))
 }

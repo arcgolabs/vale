@@ -161,11 +161,12 @@ type IPAllowListRuntime struct {
 }
 
 type ServiceRuntime struct {
-	Name          string
-	Strategy      string
-	Endpoints     *collectionlist.List[*EndpointRuntime]
-	weightedSlots *collectionlist.List[int]
-	rrCounter     atomic.Uint64
+	Name           string
+	Strategy       string
+	Endpoints      *collectionlist.List[*EndpointRuntime]
+	weightedRanges *collectionlist.List[weightedEndpointRange]
+	totalWeight    uint64
+	rrCounter      atomic.Uint64
 }
 
 type EndpointRuntime struct {

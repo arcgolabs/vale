@@ -27,21 +27,35 @@ func (OxyEngine) Name() string {
 
 func (OxyEngine) Build(target *url.URL) http.Handler {
 	base := oxyforward.New(false)
-	return &httputil.ReverseProxy{
-		Transport:    NewOxyTransport(),
-		BufferPool:   defaultProxyBufferPool,
-		ErrorHandler: base.ErrorHandler,
-		Rewrite: func(rewrite *httputil.ProxyRequest) {
-			originalHost := rewrite.In.Host
-			RewriteRequestURL(target, rewrite.Out.URL)
-			rewrite.Out.Host = target.Host
-			rewrite.Out.RequestURI = ""
-			rewrite.Out.Proto = "HTTP/1.1"
-			rewrite.Out.ProtoMajor = 1
-			rewrite.Out.ProtoMinor = 1
-			rewriteForwardedHeaders(rewrite.Out, originalHost, rewrite.In.TLS != nil)
-		},
+	base.Transport = NewOxyTransport()
+	base.BufferPool = defaultProxyBufferPool
+	return &oxyTargetProxy{
+		target: target,
+		proxy:  base,
 	}
+}
+
+type oxyTargetProxy struct {
+	target *url.URL
+	proxy  *httputil.ReverseProxy
+}
+
+func (p *oxyTargetProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if p == nil || p.proxy == nil || p.target == nil {
+		http.Error(w, "proxy unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	originalURL := r.URL
+	originalRequestURI := r.RequestURI
+	rewrittenURL := RewriteTargetURL(p.target, r.URL)
+	r.URL = rewrittenURL
+	r.RequestURI = rewrittenURL.RequestURI()
+	defer func() {
+		r.URL = originalURL
+		r.RequestURI = originalRequestURI
+	}()
+
+	p.proxy.ServeHTTP(w, r)
 }
 
 func Build(target *url.URL) http.Handler {
@@ -83,20 +97,6 @@ func RewriteRequestURL(target, requestURL *url.URL) {
 	requestURL.Path = joinURLPath(target.Path, requestPath)
 	requestURL.RawPath = ""
 	requestURL.RawQuery = joinRawQuery(target.RawQuery, requestQuery)
-}
-
-func rewriteForwardedHeaders(request *http.Request, originalHost string, inboundTLS bool) {
-	if request.Header.Get("X-Forwarded-Host") == "" && originalHost != "" {
-		request.Header.Set("X-Forwarded-Host", originalHost)
-	}
-	if request.Header.Get("X-Forwarded-Proto") != "" {
-		return
-	}
-	if inboundTLS {
-		request.Header.Set("X-Forwarded-Proto", "https")
-		return
-	}
-	request.Header.Set("X-Forwarded-Proto", "http")
 }
 
 func joinURLPath(base, requestPath string) string {

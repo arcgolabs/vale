@@ -210,10 +210,12 @@ func shouldLimitRequestBody(r *http.Request, maxBodyBytes int64) bool {
 func (g *Gateway) matchRoute(snapshot *CompiledSnapshot, entrypoint string, request *http.Request) *CompiledRoute {
 	cache := g.routeMatches.Load()
 	if route, ok := cache.get(snapshot, entrypoint, request); ok {
+		g.ObserveRouteCache(true)
 		return route
 	}
 	route := matchSnapshotRoute(snapshot, entrypoint, request)
 	cache.add(snapshot, entrypoint, request, route)
+	g.ObserveRouteCache(false)
 	return route
 }
 
