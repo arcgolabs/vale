@@ -135,7 +135,7 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 			})
 			return true
 		})
-		cfg.Provider = mergedprovider.NewWithLoggerList(cfg.EventBus, cfg.Logger, sourceList)
+		cfg.Provider = newMergedProvider(cfg.EventBus, cfg.Logger, sourceList, cfg.Middleware)
 	}
 	if cfg.OnWatchError == nil {
 		cfg.OnWatchError = func(err error) {
@@ -150,4 +150,17 @@ func NewFromConfig(cfg Config) (*Gateway, error) {
 		events:   cfg.EventBus,
 		ownsBus:  ownsBus,
 	}, nil
+}
+
+func newMergedProvider(
+	bus provider.EventBus,
+	logger *slog.Logger,
+	sources *collectionlist.List[mergedprovider.Source],
+	middleware *runtime.MiddlewareRegistry,
+) *mergedprovider.Provider {
+	merged := mergedprovider.NewWithLoggerList(bus, logger, sources)
+	if middleware != nil {
+		merged.SetMiddlewareTypes(middleware.Names())
+	}
+	return merged
 }

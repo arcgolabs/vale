@@ -4,6 +4,10 @@ use (
 	.
 	./cluster/raftnode
 	./cmd
+	./examples/embedded_custom_middleware
+	./examples/embedded_custom_provider
+	./examples/embedded_extension_components
+	./examples/embedded_jwt_middleware
 	./examples/embedded_multi_provider
 	./examples/embedded_static_config
 	./observability/prometheus

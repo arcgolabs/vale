@@ -42,7 +42,7 @@ func valedStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
 				dix.Provider0(provideEventBus, dix.Eager()),
 				dix.Provider1(provideObservability, dix.Eager()),
 				dix.Provider1(provideDixObserver),
-				dix.ProviderErr1(providePluginRegistry, dix.Eager()),
+				dix.ProviderErr1(provideExtensionRegistry, dix.Eager()),
 				dix.Contribute1[vale.Option](provideWatchOption, dix.Order(0)),
 				dix.Contribute1[vale.Option](provideLoggerOption, dix.Order(10)),
 				dix.Contribute1[vale.Option](provideObservabilityOption, dix.Order(20)),

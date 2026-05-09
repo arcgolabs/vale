@@ -35,6 +35,9 @@ embedded users; subpackages remain available for advanced wiring and optional mo
 ## Compatibility Notes
 
 - The root package should remain the stable surface for typical embedded usage.
+- Extensions are compile-time library composition points, not runtime plugins. Embedded
+  users should import Vale and register custom providers, middleware, certificate
+  storage, cluster factories, metrics, or observability factories through `vale.Registry`.
 - `config` DTO structs intentionally use native Go collections because HCL/JSON decoding is their boundary.
 - Compiled runtime structs intentionally use `collectionx` containers.
 - Runtime route catalog queries return collectionx lists and keep request matching on the optimized matcher.

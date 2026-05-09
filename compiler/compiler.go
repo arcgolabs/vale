@@ -16,8 +16,16 @@ import (
 
 const DefaultACMECacheDir = ".vale/acme"
 
+type Options struct {
+	MiddlewareTypes *collectionlist.List[string]
+}
+
 func Compile(cfg *config.Config) (*runtime.CompiledSnapshot, error) {
-	middlewareMap, err := compileMiddlewares(cfg.Middlewares)
+	return CompileWithOptions(cfg, Options{})
+}
+
+func CompileWithOptions(cfg *config.Config, options Options) (*runtime.CompiledSnapshot, error) {
+	middlewareMap, err := compileMiddlewares(cfg.Middlewares, options.MiddlewareTypes)
 	if err != nil {
 		return nil, err
 	}

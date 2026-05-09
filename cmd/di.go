@@ -42,7 +42,7 @@ func provideObservability(logger *slog.Logger) observabilityx.Observability {
 	return prometheusmetrics.NewObservability(logger)
 }
 
-func providePluginRegistry(obs observabilityx.Observability) (*vale.Registry, error) {
+func provideExtensionRegistry(obs observabilityx.Observability) (*vale.Registry, error) {
 	registry := vale.NewRegistry()
 	if err := registry.RegisterMetricsFactory(defaultMetricsName, prometheusmetrics.NewFactory(obs)); err != nil {
 		return nil, oops.

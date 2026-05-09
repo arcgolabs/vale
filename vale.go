@@ -10,6 +10,7 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/observabilityx"
+	"github.com/arcgolabs/vale/certstore"
 	"github.com/arcgolabs/vale/config"
 	"github.com/arcgolabs/vale/gateway"
 	"github.com/arcgolabs/vale/provider"
@@ -19,10 +20,11 @@ import (
 )
 
 type (
-	Gateway = gateway.Gateway
-	Config  = gateway.Config
-	Option  = gateway.Option
-	Cluster = gateway.Cluster
+	Gateway     = gateway.Gateway
+	Config      = gateway.Config
+	Option      = gateway.Option
+	Cluster     = gateway.Cluster
+	ClusterPeer = gateway.ClusterPeer
 )
 
 func New(options ...Option) (*Gateway, error) {
@@ -80,6 +82,10 @@ func WithWatch(enabled bool) Option {
 
 func WithClusterFactory(factory gateway.ClusterFactory) Option {
 	return gateway.WithClusterFactory(factory)
+}
+
+func WithCertificateStorage(storage certstore.Storage) Option {
+	return gateway.WithCertificateStorage(storage)
 }
 
 func WithMetricsFactory(factory gateway.MetricsFactory) Option {

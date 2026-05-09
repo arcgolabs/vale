@@ -11,13 +11,12 @@ import (
 	"github.com/arcgolabs/vale/runtime"
 )
 
-var supportedMiddlewareTypes = collectionset.NewSet(runtime.MiddlewareTypeBuiltin)
-
-func compileMiddlewares(middlewares []config.Middleware) (*mapping.Map[string, runtime.MiddlewareRuntime], error) {
+func compileMiddlewares(middlewares []config.Middleware, extraTypes *collectionlist.List[string]) (*mapping.Map[string, runtime.MiddlewareRuntime], error) {
+	supportedTypes := middlewareTypeSet(extraTypes)
 	middlewareMap := mapping.NewMapWithCapacity[string, runtime.MiddlewareRuntime](len(middlewares))
 	for index := range middlewares {
 		middleware := &middlewares[index]
-		compiled, err := compileMiddleware(middleware)
+		compiled, err := compileMiddleware(middleware, supportedTypes)
 		if err != nil {
 			return nil, err
 		}
@@ -26,9 +25,9 @@ func compileMiddlewares(middlewares []config.Middleware) (*mapping.Map[string, r
 	return middlewareMap, nil
 }
 
-func compileMiddleware(middleware *config.Middleware) (runtime.MiddlewareRuntime, error) {
+func compileMiddleware(middleware *config.Middleware, supportedTypes *collectionset.Set[string]) (runtime.MiddlewareRuntime, error) {
 	middlewareType := normalizeMiddlewareType(middleware.Type)
-	if !supportedMiddlewareTypes.Contains(middlewareType) {
+	if !supportedTypes.Contains(middlewareType) {
 		return runtime.MiddlewareRuntime{}, fmt.Errorf("middleware %q has unsupported type %q", middleware.Name, middleware.Type)
 	}
 	return runtime.MiddlewareRuntime{
@@ -252,32 +251,6 @@ func appendMiddleware(
 		return true
 	})
 	visiting.Remove(name)
-}
-
-func normalizeMiddlewareType(middlewareType string) string {
-	middlewareType = strings.ToLower(strings.TrimSpace(middlewareType))
-	switch middlewareType {
-	case "",
-		"builtin",
-		"add_prefix",
-		"basic_auth",
-		"basicauth",
-		"buffering",
-		"chain",
-		"compress",
-		"headers",
-		"ip_allow_list",
-		"ipallowlist",
-		"ipwhitelist",
-		"redirect_regex",
-		"redirect_scheme",
-		"replace_path",
-		"replace_path_regex",
-		"strip_prefix":
-		return runtime.MiddlewareTypeBuiltin
-	default:
-		return middlewareType
-	}
 }
 
 func cleanStringList(values []string) *collectionlist.List[string] {

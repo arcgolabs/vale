@@ -17,7 +17,7 @@ func TestValedDefaultOptionsCreateGatewayWithoutConfigFile(t *testing.T) {
 
 	cfg := defaultValedConfig()
 	obs := observabilityx.Nop()
-	registry, err := providePluginRegistry(obs)
+	registry, err := provideExtensionRegistry(obs)
 	if err != nil {
 		t.Fatal(err)
 	}

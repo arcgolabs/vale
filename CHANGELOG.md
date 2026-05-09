@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.1 - 2026-05-10
+
 - Expanded Traefik-compatible Docker labels for basic auth, compression, IP allow lists, CORS, and rate limits.
 - Added builtin basic auth, gzip compression, and IP allow list middleware.
 - Added reload status admin view with route/service/endpoint diff information.
@@ -10,6 +12,8 @@
 - Added internal Go benchmarks plus a Docker-based Vale/Traefik/Caddy comparison harness.
 - Switched Docker comparison benchmarks to use the GitHub-published Vale image by default, with explicit local-build opt-in.
 - Added fixed UPX optimization to source-built and release container images.
+- Replaced the public runtime plugin API with compile-time library extension registries.
+- Added embedded examples for custom middleware, remote JWT validation, custom config providers, and extension component wiring.
 
 ## v0.1.0 - 2026-05-08
 

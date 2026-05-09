@@ -30,6 +30,7 @@ type Provider struct {
 	mu              sync.Mutex
 	lastFingerprint string
 	reloadDebounce  time.Duration
+	compilerOptions compiler.Options
 }
 
 func New(bus provider.EventBus, sources ...Source) *Provider {
@@ -67,6 +68,10 @@ func (p *Provider) SetLogger(logger *slog.Logger) {
 
 func (p *Provider) SetReloadDebounce(duration time.Duration) {
 	p.reloadDebounce = duration
+}
+
+func (p *Provider) SetMiddlewareTypes(types *collectionlist.List[string]) {
+	p.compilerOptions.MiddlewareTypes = types
 }
 
 func (p *Provider) Load(ctx context.Context) (*runtime.CompiledSnapshot, error) {
@@ -108,7 +113,7 @@ func (p *Provider) loadSnapshot(ctx context.Context) (*runtime.CompiledSnapshot,
 	if err != nil {
 		return nil, "", oops.In("provider.merged").Wrapf(err, "fingerprint merged config")
 	}
-	snapshot, err := compiler.Compile(cfg)
+	snapshot, err := compiler.CompileWithOptions(cfg, p.compilerOptions)
 	if err != nil {
 		return nil, "", oops.In("provider.merged").Wrapf(err, "compile merged config")
 	}
