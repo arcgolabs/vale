@@ -1,0 +1,17 @@
+name: vale-cluster-bench
+
+x-vale-local: &vale-local
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  image: ${VALE_IMAGE:-vale-bench-vale:latest}
+
+services:
+  vale-1:
+    <<: *vale-local
+
+  vale-2:
+    <<: *vale-local
+
+  vale-3:
+    <<: *vale-local

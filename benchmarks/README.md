@@ -99,3 +99,56 @@ TRAEFIK_IMAGE=traefik:v3 CADDY_IMAGE=caddy:2-alpine ./benchmarks/bench-compare.s
 For release-quality numbers, run on a quiet Linux host, pin image tags or image
 digests, record CPU limits, and repeat each benchmark enough times to compare
 medians instead of a single run.
+
+## Cluster Proxy Comparison
+
+The cluster scenario compares one Vale data-plane node running inside a
+three-node Dragonboat Raft control-plane cluster against a single Traefik node.
+Requests are sent only to `vale-1` so the result reflects per-node request-path
+overhead with clustering enabled, not the aggregate capacity of three Vale
+instances.
+
+Default host ports:
+
+- Vale cluster node: `http://127.0.0.1:18080`
+- Vale cluster admin: `http://127.0.0.1:28090`
+- Traefik single node: `http://127.0.0.1:18081`
+
+Run on PowerShell:
+
+```powershell
+./benchmarks/bench-cluster-compare.ps1 -Duration 30s -Warmup 5s -Concurrency 64 -LogLevel info
+```
+
+Run five 60-second measurements on the same compose stack:
+
+```powershell
+./benchmarks/bench-cluster-compare.ps1 -Duration 60s -Warmup 5s -Concurrency 64 -Repeat 5 -LogLevel info
+```
+
+Use a local source build while testing unreleased CLI changes:
+
+```powershell
+./benchmarks/bench-cluster-compare.ps1 -LocalBuild
+```
+
+Run on POSIX shells:
+
+```bash
+DURATION=30s WARMUP=5s CONCURRENCY=64 LOG_LEVEL=info ./benchmarks/bench-cluster-compare.sh
+```
+
+Run five 60-second measurements on POSIX shells:
+
+```bash
+DURATION=60s WARMUP=5s CONCURRENCY=64 REPEAT=5 LOG_LEVEL=info ./benchmarks/bench-cluster-compare.sh
+```
+
+The scripts wait for the Vale node, Traefik, and a ready Vale Raft leader before
+measuring. They write:
+
+- `benchmarks/results/cluster-<timestamp>/run-<n>-proxybench.md`
+- `benchmarks/results/cluster-<timestamp>/run-<n>-proxybench.json`
+- `benchmarks/results/cluster-<timestamp>/images.txt`
+- `benchmarks/results/cluster-<timestamp>/containers.txt`
+- `benchmarks/results/cluster-<timestamp>/vale-cluster-status.json`

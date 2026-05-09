@@ -6,7 +6,6 @@ import (
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/httpx"
 	"github.com/arcgolabs/httpx/adapter"
 	httpxstd "github.com/arcgolabs/httpx/adapter/std"
@@ -39,7 +38,7 @@ type adminReloadStatusOutput struct {
 }
 
 type adminClusterStatusOutput struct {
-	Body *mapping.Map[string, any] `json:"body"`
+	Body map[string]any `json:"body"`
 }
 
 type adminClusterPeersInput struct {
@@ -47,7 +46,7 @@ type adminClusterPeersInput struct {
 }
 
 type adminClusterPeersOutput struct {
-	Body *collectionlist.List[*ClusterPeer] `json:"body"`
+	Body []map[string]string `json:"body"`
 }
 
 type adminJoinInput struct {
@@ -70,7 +69,7 @@ type adminLeaveRequest struct {
 }
 
 type adminOKOutput struct {
-	Body *mapping.Map[string, string] `json:"body"`
+	Body map[string]string `json:"body"`
 }
 
 func (g *Gateway) buildAdminMux() http.Handler {
@@ -138,20 +137,20 @@ func (g *Gateway) handleAdminReloadStatus(context.Context, *struct{}) (*adminRel
 
 func (g *Gateway) handleAdminClusterStatus(context.Context, *struct{}) (*adminClusterStatusOutput, error) {
 	if g.cluster == nil {
-		return &adminClusterStatusOutput{Body: disabledClusterStatus()}, nil
+		return &adminClusterStatusOutput{Body: adminAnyMapView(disabledClusterStatus())}, nil
 	}
-	return &adminClusterStatusOutput{Body: g.cluster.Status()}, nil
+	return &adminClusterStatusOutput{Body: adminAnyMapView(g.cluster.Status())}, nil
 }
 
 func (g *Gateway) handleAdminClusterPeers(_ context.Context, input *adminClusterPeersInput) (*adminClusterPeersOutput, error) {
 	if g.cluster == nil {
-		return &adminClusterPeersOutput{Body: collectionlist.NewList[*ClusterPeer]()}, nil
+		return &adminClusterPeersOutput{Body: []map[string]string{}}, nil
 	}
 	peers, err := g.clusterPeers(input.Group)
 	if err != nil {
 		return nil, httpx.NewError(http.StatusInternalServerError, err.Error(), err)
 	}
-	return &adminClusterPeersOutput{Body: peers}, nil
+	return &adminClusterPeersOutput{Body: adminPeersView(peers)}, nil
 }
 
 func (g *Gateway) handleAdminClusterJoin(_ context.Context, input *adminJoinInput) (*adminOKOutput, error) {
@@ -261,7 +260,6 @@ func (g *Gateway) clusterLeader(group string) bool {
 }
 
 func adminOK() *adminOKOutput {
-	body := mapping.NewMap[string, string]()
-	body.Set("status", "ok")
+	body := map[string]string{"status": "ok"}
 	return &adminOKOutput{Body: body}
 }

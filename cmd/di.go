@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"strings"
 
+	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/logx"
 	"github.com/arcgolabs/vale"
@@ -81,21 +82,35 @@ func provideConfigSourceOptions(cfg valedConfig) valedConfigSourceOptions {
 	}
 }
 
-func provideClusterOptions(cfg valedConfig) valedClusterOptions {
+func provideClusterOptions(cfg valedConfig) (valedClusterOptions, error) {
 	if !cfg.RaftEnabled {
-		return nil
+		return nil, nil
+	}
+	initialMembers, err := parseRaftInitialMembers(cfg.RaftMembers)
+	if err != nil {
+		return nil, oops.
+			In("cmd").
+			With("raft_initial_members", cfg.RaftMembers).
+			Wrapf(err, "parse raft initial members")
+	}
+	raftConfig := raftnode.Config{
+		Enabled:   true,
+		NodeID:    cfg.RaftNodeID,
+		BindAddr:  cfg.RaftBind,
+		DataDir:   cfg.RaftDataDir,
+		Bootstrap: cfg.RaftBoot,
+	}
+	if !initialMembers.IsEmpty() {
+		raftConfig.Groups = collectionlist.NewList(raftnode.GroupConfig{
+			Name:           raftnode.DefaultGroupName,
+			InitialMembers: initialMembers,
+		})
 	}
 	return valedClusterOptions{
 		vale.WithClusterFactory(func(logger *slog.Logger) (vale.Cluster, error) {
-			return raftnode.New(raftnode.Config{
-				Enabled:   true,
-				NodeID:    cfg.RaftNodeID,
-				BindAddr:  cfg.RaftBind,
-				DataDir:   cfg.RaftDataDir,
-				Bootstrap: cfg.RaftBoot,
-			}, logger)
+			return raftnode.New(raftConfig, logger)
 		}),
-	}
+	}, nil
 }
 
 func provideEventBusOptions(bus eventx.BusRuntime) valedEventBusOptions {

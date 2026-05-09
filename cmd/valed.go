@@ -3,9 +3,11 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/configx"
 	"github.com/arcgolabs/dix"
 	"github.com/samber/oops"
@@ -23,6 +25,7 @@ type valedConfig struct {
 	RaftBind    string `koanf:"raft_bind"`
 	RaftDataDir string `koanf:"raft_data_dir"`
 	RaftBoot    bool   `koanf:"raft_bootstrap"`
+	RaftMembers string `koanf:"raft_initial_members"`
 }
 
 // valedStandaloneApp is the sole DI assembly entry for this process.
@@ -38,7 +41,7 @@ func valedStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
 			dix.Provider2(provideBaseOptions),
 			dix.Provider1(provideMetricsOptions),
 			dix.Provider1(provideConfigSourceOptions),
-			dix.Provider1(provideClusterOptions),
+			dix.ProviderErr1(provideClusterOptions),
 			dix.Provider1(provideEventBusOptions),
 			dix.Provider5(provideGatewayOptions),
 			dix.ProviderErr1(provideGateway),
@@ -73,6 +76,7 @@ func defaultValedConfig() valedConfig {
 		RaftBind:    "127.0.0.1:17000",
 		RaftDataDir: "./data/raft",
 		RaftBoot:    true,
+		RaftMembers: "",
 	}
 }
 
@@ -88,6 +92,34 @@ func parseCSV(input string) *collectionlist.List[string] {
 		trimmed := strings.TrimSpace(part)
 		return trimmed, trimmed != ""
 	})
+}
+
+func parseRaftInitialMembers(input string) (*mapping.Map[string, string], error) {
+	members := mapping.NewMap[string, string]()
+	var parseErr error
+	parseCSV(input).Range(func(_ int, part string) bool {
+		pair := strings.SplitN(part, "=", 2)
+		if len(pair) != 2 {
+			parseErr = fmt.Errorf("raft initial member %q must use id=address form", part)
+			return false
+		}
+		id := strings.TrimSpace(pair[0])
+		address := strings.TrimSpace(pair[1])
+		if id == "" || address == "" {
+			parseErr = fmt.Errorf("raft initial member %q has empty id or address", part)
+			return false
+		}
+		if _, exists := members.Get(id); exists {
+			parseErr = fmt.Errorf("raft initial member %q is duplicated", id)
+			return false
+		}
+		members.Set(id, address)
+		return true
+	})
+	if parseErr != nil {
+		return nil, parseErr
+	}
+	return members, nil
 }
 
 func execute() error {
