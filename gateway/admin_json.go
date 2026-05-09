@@ -3,9 +3,45 @@ package gateway
 import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
+	"github.com/arcgolabs/mapper"
+)
+
+var adminMapper = mapper.New(
+	mapper.Converter(adminAnyMapRaw),
+	mapper.Converter(adminStringMapRaw),
 )
 
 func adminAnyMapView(values *mapping.Map[string, any]) map[string]any {
+	view := map[string]any{}
+	if err := adminMapper.MapInto(&view, values); err != nil {
+		return adminAnyMapRaw(values)
+	}
+	return view
+}
+
+func adminStringMapView(values *mapping.Map[string, string]) map[string]string {
+	view := map[string]string{}
+	if err := adminMapper.MapInto(&view, values); err != nil {
+		return adminStringMapRaw(values)
+	}
+	return view
+}
+
+func adminPeersView(peers *collectionlist.List[*ClusterPeer]) []map[string]string {
+	if peers == nil {
+		return []map[string]string{}
+	}
+	view, err := mapper.Slice[map[string]string](
+		peers.Values(),
+		mapper.Converter(adminStringMapRaw),
+	)
+	if err != nil {
+		return adminPeersRaw(peers)
+	}
+	return view
+}
+
+func adminAnyMapRaw(values *mapping.Map[string, any]) map[string]any {
 	if values == nil {
 		return map[string]any{}
 	}
@@ -17,7 +53,7 @@ func adminAnyMapView(values *mapping.Map[string, any]) map[string]any {
 	return view
 }
 
-func adminStringMapView(values *mapping.Map[string, string]) map[string]string {
+func adminStringMapRaw(values *mapping.Map[string, string]) map[string]string {
 	if values == nil {
 		return map[string]string{}
 	}
@@ -29,7 +65,7 @@ func adminStringMapView(values *mapping.Map[string, string]) map[string]string {
 	return view
 }
 
-func adminPeersView(peers *collectionlist.List[*ClusterPeer]) []map[string]string {
+func adminPeersRaw(peers *collectionlist.List[*ClusterPeer]) []map[string]string {
 	if peers == nil {
 		return []map[string]string{}
 	}
@@ -44,9 +80,9 @@ func adminPeersView(peers *collectionlist.List[*ClusterPeer]) []map[string]strin
 func adminJSONValue(value any) any {
 	switch typed := value.(type) {
 	case *mapping.Map[string, any]:
-		return adminAnyMapView(typed)
+		return adminAnyMapRaw(typed)
 	case *mapping.Map[string, string]:
-		return adminStringMapView(typed)
+		return adminStringMapRaw(typed)
 	default:
 		return value
 	}

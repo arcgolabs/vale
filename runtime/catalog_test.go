@@ -41,6 +41,20 @@ func TestCatalogQueriesRoutesByServiceAndEntrypoint(t *testing.T) {
 	if byEntrypoint.Len() != 2 {
 		t.Fatalf("routes by entrypoint len = %d, want 2", byEntrypoint.Len())
 	}
+
+	byCompoundFilter := snapshot.QueryRoutes(valeruntime.RouteFilter{
+		Entrypoint: "web",
+		Host:       "api.example.com",
+		PathPrefix: "/api",
+		Service:    "api",
+	})
+	if byCompoundFilter.Len() != 1 {
+		t.Fatalf("routes by compound filter len = %d, want 1", byCompoundFilter.Len())
+	}
+	compoundRoute, _ := byCompoundFilter.Get(0)
+	if compoundRoute.Name != "api-route" {
+		t.Fatalf("route by compound filter = %q, want api-route", compoundRoute.Name)
+	}
 }
 
 func TestCatalogFallsBackWhenMissing(t *testing.T) {

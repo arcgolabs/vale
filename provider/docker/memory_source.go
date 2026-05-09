@@ -6,21 +6,19 @@ import (
 	"sync"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vale/provider"
 )
 
 type MemorySource struct {
 	mu         sync.RWMutex
 	containers *collectionlist.List[Container]
-	listeners  *mapping.Map[int, func()]
-	nextID     int
+	watchHub   *provider.WatchHub
 }
 
 func NewMemorySource(containers ...Container) *MemorySource {
 	return &MemorySource{
 		containers: collectionlist.NewList(containers...),
-		listeners:  mapping.NewMap[int, func()](),
+		watchHub:   provider.NewWatchHub(),
 	}
 }
 
@@ -31,32 +29,13 @@ func (s *MemorySource) ListContainers(_ context.Context) (*collectionlist.List[C
 }
 
 func (s *MemorySource) Watch(_ context.Context, onReload func(), _ func(error)) (io.Closer, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	id := s.nextID
-	s.nextID++
-	s.listeners.Set(id, onReload)
-	return provider.NewOnceCloser(func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		s.listeners.Delete(id)
-	}), nil
+	return s.watchHub.Watch(onReload), nil
 }
 
 func (s *MemorySource) Update(containers ...Container) {
 	s.mu.Lock()
 	s.containers = collectionlist.NewList(containers...)
-	listeners := collectionlist.NewListWithCapacity[func()](s.listeners.Len())
-	s.listeners.Range(func(_ int, listener func()) bool {
-		listeners.Add(listener)
-		return true
-	})
 	s.mu.Unlock()
 
-	listeners.Range(func(_ int, listener func()) bool {
-		if listener != nil {
-			listener()
-		}
-		return true
-	})
+	s.watchHub.Notify()
 }

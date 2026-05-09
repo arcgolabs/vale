@@ -194,18 +194,48 @@ func filterRouteViews(routes *collectionlist.List[RouteView], filter RouteFilter
 }
 
 func routeLookup(filter RouteFilter) (string, []any) {
-	switch {
-	case filter.Entrypoint != "":
-		return "entrypoint", []any{filter.Entrypoint}
-	case filter.Service != "":
-		return "service", []any{filter.Service}
-	case filter.Host != "":
-		return "host", []any{filter.Host}
-	case filter.PathPrefix != "":
-		return "path_prefix", []any{filter.PathPrefix}
-	default:
+	candidate, ok := collectionlist.FindList(routeLookupCandidates(filter), func(_ int, candidate routeLookupCandidate) bool {
+		return candidate.enabled
+	})
+	if !ok {
 		return "id", nil
 	}
+	return candidate.index, candidate.args
+}
+
+type routeLookupCandidate struct {
+	index   string
+	args    []any
+	enabled bool
+}
+
+func routeLookupCandidates(filter RouteFilter) *collectionlist.List[routeLookupCandidate] {
+	return collectionlist.NewList(
+		routeLookupCandidate{
+			index:   "entrypoint_host_path_prefix",
+			args:    []any{filter.Entrypoint, filter.Host, filter.PathPrefix},
+			enabled: filter.Entrypoint != "" && filter.Host != "" && filter.PathPrefix != "",
+		},
+		routeLookupCandidate{
+			index:   "entrypoint_service",
+			args:    []any{filter.Entrypoint, filter.Service},
+			enabled: filter.Entrypoint != "" && filter.Service != "",
+		},
+		routeLookupCandidate{
+			index:   "entrypoint_host",
+			args:    []any{filter.Entrypoint, filter.Host},
+			enabled: filter.Entrypoint != "" && filter.Host != "",
+		},
+		routeLookupCandidate{
+			index:   "entrypoint_path_prefix",
+			args:    []any{filter.Entrypoint, filter.PathPrefix},
+			enabled: filter.Entrypoint != "" && filter.PathPrefix != "",
+		},
+		routeLookupCandidate{index: "entrypoint", args: []any{filter.Entrypoint}, enabled: filter.Entrypoint != ""},
+		routeLookupCandidate{index: "service", args: []any{filter.Service}, enabled: filter.Service != ""},
+		routeLookupCandidate{index: "host", args: []any{filter.Host}, enabled: filter.Host != ""},
+		routeLookupCandidate{index: "path_prefix", args: []any{filter.PathPrefix}, enabled: filter.PathPrefix != ""},
+	)
 }
 
 func routeMatchesFilter(route RouteRecord, filter RouteFilter) bool {

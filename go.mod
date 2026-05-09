@@ -12,6 +12,7 @@ require (
 	github.com/arcgolabs/eventx v0.1.2
 	github.com/arcgolabs/httpx v0.1.5
 	github.com/arcgolabs/httpx/adapter/std v0.1.5
+	github.com/arcgolabs/mapper v0.1.2
 	github.com/arcgolabs/observabilityx v0.4.0
 	github.com/caddyserver/certmagic v0.25.3
 	github.com/go-chi/chi/v5 v5.2.5

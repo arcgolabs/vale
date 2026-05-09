@@ -19,13 +19,8 @@ const (
 
 type EntrypointMatcher struct {
 	exactHosts *mapping.Map[string, *routeBucket]
-	wildcards  *collectionlist.List[wildcardBucket]
+	wildcards  *prefix.Trie[*routeBucket]
 	fallback   *routeBucket
-}
-
-type wildcardBucket struct {
-	suffix string
-	bucket *routeBucket
 }
 
 type routeBucket struct {
@@ -36,11 +31,10 @@ type routeBucket struct {
 func BuildEntrypointMatcher(routes *collectionlist.List[*CompiledRoute]) *EntrypointMatcher {
 	matcher := &EntrypointMatcher{
 		exactHosts: mapping.NewMap[string, *routeBucket](),
-		wildcards:  collectionlist.NewList[wildcardBucket](),
+		wildcards:  prefix.NewTrie[*routeBucket](),
 		fallback:   newRouteBucket(),
 	}
 
-	wildcardMap := mapping.NewMap[string, *routeBucket]()
 	routes.Range(func(_ int, route *CompiledRoute) bool {
 		host := strings.TrimSpace(strings.ToLower(route.Host))
 		switch {
@@ -48,8 +42,13 @@ func BuildEntrypointMatcher(routes *collectionlist.List[*CompiledRoute]) *Entryp
 			matcher.fallback.Add(route)
 		case strings.HasPrefix(host, "*."):
 			suffix := strings.TrimPrefix(host, "*")
-			bucket, _ := wildcardMap.GetOrCompute(suffix, newRouteBucket)
+			reversedSuffix := reverseString(suffix)
+			bucket, _ := matcher.wildcards.Get(reversedSuffix)
+			if bucket == nil {
+				bucket = newRouteBucket()
+			}
 			bucket.Add(route)
+			matcher.wildcards.Put(reversedSuffix, bucket)
 		default:
 			bucket, _ := matcher.exactHosts.GetOrCompute(host, newRouteBucket)
 			bucket.Add(route)
@@ -61,16 +60,9 @@ func BuildEntrypointMatcher(routes *collectionlist.List[*CompiledRoute]) *Entryp
 		bucket.Sort()
 		return true
 	})
-	wildcardMap.Range(func(suffix string, bucket *routeBucket) bool {
+	matcher.wildcards.RangePrefix("", func(_ string, bucket *routeBucket) bool {
 		bucket.Sort()
-		matcher.wildcards.Add(wildcardBucket{
-			suffix: suffix,
-			bucket: bucket,
-		})
 		return true
-	})
-	matcher.wildcards.Sort(func(left, right wildcardBucket) int {
-		return len(right.suffix) - len(left.suffix)
 	})
 	matcher.fallback.Sort()
 	return matcher
@@ -91,21 +83,28 @@ func MatchRoute(matcher *EntrypointMatcher, routes *collectionlist.List[*Compile
 		}
 	}
 
-	var wildcardRoute *CompiledRoute
-	matcher.wildcards.Range(func(_ int, wildcard wildcardBucket) bool {
-		if strings.HasSuffix(host, wildcard.suffix) {
-			if route := wildcard.bucket.Match(request.URL.Path, method, request.Header); route != nil {
-				wildcardRoute = route
-				return false
-			}
-		}
-		return true
-	})
-	if wildcardRoute != nil {
-		return wildcardRoute
+	if route := matcher.matchWildcardHost(host, request.URL.Path, method, request.Header); route != nil {
+		return route
 	}
 
 	return matcher.fallback.Match(request.URL.Path, method, request.Header)
+}
+
+func (m *EntrypointMatcher) matchWildcardHost(host, path, method string, headers http.Header) *CompiledRoute {
+	if m == nil || m.wildcards == nil {
+		return nil
+	}
+	for probe := reverseString(host); probe != ""; {
+		wildcardKey, bucket, ok := m.wildcards.LongestPrefix(probe)
+		if !ok {
+			return nil
+		}
+		if route := bucket.Match(path, method, headers); route != nil {
+			return route
+		}
+		probe = trimLastRune(wildcardKey)
+	}
+	return nil
 }
 
 func matchSnapshotRoute(snapshot *CompiledSnapshot, entrypoint string, request *http.Request) *CompiledRoute {

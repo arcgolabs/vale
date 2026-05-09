@@ -18,6 +18,8 @@ github.com/arcgolabs/httpx v0.1.5 h1:q8xb7ULdB08A1gK/KymHDFzd+s7I+OvuWqAVj86fzjE
 github.com/arcgolabs/httpx v0.1.5/go.mod h1:le+QyVXbioOli0YQXe3k48E2bUs0VczKuDbQWz+FjLA=
 github.com/arcgolabs/httpx/adapter/std v0.1.5 h1:UzXc4INLpvl17aNMQhBOOjd7myo2iEkyKhSPrp92Wuc=
 github.com/arcgolabs/httpx/adapter/std v0.1.5/go.mod h1:aluFzezJTu14J3sUxWChTUsckny/l4cKXYBxEtf+rWc=
+github.com/arcgolabs/mapper v0.1.2 h1:anwnOHcnxi3U4sj67v0DvRUY0V84iiFddTkxuODYXhA=
+github.com/arcgolabs/mapper v0.1.2/go.mod h1:zd+mapJHQ5R0ZikEYyVeZU3O4T1G+LfQw5ynaQ1vnFk=
 github.com/arcgolabs/observabilityx v0.4.0 h1:7ihfQev5KSV8xcO+6DcbMcUYSDVsYhnENH2ZbHB5IxY=
 github.com/arcgolabs/observabilityx v0.4.0/go.mod h1:yZeU3QmYUwhd051UnoD4cFu89sdLjPYGU15QKX+TVac=
 github.com/arcgolabs/pkg/option v0.0.3 h1:SS7WDMUAr7XW2/sOZkaqDrIUrygJK8u1gdPs9A4K5+A=

@@ -44,3 +44,14 @@ func trimLastRune(value string) string {
 	_, size := utf8.DecodeLastRuneInString(value)
 	return value[:len(value)-size]
 }
+
+func reverseString(value string) string {
+	if value == "" {
+		return ""
+	}
+	runes := []rune(value)
+	for left, right := 0, len(runes)-1; left < right; left, right = left+1, right-1 {
+		runes[left], runes[right] = runes[right], runes[left]
+	}
+	return string(runes)
+}

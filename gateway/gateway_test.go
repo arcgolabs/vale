@@ -86,6 +86,10 @@ func TestAdminAPIWritesPlainJSONViews(t *testing.T) {
 	if status.State != "loaded" || status.Routes != 1 || status.Services != 1 {
 		t.Fatalf("reload status = %#v", status)
 	}
+	clusterStatus := assertAdminJSON[map[string]any](t, adminAddr, "/admin/cluster/status")
+	if clusterStatus["enabled"] != false {
+		t.Fatalf("cluster status = %#v, want disabled plain JSON object", clusterStatus)
+	}
 }
 
 func TestStartLoadsStaticTLSCertificate(t *testing.T) {

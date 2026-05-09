@@ -99,6 +99,22 @@ func TestMatchRouteFallsBackToShorterPrefixWhenLongerPredicateMisses(t *testing.
 	}
 }
 
+func TestMatchRouteFallsBackToShorterWildcardWhenLongerPredicateMisses(t *testing.T) {
+	t.Parallel()
+
+	routes := collectionlist.NewList(
+		valeruntime.NewRoute("example", "web", nil).WithHost("*.example.com").WithPathPrefix("/"),
+		valeruntime.NewRoute("api-post", "web", nil).WithHost("*.api.example.com").WithPathPrefix("/api").WithMethod(http.MethodPost),
+	)
+	matcher := valeruntime.BuildEntrypointMatcher(routes)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://v1.api.example.com/api/users", http.NoBody)
+
+	got := valeruntime.MatchRoute(matcher, routes, req)
+	if got == nil || got.Name != "example" {
+		t.Fatalf("matched route = %v, want example", routeName(got))
+	}
+}
+
 func routeName(route *valeruntime.CompiledRoute) string {
 	if route == nil {
 		return "<nil>"

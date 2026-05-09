@@ -6,8 +6,6 @@ import (
 	"io"
 	"sync"
 
-	collectionlist "github.com/arcgolabs/collectionx/list"
-	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vale/config"
 	"github.com/arcgolabs/vale/provider"
 	"github.com/samber/oops"
@@ -16,10 +14,9 @@ import (
 type Provider struct {
 	name string
 
-	mu        sync.RWMutex
-	cfg       *config.Config
-	listeners *mapping.Map[int, func()]
-	nextID    int
+	mu       sync.RWMutex
+	cfg      *config.Config
+	watchHub *provider.WatchHub
 }
 
 func New(name string, cfg *config.Config) (*Provider, error) {
@@ -33,9 +30,9 @@ func New(name string, cfg *config.Config) (*Provider, error) {
 		name = "memory-config"
 	}
 	return &Provider{
-		name:      name,
-		cfg:       cfg,
-		listeners: mapping.NewMap[int, func()](),
+		name:     name,
+		cfg:      cfg,
+		watchHub: provider.NewWatchHub(),
 	}, nil
 }
 
@@ -50,16 +47,7 @@ func (p *Provider) Load(_ context.Context) (*config.Config, error) {
 }
 
 func (p *Provider) Watch(_ context.Context, onReload func(), _ func(error)) (io.Closer, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	id := p.nextID
-	p.nextID++
-	p.listeners.Set(id, onReload)
-	return provider.NewOnceCloser(func() {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		p.listeners.Delete(id)
-	}), nil
+	return p.watchHub.Watch(onReload), nil
 }
 
 func (p *Provider) Update(cfg *config.Config) error {
@@ -72,18 +60,8 @@ func (p *Provider) Update(cfg *config.Config) error {
 
 	p.mu.Lock()
 	p.cfg = cfg
-	listeners := collectionlist.NewListWithCapacity[func()](p.listeners.Len())
-	p.listeners.Range(func(_ int, listener func()) bool {
-		listeners.Add(listener)
-		return true
-	})
 	p.mu.Unlock()
 
-	listeners.Range(func(_ int, listener func()) bool {
-		if listener != nil {
-			listener()
-		}
-		return true
-	})
+	p.watchHub.Notify()
 	return nil
 }
