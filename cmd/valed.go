@@ -52,7 +52,7 @@ func valedStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
 func provideValedConfig(fs *pflag.FlagSet) (valedConfig, error) {
 	def := defaultValedConfig()
 	cfg, err := configx.LoadTErr[valedConfig](
-		configx.WithTypedDefaults(def),
+		configx.WithDefaults(defaultValedConfigValues(def)),
 		configx.WithEnvPrefix("VALE"),
 		configx.WithEnvSeparator("_"),
 		configx.WithFlagSet(fs),
@@ -75,6 +75,20 @@ func defaultValedConfig() valedConfig {
 		RaftDataDir: "./data/raft",
 		RaftBoot:    true,
 		RaftMembers: "",
+	}
+}
+
+func defaultValedConfigValues(cfg valedConfig) map[string]any {
+	return map[string]any{
+		"config":               cfg.ConfigPath,
+		"config_files":         cfg.ConfigFiles,
+		"watch":                cfg.Watch,
+		"log_level":            cfg.LogLevel,
+		"raft_node_id":         cfg.RaftNodeID,
+		"raft_bind":            cfg.RaftBind,
+		"raft_data_dir":        cfg.RaftDataDir,
+		"raft_bootstrap":       cfg.RaftBoot,
+		"raft_initial_members": cfg.RaftMembers,
 	}
 }
 

@@ -11,7 +11,7 @@ services:
 
   vale:
     image: ${VALE_IMAGE:-ghcr.io/arcgolabs/vale:latest}
-    command: ["--config", "/etc/vale/vale.hcl", "--log-level", "error"]
+    command: ["--config", "/etc/vale/vale.hcl", "--log-level", "error", "--raft-data-dir", "/tmp/vale/raft"]
     volumes:
       - ./vale.hcl:/etc/vale/vale.hcl:ro
     ports:
@@ -38,5 +38,14 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     ports:
       - "18082:8080"
+    depends_on:
+      - upstream
+
+  nginx:
+    image: ${NGINX_IMAGE:-nginx:1.27-alpine}
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "18083:8080"
     depends_on:
       - upstream

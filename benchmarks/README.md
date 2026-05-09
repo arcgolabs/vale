@@ -93,7 +93,7 @@ The scripts write:
 Image tags are intentionally configurable:
 
 ```bash
-TRAEFIK_IMAGE=traefik:v3 CADDY_IMAGE=caddy:2-alpine ./benchmarks/bench-compare.sh
+TRAEFIK_IMAGE=traefik:v3 CADDY_IMAGE=caddy:2-alpine NGINX_IMAGE=nginx:1.27-alpine ./benchmarks/bench-compare.sh
 ```
 
 For release-quality numbers, run on a quiet Linux host, pin image tags or image

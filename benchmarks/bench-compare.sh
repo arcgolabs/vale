@@ -74,6 +74,8 @@ bench_log "waiting for traefik"
 wait_endpoint traefik http://127.0.0.1:18081/
 bench_log "waiting for caddy"
 wait_endpoint caddy http://127.0.0.1:18082/
+bench_log "waiting for nginx"
+wait_endpoint nginx http://127.0.0.1:18083/
 
 bench_log "recording image metadata in $OUTPUT_DIR"
 docker compose "$@" images > "$OUTPUT_DIR/images.txt"
@@ -84,6 +86,6 @@ go run ./benchmarks/cmd/proxybench \
   -warmup "$WARMUP" \
   -concurrency "$CONCURRENCY" \
   -log-level "$LOG_LEVEL" \
-  -target "vale=http://127.0.0.1:18080,traefik=http://127.0.0.1:18081,caddy=http://127.0.0.1:18082" \
+  -target "vale=http://127.0.0.1:18080,traefik=http://127.0.0.1:18081,caddy=http://127.0.0.1:18082,nginx=http://127.0.0.1:18083" \
   -json "$OUTPUT_DIR/proxybench.json" \
   -markdown "$OUTPUT_DIR/proxybench.md"

@@ -78,6 +78,8 @@ try {
     Wait-BenchEndpoint -Name "traefik" -Url "http://127.0.0.1:18081/"
     Write-BenchLog "waiting for caddy"
     Wait-BenchEndpoint -Name "caddy" -Url "http://127.0.0.1:18082/"
+    Write-BenchLog "waiting for nginx"
+    Wait-BenchEndpoint -Name "nginx" -Url "http://127.0.0.1:18083/"
 
     Write-BenchLog "recording image metadata in $OutputDir"
     docker compose @ComposeArgs images | Out-File -FilePath (Join-Path $OutputDir "images.txt") -Encoding utf8
@@ -88,7 +90,7 @@ try {
         -warmup $Warmup `
         -concurrency $Concurrency `
         -log-level $LogLevel `
-        -target "vale=http://127.0.0.1:18080,traefik=http://127.0.0.1:18081,caddy=http://127.0.0.1:18082" `
+        -target "vale=http://127.0.0.1:18080,traefik=http://127.0.0.1:18081,caddy=http://127.0.0.1:18082,nginx=http://127.0.0.1:18083" `
         -json (Join-Path $OutputDir "proxybench.json") `
         -markdown (Join-Path $OutputDir "proxybench.md")
 } finally {
