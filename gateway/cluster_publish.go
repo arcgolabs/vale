@@ -27,9 +27,13 @@ func (g *Gateway) publishClusterUpdate(snapshot *runtime.CompiledSnapshot) {
 		g.logger.Error("raft payload marshal failed", "error", err)
 		return
 	}
+	start := time.Now()
 	if err := g.applyClusterGroup(ClusterGroupRoutes, data, 2*time.Second); err != nil {
+		g.runtime.ObserveRaftApply(ClusterGroupRoutes, time.Since(start), "failed")
 		g.logger.Error("raft apply failed", "error", err)
+		return
 	}
+	g.runtime.ObserveRaftApply(ClusterGroupRoutes, time.Since(start), "success")
 }
 
 func (g *Gateway) applyClusterGroup(group string, data []byte, timeout time.Duration) error {

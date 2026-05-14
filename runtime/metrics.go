@@ -37,12 +37,15 @@ type observabilityMetrics struct {
 	requests      observabilityx.Counter
 	latency       observabilityx.Histogram
 	reloads       observabilityx.Counter
+	reloadDelay   observabilityx.Histogram
 	healthChecks  observabilityx.Counter
 	healthLatency observabilityx.Histogram
 	routeCache    observabilityx.Counter
 	routes        observabilityx.Gauge
 	services      observabilityx.Gauge
 	endpoints     observabilityx.Gauge
+	raftApply     observabilityx.Histogram
+	raftApplyOps  observabilityx.Counter
 	handler       http.Handler
 }
 
@@ -79,6 +82,11 @@ func NewObservabilityMetrics(enabled bool, obs observabilityx.Observability, han
 			observabilityx.WithDescription("Total runtime reload attempts."),
 			observabilityx.WithLabelKeys("result"),
 		)),
+		reloadDelay: obs.Histogram(observabilityx.NewHistogramSpec("runtime_reload_duration_seconds",
+			observabilityx.WithDescription("Runtime reload duration in seconds."),
+			observabilityx.WithUnit("s"),
+			observabilityx.WithLabelKeys("result"),
+		)),
 		healthChecks: obs.Counter(observabilityx.NewCounterSpec("health_checks_total",
 			observabilityx.WithDescription("Total endpoint health check results."),
 			observabilityx.WithLabelKeys("endpoint", "healthy"),
@@ -91,6 +99,15 @@ func NewObservabilityMetrics(enabled bool, obs observabilityx.Observability, han
 		routeCache: obs.Counter(observabilityx.NewCounterSpec("route_match_cache_total",
 			observabilityx.WithDescription("Total route match cache lookups."),
 			observabilityx.WithLabelKeys("result"),
+		)),
+		raftApply: obs.Histogram(observabilityx.NewHistogramSpec("runtime_raft_apply_duration_seconds",
+			observabilityx.WithDescription("Raft apply duration in seconds."),
+			observabilityx.WithUnit("s"),
+			observabilityx.WithLabelKeys("group", "result"),
+		)),
+		raftApplyOps: obs.Counter(observabilityx.NewCounterSpec("runtime_raft_apply_total",
+			observabilityx.WithDescription("Total raft apply attempts."),
+			observabilityx.WithLabelKeys("group", "result"),
 		)),
 		routes: obs.Gauge(observabilityx.NewGaugeSpec("active_routes",
 			observabilityx.WithDescription("Current compiled route count."),
@@ -143,6 +160,10 @@ type ReloadMetricsRecorder interface {
 	ObserveReload(result string)
 }
 
+type ReloadDurationMetricsRecorder interface {
+	ObserveReloadDuration(result string, duration time.Duration)
+}
+
 type HealthMetricsRecorder interface {
 	ObserveHealth(endpoint *EndpointRuntime, healthy bool)
 }
@@ -153,6 +174,10 @@ type HealthCheckMetricsRecorder interface {
 
 type RouteCacheMetricsRecorder interface {
 	ObserveRouteCache(hit bool)
+}
+
+type RaftApplyMetricsRecorder interface {
+	ObserveRaftApply(group string, duration time.Duration, result string)
 }
 
 func (g *Gateway) ObserveSnapshot(snapshot *CompiledSnapshot) {
@@ -170,6 +195,15 @@ func (g *Gateway) ObserveReload(result string) {
 	}
 	if recorder, ok := g.metrics.(ReloadMetricsRecorder); ok {
 		recorder.ObserveReload(result)
+	}
+}
+
+func (g *Gateway) ObserveReloadDuration(result string, duration time.Duration) {
+	if g == nil {
+		return
+	}
+	if recorder, ok := g.metrics.(ReloadDurationMetricsRecorder); ok {
+		recorder.ObserveReloadDuration(result, duration)
 	}
 }
 
@@ -200,6 +234,15 @@ func (g *Gateway) ObserveRouteCache(hit bool) {
 	}
 }
 
+func (g *Gateway) ObserveRaftApply(group string, duration time.Duration, result string) {
+	if g == nil {
+		return
+	}
+	if recorder, ok := g.metrics.(RaftApplyMetricsRecorder); ok {
+		recorder.ObserveRaftApply(group, duration, result)
+	}
+}
+
 func (m *observabilityMetrics) ObserveSnapshot(snapshot *CompiledSnapshot) {
 	if !m.enabled || snapshot == nil {
 		return
@@ -220,6 +263,17 @@ func (m *observabilityMetrics) ObserveReload(result string) {
 		return
 	}
 	m.reloads.Add(context.Background(), 1, observabilityx.String("result", result))
+}
+
+func (m *observabilityMetrics) ObserveReloadDuration(result string, duration time.Duration) {
+	if !m.enabled {
+		return
+	}
+	m.reloadDelay.Record(
+		context.Background(),
+		duration.Seconds(),
+		observabilityx.String("result", result),
+	)
 }
 
 func (m *observabilityMetrics) ObserveHealth(endpoint *EndpointRuntime, healthy bool) {
@@ -251,4 +305,22 @@ func (m *observabilityMetrics) ObserveRouteCache(hit bool) {
 		result = "hit"
 	}
 	m.routeCache.Add(context.Background(), 1, observabilityx.String("result", result))
+}
+
+func (m *observabilityMetrics) ObserveRaftApply(group string, duration time.Duration, result string) {
+	if !m.enabled {
+		return
+	}
+	m.raftApply.Record(
+		context.Background(),
+		duration.Seconds(),
+		observabilityx.String("group", group),
+		observabilityx.String("result", result),
+	)
+	m.raftApplyOps.Add(
+		context.Background(),
+		1,
+		observabilityx.String("group", group),
+		observabilityx.String("result", result),
+	)
 }

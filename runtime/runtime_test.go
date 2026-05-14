@@ -150,6 +150,18 @@ func TestGatewayInvokesExtendedMetricsRecorder(t *testing.T) {
 	if metrics.routeCacheMisses != 1 {
 		t.Fatalf("route cache misses = %d, want 1", metrics.routeCacheMisses)
 	}
+	gateway.ObserveReloadDuration("swapped", 100*time.Millisecond)
+	if metrics.reloadDurations != 1 {
+		t.Fatalf("reload durations = %d, want 1", metrics.reloadDurations)
+	}
+
+	gateway.ObserveRaftApply("data", 50*time.Millisecond, "success")
+	if metrics.raftApplys != 1 {
+		t.Fatalf("raft applys = %d, want 1", metrics.raftApplys)
+	}
+	if metrics.raftApplySuccess != 1 {
+		t.Fatalf("raft apply successes = %d, want 1", metrics.raftApplySuccess)
+	}
 
 	gateway.ObserveReload("swapped")
 	if metrics.reloads != 1 || metrics.lastReloadResult != "swapped" {
@@ -164,6 +176,9 @@ type testExtendedMetricsRecorder struct {
 	healthCheckDurations int
 	routeCacheHits       int
 	routeCacheMisses     int
+	reloadDurations      int
+	raftApplys           int
+	raftApplySuccess     int
 	lastReloadResult     string
 }
 
@@ -197,4 +212,15 @@ func (r *testExtendedMetricsRecorder) ObserveRouteCache(hit bool) {
 		return
 	}
 	r.routeCacheMisses++
+}
+
+func (r *testExtendedMetricsRecorder) ObserveReloadDuration(_ string, _ time.Duration) {
+	r.reloadDurations++
+}
+
+func (r *testExtendedMetricsRecorder) ObserveRaftApply(_ string, _ time.Duration, result string) {
+	r.raftApplys++
+	if result == "success" {
+		r.raftApplySuccess++
+	}
 }

@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"time"
 
 	"github.com/arcgolabs/vale/runtime"
 )
@@ -10,6 +11,7 @@ func (g *Gateway) applyReloadSnapshot(ctx context.Context, snapshot *runtime.Com
 	if snapshot == nil {
 		return
 	}
+	start := time.Now()
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	current := g.runtime.Snapshot()
@@ -29,14 +31,19 @@ func (g *Gateway) applyReloadSnapshot(ctx context.Context, snapshot *runtime.Com
 			g.logger.Error("static runtime reload failed", "fields", changed, "error", err)
 			g.reload = g.reloadStatusFromSnapshot("failed", current, diff, changed.Values(), err.Error())
 			g.config.OnWatchError(err)
+			g.runtime.ObserveReload("failed")
+			g.runtime.ObserveReloadDuration("failed", time.Since(start))
 			return
 		}
+		g.runtime.ObserveReload("restarted")
+		g.runtime.ObserveReloadDuration("restarted", time.Since(start))
 		g.recordReloadSuccessLocked("restarted", snapshot, diff, changed.Values())
 		return
 	}
 	g.runtime.Swap(snapshot)
 	g.publishClusterUpdate(snapshot)
 	g.runtime.ObserveReload("swapped")
+	g.runtime.ObserveReloadDuration("swapped", time.Since(start))
 	g.recordReloadSuccessLocked("swapped", snapshot, diff, nil)
 	g.logger.Info("runtime snapshot swapped",
 		"built_at", snapshot.BuiltAt,
