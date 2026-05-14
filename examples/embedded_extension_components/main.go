@@ -17,13 +17,14 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
+	"github.com/arcgolabs/logx"
 	"github.com/arcgolabs/observabilityx"
 	"github.com/arcgolabs/vale"
 	"github.com/arcgolabs/vale/certstore"
 )
 
 func main() {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := logx.MustNew()
 	if err := run(context.Background(), logger); err != nil {
 		logger.Error("embedded gateway failed", "error", err)
 		os.Exit(1)
