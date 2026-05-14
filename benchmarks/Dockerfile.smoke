@@ -1,0 +1,7 @@
+FROM scratch
+
+COPY valed /usr/local/bin/valed
+
+EXPOSE 8080 19090
+
+ENTRYPOINT ["/usr/local/bin/valed"]

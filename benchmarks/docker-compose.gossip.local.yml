@@ -1,0 +1,17 @@
+name: vale-gossip-smoke
+
+x-vale-local: &vale-local
+  build:
+    context: ./.tmp/gossip-smoke-image
+    dockerfile: Dockerfile
+  image: ${VALE_IMAGE:-vale-gossip-smoke:latest}
+
+services:
+  vale-1:
+    <<: *vale-local
+
+  vale-2:
+    <<: *vale-local
+
+  vale-3:
+    <<: *vale-local

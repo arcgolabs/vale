@@ -30,7 +30,7 @@ func provideLogger(cfg valedConfig) (*slog.Logger, error) {
 			Wrapf(err, "create logger")
 	}
 	logx.SetDefault(logger)
-	logger.Info("logger configured", "level", cfg.LogLevel)
+	logger.Debug("logger configured", "level", cfg.LogLevel)
 	return logger, nil
 }
 

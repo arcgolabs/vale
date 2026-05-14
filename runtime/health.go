@@ -111,7 +111,7 @@ func (h *HealthChecker) checkEndpoint(ctx context.Context, gateway *Gateway, end
 
 	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint.URL.String(), http.NoBody)
 	if err != nil {
-		h.markEndpointUnhealthy(gateway, endpoint, "request_build_failed", oops.
+		h.markEndpointUnhealthy(ctx, gateway, endpoint, "request_build_failed", oops.
 			In("runtime").
 			With("url", endpoint.URL.String()).
 			Wrapf(err, "build health check request"))
@@ -119,7 +119,7 @@ func (h *HealthChecker) checkEndpoint(ctx context.Context, gateway *Gateway, end
 	}
 	resp, err := h.client.Do(req)
 	if err != nil {
-		h.markEndpointUnhealthy(gateway, endpoint, "request_failed", oops.
+		h.markEndpointUnhealthy(ctx, gateway, endpoint, "request_failed", oops.
 			In("runtime").
 			With("url", endpoint.URL.String()).
 			Wrapf(err, "execute health check request"))
@@ -132,33 +132,35 @@ func (h *HealthChecker) checkEndpoint(ctx context.Context, gateway *Gateway, end
 			Wrapf(err, "close health check response body"))
 	}
 	healthy = resp.StatusCode < http.StatusInternalServerError
-	h.setEndpointHealth(endpoint, healthy, "status_checked", nil)
+	h.setEndpointHealth(ctx, endpoint, healthy, "status_checked", nil)
 	gateway.ObserveHealth(endpoint, healthy)
 	endpoint.LastChecked.Store(time.Now().Unix())
 }
 
-func (h *HealthChecker) markEndpointUnhealthy(gateway *Gateway, endpoint *EndpointRuntime, reason string, err error) {
-	h.setEndpointHealth(endpoint, false, reason, err)
+func (h *HealthChecker) markEndpointUnhealthy(ctx context.Context, gateway *Gateway, endpoint *EndpointRuntime, reason string, err error) {
+	h.setEndpointHealth(ctx, endpoint, false, reason, err)
 	gateway.ObserveHealth(endpoint, false)
 }
 
-func (h *HealthChecker) setEndpointHealth(endpoint *EndpointRuntime, healthy bool, reason string, err error) {
+func (h *HealthChecker) setEndpointHealth(ctx context.Context, endpoint *EndpointRuntime, healthy bool, reason string, err error) {
 	previous := endpoint.Healthy.Swap(healthy)
 	if h.logger == nil || previous == healthy {
 		return
 	}
-	if err != nil {
-		h.logger.Info("endpoint health changed",
-			"endpoint", endpoint.URL.String(),
-			"healthy", healthy,
-			"reason", reason,
-			"error", err,
-		)
-		return
+	level := slog.LevelInfo
+	if !healthy {
+		level = slog.LevelWarn
+		if endpoint.LastChecked.Load() == 0 {
+			level = slog.LevelDebug
+		}
 	}
-	h.logger.Info("endpoint health changed",
-		"endpoint", endpoint.URL.String(),
-		"healthy", healthy,
-		"reason", reason,
-	)
+	attrs := []slog.Attr{
+		slog.String("endpoint", endpoint.URL.String()),
+		slog.Bool("healthy", healthy),
+		slog.String("reason", reason),
+	}
+	if err != nil {
+		attrs = append(attrs, slog.Any("error", err))
+	}
+	h.logger.LogAttrs(ctx, level, "endpoint health changed", attrs...)
 }

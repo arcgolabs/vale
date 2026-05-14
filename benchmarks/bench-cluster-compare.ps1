@@ -14,6 +14,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true
 
 if ($Repeat -le 0) {
     throw "Repeat must be positive"

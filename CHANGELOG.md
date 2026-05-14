@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## v0.1.3 - 2026-05-14
+
+- Added CI golangci-lint coverage for root and workspace modules.
+- Documented go.work-only local module development and path-prefixed submodule release tags.
+- Added a Docker Compose gossip cluster smoke test that validates metadata, data, and certificates Raft voter convergence.
+- Fixed reload restarts so the replacement health checker keeps running after static runtime changes.
+- Reduced startup log noise by moving internal lifecycle logs to debug and suppressing first health-down transitions at info level.
+
 ## v0.1.2 - 2026-05-14
 
 - Added built-in forward auth middleware and Traefik-compatible `forwardauth.*` labels.

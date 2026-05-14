@@ -1,0 +1,83 @@
+name: vale-gossip-smoke
+
+x-vale-common: &vale-common
+  image: ${VALE_IMAGE:-ghcr.io/arcgolabs/vale:latest}
+  volumes:
+    - ./vale.hcl:/etc/vale/vale.hcl:ro
+  depends_on:
+    - upstream
+
+services:
+  upstream:
+    image: ${UPSTREAM_IMAGE:-caddy:2-alpine}
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    volumes:
+      - ./caddy-upstream.Caddyfile:/etc/caddy/Caddyfile:ro
+    expose:
+      - "8080"
+
+  vale-1:
+    <<: *vale-common
+    command:
+      - "--config"
+      - "/etc/vale/vale.hcl"
+      - "--log-level"
+      - "error"
+      - "--raft-node-id"
+      - "node-1"
+      - "--raft-bind"
+      - "vale-1:17000"
+      - "--raft-data-dir"
+      - "/tmp/vale-raft"
+      - "--raft-bootstrap=true"
+      - "--cluster-discovery"
+      - "gossip"
+      - "--gossip-bind"
+      - ":17100"
+    ports:
+      - "18080:8080"
+      - "28090:19090"
+
+  vale-2:
+    <<: *vale-common
+    command:
+      - "--config"
+      - "/etc/vale/vale.hcl"
+      - "--log-level"
+      - "error"
+      - "--raft-node-id"
+      - "node-2"
+      - "--raft-bind"
+      - "vale-2:17000"
+      - "--raft-data-dir"
+      - "/tmp/vale-raft"
+      - "--cluster-discovery"
+      - "gossip"
+      - "--gossip-bind"
+      - ":17100"
+      - "--gossip-seeds"
+      - "vale-1:17100"
+    ports:
+      - "28091:19090"
+
+  vale-3:
+    <<: *vale-common
+    command:
+      - "--config"
+      - "/etc/vale/vale.hcl"
+      - "--log-level"
+      - "error"
+      - "--raft-node-id"
+      - "node-3"
+      - "--raft-bind"
+      - "vale-3:17000"
+      - "--raft-data-dir"
+      - "/tmp/vale-raft"
+      - "--cluster-discovery"
+      - "gossip"
+      - "--gossip-bind"
+      - ":17100"
+      - "--gossip-seeds"
+      - "vale-1:17100"
+    ports:
+      - "28092:19090"

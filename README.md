@@ -29,7 +29,7 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 
 ## Status
 
-The latest root release is `v0.1.2`. The public import path follows the current
+The latest root release is `v0.1.3`. The public import path follows the current
 git remote: `github.com/arcgolabs/vale`.
 
 ## Architecture Boundary
@@ -65,9 +65,9 @@ to make a workspace build run outside `go.work`.
 
 Releases are tag-scoped:
 
-- Root releases use normal semantic tags such as `v0.1.2`.
+- Root releases use normal semantic tags such as `v0.1.3`.
 - Optional submodules use path-prefixed tags when they are released, for example
-  `cmd/v0.1.2`, `provider/docker/v0.1.2`, or `cluster/raftnode/v0.1.2`.
+  `cmd/v0.1.3`, `provider/docker/v0.1.3`, or `cluster/raftnode/v0.1.3`.
 
 Current workspace modules:
 
@@ -118,7 +118,7 @@ go run ./cmd
 Run the published container image:
 
 ```bash
-docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.2
+docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.3
 ```
 
 To run with an HCL file, copy sample config:
@@ -419,7 +419,7 @@ Example three-node cluster:
 docker network create vale-cluster
 
 docker run -d --name vale-1 --network vale-cluster -p 19091:19090 `
-  ghcr.io/arcgolabs/vale:v0.1.2 `
+  ghcr.io/arcgolabs/vale:v0.1.3 `
   --raft-node-id node-1 `
   --raft-bind vale-1:17000 `
   --raft-bootstrap=true `
@@ -427,7 +427,7 @@ docker run -d --name vale-1 --network vale-cluster -p 19091:19090 `
   --gossip-bind :17100
 
 docker run -d --name vale-2 --network vale-cluster -p 19092:19090 `
-  ghcr.io/arcgolabs/vale:v0.1.2 `
+  ghcr.io/arcgolabs/vale:v0.1.3 `
   --raft-node-id node-2 `
   --raft-bind vale-2:17000 `
   --cluster-discovery gossip `
@@ -435,7 +435,7 @@ docker run -d --name vale-2 --network vale-cluster -p 19092:19090 `
   --gossip-seeds vale-1:17100
 
 docker run -d --name vale-3 --network vale-cluster -p 19093:19090 `
-  ghcr.io/arcgolabs/vale:v0.1.2 `
+  ghcr.io/arcgolabs/vale:v0.1.3 `
   --raft-node-id node-3 `
   --raft-bind vale-3:17000 `
   --cluster-discovery gossip `
@@ -488,7 +488,7 @@ through UPX in the optimize stage to keep the runtime image small.
 For example:
 
 ```bash
-docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.2
+docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.3
 ```
 
 ## Benchmarks

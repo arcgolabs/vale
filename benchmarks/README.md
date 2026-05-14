@@ -152,3 +152,28 @@ measuring. They write:
 - `benchmarks/results/cluster-<timestamp>/images.txt`
 - `benchmarks/results/cluster-<timestamp>/containers.txt`
 - `benchmarks/results/cluster-<timestamp>/vale-cluster-status.json`
+
+## Gossip Cluster Smoke
+
+The gossip smoke scripts start three Vale containers without
+`--raft-initial-members`. Node 1 bootstraps, nodes 2 and 3 discover node 1 with
+memberlist gossip, and the scripts wait until the `metadata`, `data`, and
+`certificates` Raft groups each expose three voters.
+
+With `-LocalBuild` or `LOCAL_BUILD=1`, the scripts build a Linux `valed` binary
+locally and assemble a scratch smoke image, avoiding Docker Hub pulls for the
+Vale image build path.
+
+PowerShell:
+
+```powershell
+./benchmarks/smoke-gossip-cluster.ps1 -LocalBuild
+```
+
+POSIX shells:
+
+```bash
+LOCAL_BUILD=1 ./benchmarks/smoke-gossip-cluster.sh
+```
+
+Use `-Keep` or `KEEP=1` to keep the compose stack running for inspection.

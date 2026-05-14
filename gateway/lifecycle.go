@@ -22,7 +22,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 			In("gateway").
 			New("gateway already started")
 	}
-	g.logger.Info("gateway starting", "watch", g.config.Watch)
+	g.logger.Debug("gateway starting", "watch", g.config.Watch)
 
 	if err := g.initializeCluster(); err != nil {
 		return err
@@ -157,7 +157,7 @@ func (g *Gateway) stopWatcher() {
 			g.logger.Error("watcher close failed", "error", err)
 		}
 		g.watcher = nil
-		g.logger.Info("watcher stopped")
+		g.logger.Debug("watcher stopped")
 	}
 }
 
@@ -165,7 +165,7 @@ func (g *Gateway) stopHealthChecker() {
 	if g.health != nil {
 		g.health.Stop()
 		g.health = nil
-		g.logger.Info("health checker stopped")
+		g.logger.Debug("health checker stopped")
 	}
 }
 
@@ -177,7 +177,7 @@ func (g *Gateway) stopServers(ctx context.Context) {
 		if err := server.Shutdown(ctx); err != nil {
 			g.logger.Error("server shutdown failed", "addr", server.Addr, "error", err)
 		}
-		g.logger.Info("server stopped", "addr", server.Addr)
+		g.logger.Debug("server stopped", "addr", server.Addr)
 		return true
 	})
 }
@@ -197,7 +197,7 @@ func (g *Gateway) closeOwnedEventBus() {
 		if err := g.events.Close(); err != nil {
 			g.logger.Error("event bus close failed", "error", err)
 		}
-		g.logger.Info("event bus closed")
+		g.logger.Debug("event bus closed")
 	}
 }
 
@@ -218,7 +218,7 @@ func (g *Gateway) startWatcher(ctx context.Context) error {
 	}
 	g.watchCancel = cancel
 	g.watcher = watcher
-	g.logger.Info("watcher started")
+	g.logger.Debug("watcher started")
 	return nil
 }
 
@@ -227,7 +227,7 @@ func (g *Gateway) startHealthChecker(ctx context.Context, snapshot *runtime.Comp
 	timeout := parseDurationDefault(snapshot.HealthTimeout, 2*time.Second)
 	g.health = runtime.NewHealthCheckerWithLogger(interval, timeout, g.logger)
 	g.health.Start(ctx, g.runtime)
-	g.logger.Info("health checker started", "interval", interval, "timeout", timeout)
+	g.logger.Debug("health checker started", "interval", interval, "timeout", timeout)
 }
 
 func (g *Gateway) serveServers(servers *collectionlist.List[*http.Server], listeners *collectionlist.List[net.Listener], entrypointNames *collectionlist.List[string]) {
