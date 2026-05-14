@@ -57,12 +57,13 @@ type Gateway struct {
 	mu      sync.Mutex
 	started bool
 
-	runtime     *runtime.Gateway
-	health      *runtime.HealthChecker
-	watcher     io.Closer
-	watchCancel context.CancelFunc
-	servers     *collectionlist.List[*http.Server]
-	reload      ReloadStatusView
+	runtime      *runtime.Gateway
+	health       *runtime.HealthChecker
+	watcher      io.Closer
+	watchCancel  context.CancelFunc
+	servers      *collectionlist.List[*http.Server]
+	reload       ReloadStatusView
+	unsubReloads []func()
 }
 
 // New applies options onto DefaultConfig then NewFromConfig.

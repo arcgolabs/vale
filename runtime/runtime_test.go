@@ -154,6 +154,10 @@ func TestGatewayInvokesExtendedMetricsRecorder(t *testing.T) {
 	if metrics.reloadDurations != 1 {
 		t.Fatalf("reload durations = %d, want 1", metrics.reloadDurations)
 	}
+	gateway.ObserveReloadDebounce(100*time.Millisecond, 2)
+	if metrics.reloadDebounces != 1 {
+		t.Fatalf("reload debounces = %d, want 1", metrics.reloadDebounces)
+	}
 
 	gateway.ObserveRaftApply("data", 50*time.Millisecond, "success")
 	if metrics.raftApplys != 1 {
@@ -177,6 +181,7 @@ type testExtendedMetricsRecorder struct {
 	routeCacheHits       int
 	routeCacheMisses     int
 	reloadDurations      int
+	reloadDebounces      int
 	raftApplys           int
 	raftApplySuccess     int
 	lastReloadResult     string
@@ -216,6 +221,10 @@ func (r *testExtendedMetricsRecorder) ObserveRouteCache(hit bool) {
 
 func (r *testExtendedMetricsRecorder) ObserveReloadDuration(_ string, _ time.Duration) {
 	r.reloadDurations++
+}
+
+func (r *testExtendedMetricsRecorder) ObserveReloadDebounce(_ time.Duration, _ int) {
+	r.reloadDebounces++
 }
 
 func (r *testExtendedMetricsRecorder) ObserveRaftApply(_ string, _ time.Duration, result string) {

@@ -118,6 +118,7 @@ func (p *Provider) runReloadLoop(
 	pending := collectionset.NewSet[string]()
 	timer := time.NewTimer(time.Hour)
 	timerActive := stopTimer(timer)
+	debounceStart := time.Time{}
 	for {
 		select {
 		case <-ctx.Done():
@@ -128,10 +129,12 @@ func (p *Provider) runReloadLoop(
 			if !timerActive {
 				timer.Reset(p.reloadDebounce)
 				timerActive = true
+				debounceStart = time.Now()
 			}
 		case <-timer.C:
 			timerActive = false
-			p.reloadPending(ctx, pending, onReload, onError)
+			p.reloadPending(ctx, pending, debounceStart, onReload, onError)
+			debounceStart = time.Time{}
 		}
 	}
 }
@@ -139,6 +142,7 @@ func (p *Provider) runReloadLoop(
 func (p *Provider) reloadPending(
 	ctx context.Context,
 	pending *collectionset.Set[string],
+	debounceStart time.Time,
 	onReload func(*runtime.CompiledSnapshot),
 	onError func(error),
 ) {
@@ -149,6 +153,15 @@ func (p *Provider) reloadPending(
 	})
 	sourceNames = provider.SortedStrings(sourceNames)
 	pending.Clear()
+	if sourceNames.IsEmpty() {
+		return
+	}
+	debounceTime := time.Since(debounceStart)
+	p.publish(ctx, provider.ConfigSourceDebouncedEvent{
+		Source:       sourceNames.Join(","),
+		DebounceTime: debounceTime,
+		SourceCount:  sourceNames.Len(),
+	})
 	p.reloadNow(ctx, sourceNames.Join(","), onReload, onError)
 }
 

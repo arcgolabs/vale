@@ -2,12 +2,14 @@ package gateway
 
 import (
 	"context"
+	"github.com/arcgolabs/eventx"
 	"net"
 	"net/http"
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/vale/certstore"
+	"github.com/arcgolabs/vale/provider"
 	"github.com/arcgolabs/vale/runtime"
 	"github.com/samber/oops"
 )
@@ -35,6 +37,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 	g.runtime = runtime.NewGatewayWithMiddlewareRegistry(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled), g.config.Middleware)
 	g.recordInitialSnapshotLocked(snapshot)
 	g.publishClusterUpdate(snapshot)
+	g.startProviderObservability()
 
 	servers, listeners, entrypointNames, err := g.buildServers(ctx, snapshot)
 	if err != nil {
@@ -159,6 +162,7 @@ func (g *Gateway) stopWatcher() {
 		g.watcher = nil
 		g.logger.Debug("watcher stopped")
 	}
+	g.stopProviderObservability()
 }
 
 func (g *Gateway) stopHealthChecker() {
@@ -228,6 +232,30 @@ func (g *Gateway) startHealthChecker(ctx context.Context, snapshot *runtime.Comp
 	g.health = runtime.NewHealthCheckerWithLogger(interval, timeout, g.logger)
 	g.health.Start(ctx, g.runtime)
 	g.logger.Debug("health checker started", "interval", interval, "timeout", timeout)
+}
+
+func (g *Gateway) startProviderObservability() {
+	if g.runtime == nil || g.events == nil {
+		return
+	}
+	unsub, err := eventx.Subscribe[provider.ConfigSourceDebouncedEvent](g.events, func(_ context.Context, event provider.ConfigSourceDebouncedEvent) error {
+		g.runtime.ObserveReloadDebounce(event.DebounceTime, event.SourceCount)
+		return nil
+	})
+	if err != nil {
+		g.logger.Error("subscribe config source debounce event failed", "error", err)
+		return
+	}
+	g.unsubReloads = append(g.unsubReloads, unsub)
+}
+
+func (g *Gateway) stopProviderObservability() {
+	for _, unsubscribe := range g.unsubReloads {
+		if unsubscribe != nil {
+			unsubscribe()
+		}
+	}
+	g.unsubReloads = nil
 }
 
 func (g *Gateway) serveServers(servers *collectionlist.List[*http.Server], listeners *collectionlist.List[net.Listener], entrypointNames *collectionlist.List[string]) {

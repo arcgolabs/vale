@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/vale/config"
+	providerevents "github.com/arcgolabs/vale/provider"
 	"github.com/arcgolabs/vale/provider/memoryconfig"
 	"github.com/arcgolabs/vale/provider/merged"
 	"github.com/arcgolabs/vale/runtime"
@@ -57,6 +59,32 @@ func TestWatchCloseStopsReload(t *testing.T) {
 	assertNoReload(t, reloads, 50*time.Millisecond, "closed watcher received reload")
 }
 
+func TestWatchPublishesDebounceMetricsEvent(t *testing.T) {
+	t.Parallel()
+
+	source := newMemorySource(t, config.Default())
+	bus := eventx.New()
+	debounce := 20 * time.Millisecond
+	provider := newLoadedProviderWithBus(t, source, debounce, bus)
+	reloads, debounceEvents, closer := watchProviderWithMetrics(t, provider, bus, 1)
+	defer closeProvider(t, closer)
+
+	updateSource(t, source, configWithAdmin(":19091"))
+	updateSource(t, source, configWithAdmin(":19092"))
+
+	assertReload(t, reloads, 250*time.Millisecond)
+	debounceEvent := assertDebounceEvent(t, debounceEvents, 250*time.Millisecond)
+	if debounceEvent.SourceCount != 1 {
+		t.Fatalf("debounce SourceCount = %d, want 1", debounceEvent.SourceCount)
+	}
+	if debounceEvent.Source != "memory" {
+		t.Fatalf("debounce Source = %q, want memory", debounceEvent.Source)
+	}
+	if debounceEvent.DebounceTime < debounce {
+		t.Fatalf("debounce Delay = %s, want at least %s", debounceEvent.DebounceTime, debounce)
+	}
+}
+
 func newMemorySource(t *testing.T, cfg *config.Config) *memoryconfig.Provider {
 	t.Helper()
 	source, err := memoryconfig.New("memory", cfg)
@@ -69,6 +97,21 @@ func newMemorySource(t *testing.T, cfg *config.Config) *memoryconfig.Provider {
 func newLoadedProvider(t *testing.T, source *memoryconfig.Provider, debounce time.Duration) *merged.Provider {
 	t.Helper()
 	provider := merged.New(nil, merged.Source{Name: "memory", Provider: source})
+	provider.SetReloadDebounce(debounce)
+	if _, err := provider.Load(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return provider
+}
+
+func newLoadedProviderWithBus(
+	t *testing.T,
+	source *memoryconfig.Provider,
+	debounce time.Duration,
+	bus eventx.BusRuntime,
+) *merged.Provider {
+	t.Helper()
+	provider := merged.New(bus, merged.Source{Name: "memory", Provider: source})
 	provider.SetReloadDebounce(debounce)
 	if _, err := provider.Load(context.Background()); err != nil {
 		t.Fatal(err)
@@ -95,6 +138,58 @@ func closeProvider(t *testing.T, closer io.Closer) {
 	if err := closer.Close(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func watchProviderWithMetrics(
+	t *testing.T,
+	provider *merged.Provider,
+	bus eventx.BusRuntime,
+	buffer int,
+) (chan *runtime.CompiledSnapshot, chan providerevents.ConfigSourceDebouncedEvent, io.Closer) {
+	t.Helper()
+	reloads := make(chan *runtime.CompiledSnapshot, buffer)
+	if bus == nil {
+		t.Fatal("watchProviderWithEvents requires a non-nil bus")
+	}
+	debounceEvents := make(chan providerevents.ConfigSourceDebouncedEvent, buffer)
+	debouncedUnsub, err := eventx.Subscribe[providerevents.ConfigSourceDebouncedEvent](bus, func(_ context.Context, event providerevents.ConfigSourceDebouncedEvent) error {
+		select {
+		case debounceEvents <- event:
+		default:
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		debouncedUnsub()
+	})
+
+	closer, err := provider.Watch(context.Background(), func(snapshot *runtime.CompiledSnapshot) {
+		reloads <- snapshot
+	}, func(err error) {
+		t.Errorf("watch error: %v", err)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return reloads, debounceEvents, closer
+}
+
+func assertDebounceEvent(
+	t *testing.T,
+	events <-chan providerevents.ConfigSourceDebouncedEvent,
+	timeout time.Duration,
+) providerevents.ConfigSourceDebouncedEvent {
+	t.Helper()
+	select {
+	case event := <-events:
+		return event
+	case <-time.After(timeout):
+		t.Fatal("did not receive config source debounced event")
+	}
+	return providerevents.ConfigSourceDebouncedEvent{}
 }
 
 func updateSource(t *testing.T, source *memoryconfig.Provider, cfg *config.Config) {

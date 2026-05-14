@@ -33,20 +33,21 @@ func (noopMetrics) Handler() http.Handler {
 }
 
 type observabilityMetrics struct {
-	enabled       bool
-	requests      observabilityx.Counter
-	latency       observabilityx.Histogram
-	reloads       observabilityx.Counter
-	reloadDelay   observabilityx.Histogram
-	healthChecks  observabilityx.Counter
-	healthLatency observabilityx.Histogram
-	routeCache    observabilityx.Counter
-	routes        observabilityx.Gauge
-	services      observabilityx.Gauge
-	endpoints     observabilityx.Gauge
-	raftApply     observabilityx.Histogram
-	raftApplyOps  observabilityx.Counter
-	handler       http.Handler
+	enabled        bool
+	requests       observabilityx.Counter
+	latency        observabilityx.Histogram
+	reloads        observabilityx.Counter
+	reloadDelay    observabilityx.Histogram
+	reloadDebounce observabilityx.Histogram
+	healthChecks   observabilityx.Counter
+	healthLatency  observabilityx.Histogram
+	routeCache     observabilityx.Counter
+	routes         observabilityx.Gauge
+	services       observabilityx.Gauge
+	endpoints      observabilityx.Gauge
+	raftApply      observabilityx.Histogram
+	raftApplyOps   observabilityx.Counter
+	handler        http.Handler
 }
 
 type metricsHandler interface {
@@ -86,6 +87,11 @@ func NewObservabilityMetrics(enabled bool, obs observabilityx.Observability, han
 			observabilityx.WithDescription("Runtime reload duration in seconds."),
 			observabilityx.WithUnit("s"),
 			observabilityx.WithLabelKeys("result"),
+		)),
+		reloadDebounce: obs.Histogram(observabilityx.NewHistogramSpec("runtime_reload_debounce_delay_seconds",
+			observabilityx.WithDescription("Delay between config change and debounced reload trigger."),
+			observabilityx.WithUnit("s"),
+			observabilityx.WithLabelKeys("source_count"),
 		)),
 		healthChecks: obs.Counter(observabilityx.NewCounterSpec("health_checks_total",
 			observabilityx.WithDescription("Total endpoint health check results."),
@@ -164,6 +170,10 @@ type ReloadDurationMetricsRecorder interface {
 	ObserveReloadDuration(result string, duration time.Duration)
 }
 
+type ReloadDebounceMetricsRecorder interface {
+	ObserveReloadDebounce(delay time.Duration, sourceCount int)
+}
+
 type HealthMetricsRecorder interface {
 	ObserveHealth(endpoint *EndpointRuntime, healthy bool)
 }
@@ -204,6 +214,15 @@ func (g *Gateway) ObserveReloadDuration(result string, duration time.Duration) {
 	}
 	if recorder, ok := g.metrics.(ReloadDurationMetricsRecorder); ok {
 		recorder.ObserveReloadDuration(result, duration)
+	}
+}
+
+func (g *Gateway) ObserveReloadDebounce(delay time.Duration, sourceCount int) {
+	if g == nil {
+		return
+	}
+	if recorder, ok := g.metrics.(ReloadDebounceMetricsRecorder); ok {
+		recorder.ObserveReloadDebounce(delay, sourceCount)
 	}
 }
 
@@ -273,6 +292,17 @@ func (m *observabilityMetrics) ObserveReloadDuration(result string, duration tim
 		context.Background(),
 		duration.Seconds(),
 		observabilityx.String("result", result),
+	)
+}
+
+func (m *observabilityMetrics) ObserveReloadDebounce(delay time.Duration, sourceCount int) {
+	if !m.enabled {
+		return
+	}
+	m.reloadDebounce.Record(
+		context.Background(),
+		delay.Seconds(),
+		observabilityx.String("source_count", strconv.Itoa(sourceCount)),
 	)
 }
 

@@ -10,12 +10,13 @@ type Event = eventx.Event
 type EventBus = eventx.BusRuntime
 
 const (
-	EventNameConfigSourceLoaded  = "provider.config_source.loaded"
-	EventNameConfigSourceFailed  = "provider.config_source.failed"
-	EventNameSnapshotRecompiled  = "provider.snapshot.recompiled"
-	EventNameSnapshotUnchanged   = "provider.snapshot.unchanged"
-	EventNameWatchSetupFailed    = "provider.watch.setup_failed"
-	EventNameConfigSourceChanged = "provider.config_source.changed"
+	EventNameConfigSourceLoaded    = "provider.config_source.loaded"
+	EventNameConfigSourceFailed    = "provider.config_source.failed"
+	EventNameSnapshotRecompiled    = "provider.snapshot.recompiled"
+	EventNameSnapshotUnchanged     = "provider.snapshot.unchanged"
+	EventNameWatchSetupFailed      = "provider.watch.setup_failed"
+	EventNameConfigSourceChanged   = "provider.config_source.changed"
+	EventNameConfigSourceDebounced = "provider.config_source.debounced"
 )
 
 type ConfigSourceLoadedEvent struct {
@@ -61,3 +62,11 @@ type ConfigSourceChangedEvent struct {
 }
 
 func (e ConfigSourceChangedEvent) Name() string { return EventNameConfigSourceChanged }
+
+type ConfigSourceDebouncedEvent struct {
+	Source       string
+	DebounceTime time.Duration
+	SourceCount  int
+}
+
+func (e ConfigSourceDebouncedEvent) Name() string { return EventNameConfigSourceDebounced }
