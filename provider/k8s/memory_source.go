@@ -3,37 +3,48 @@ package k8s
 import (
 	"context"
 	"io"
-	"sync"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/vale/provider"
 )
 
 type MemorySource struct {
-	mu        sync.RWMutex
-	routes    *collectionlist.List[HTTPRoute]
-	endpoints *collectionlist.List[ServiceEndpoint]
 	watchHub  *provider.WatchHub
+	routes    *provider.StateStore[*collectionlist.List[HTTPRoute]]
+	endpoints *provider.StateStore[*collectionlist.List[ServiceEndpoint]]
 }
 
 func NewMemorySource(routes *collectionlist.List[HTTPRoute], endpoints *collectionlist.List[ServiceEndpoint]) *MemorySource {
+	if routes == nil {
+		routes = collectionlist.NewList[HTTPRoute]()
+	}
+	if endpoints == nil {
+		endpoints = collectionlist.NewList[ServiceEndpoint]()
+	}
+
 	return &MemorySource{
-		routes:    routes,
-		endpoints: endpoints,
-		watchHub:  provider.NewWatchHub(),
+		watchHub: provider.NewWatchHub(),
+		routes: provider.NewStateStore(routes, func(routes *collectionlist.List[HTTPRoute]) *collectionlist.List[HTTPRoute] {
+			if routes == nil {
+				return collectionlist.NewList[HTTPRoute]()
+			}
+			return routes.Clone()
+		}),
+		endpoints: provider.NewStateStore(endpoints, func(endpoints *collectionlist.List[ServiceEndpoint]) *collectionlist.List[ServiceEndpoint] {
+			if endpoints == nil {
+				return collectionlist.NewList[ServiceEndpoint]()
+			}
+			return endpoints.Clone()
+		}),
 	}
 }
 
 func (s *MemorySource) ListRoutes(_ context.Context) (*collectionlist.List[HTTPRoute], error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.routes.Clone(), nil
+	return s.routes.Load(), nil
 }
 
 func (s *MemorySource) ListEndpoints(_ context.Context) (*collectionlist.List[ServiceEndpoint], error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.endpoints.Clone(), nil
+	return s.endpoints.Load(), nil
 }
 
 func (s *MemorySource) Watch(_ context.Context, onReload func(), _ func(error)) (io.Closer, error) {
@@ -41,10 +52,7 @@ func (s *MemorySource) Watch(_ context.Context, onReload func(), _ func(error)) 
 }
 
 func (s *MemorySource) Update(routes *collectionlist.List[HTTPRoute], endpoints *collectionlist.List[ServiceEndpoint]) {
-	s.mu.Lock()
-	s.routes = routes
-	s.endpoints = endpoints
-	s.mu.Unlock()
-
+	s.routes.Set(routes)
+	s.endpoints.Set(endpoints)
 	s.watchHub.Notify()
 }
