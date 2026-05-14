@@ -130,7 +130,7 @@ func (c *Catalog) Routes(filter RouteFilter) (*collectionlist.List[RouteRecord],
 		return routes, nil
 	}
 	filter = normalizeRouteFilter(filter)
-	index, args := routeLookup(filter)
+	index, args, skipFilter := routeLookup(filter)
 	txn := c.db.Txn(false)
 	defer txn.Abort()
 	it, err := txn.Get(catalogTableRoute, index, args...)
@@ -148,7 +148,7 @@ func (c *Catalog) Routes(filter RouteFilter) (*collectionlist.List[RouteRecord],
 				With("table", catalogTableRoute, "index", index, "type", fmt.Sprintf("%T", item)).
 				New("catalog route record has unexpected type")
 		}
-		if routeMatchesFilter(route, filter) {
+		if !skipFilter || routeMatchesFilter(route, filter) {
 			routes.Add(route)
 		}
 	}
@@ -193,53 +193,65 @@ func filterRouteViews(routes *collectionlist.List[RouteView], filter RouteFilter
 	})
 }
 
-func routeLookup(filter RouteFilter) (string, []any) {
+func routeLookup(filter RouteFilter) (string, []any, bool) {
 	candidate, ok := collectionlist.FindList(routeLookupCandidates(filter), func(_ int, candidate routeLookupCandidate) bool {
 		return candidate.enabled
 	})
 	if !ok {
-		return "id", nil
+		return "id", nil, false
 	}
-	return candidate.index, candidate.args
+	return candidate.index, candidate.args, candidate.skipFilter
 }
 
 type routeLookupCandidate struct {
-	index   string
-	args    []any
-	enabled bool
+	index      string
+	args       []any
+	enabled    bool
+	skipFilter bool
 }
 
 func routeLookupCandidates(filter RouteFilter) *collectionlist.List[routeLookupCandidate] {
 	return collectionlist.NewList(
 		routeLookupCandidate{
-			index:   "entrypoint_host_path_prefix_service",
-			args:    []any{filter.Entrypoint, filter.Host, filter.PathPrefix, filter.Service},
-			enabled: filter.Entrypoint != "" && filter.Host != "" && filter.PathPrefix != "" && filter.Service != "",
+			index:      "entrypoint_host_path_prefix_service",
+			args:       []any{filter.Entrypoint, filter.Host, filter.PathPrefix, filter.Service},
+			enabled:    filter.Entrypoint != "" && filter.Host != "" && filter.PathPrefix != "" && filter.Service != "",
+			skipFilter: true,
 		},
 		routeLookupCandidate{
-			index:   "entrypoint_host_path_prefix",
-			args:    []any{filter.Entrypoint, filter.Host, filter.PathPrefix},
-			enabled: filter.Entrypoint != "" && filter.Host != "" && filter.PathPrefix != "",
+			index:      "entrypoint_host_path_prefix",
+			args:       []any{filter.Entrypoint, filter.Host, filter.PathPrefix},
+			enabled:    filter.Entrypoint != "" && filter.Host != "" && filter.PathPrefix != "",
+			skipFilter: true,
 		},
 		routeLookupCandidate{
-			index:   "entrypoint_service",
-			args:    []any{filter.Entrypoint, filter.Service},
-			enabled: filter.Entrypoint != "" && filter.Service != "",
+			index:      "host_path_prefix",
+			args:       []any{filter.Host, filter.PathPrefix},
+			enabled:    filter.Host != "" && filter.PathPrefix != "",
+			skipFilter: true,
 		},
 		routeLookupCandidate{
-			index:   "entrypoint_host",
-			args:    []any{filter.Entrypoint, filter.Host},
-			enabled: filter.Entrypoint != "" && filter.Host != "",
+			index:      "entrypoint_service",
+			args:       []any{filter.Entrypoint, filter.Service},
+			enabled:    filter.Entrypoint != "" && filter.Service != "",
+			skipFilter: true,
 		},
 		routeLookupCandidate{
-			index:   "entrypoint_path_prefix",
-			args:    []any{filter.Entrypoint, filter.PathPrefix},
-			enabled: filter.Entrypoint != "" && filter.PathPrefix != "",
+			index:      "entrypoint_host",
+			args:       []any{filter.Entrypoint, filter.Host},
+			enabled:    filter.Entrypoint != "" && filter.Host != "",
+			skipFilter: true,
 		},
-		routeLookupCandidate{index: "entrypoint", args: []any{filter.Entrypoint}, enabled: filter.Entrypoint != ""},
-		routeLookupCandidate{index: "service", args: []any{filter.Service}, enabled: filter.Service != ""},
-		routeLookupCandidate{index: "host", args: []any{filter.Host}, enabled: filter.Host != ""},
-		routeLookupCandidate{index: "path_prefix", args: []any{filter.PathPrefix}, enabled: filter.PathPrefix != ""},
+		routeLookupCandidate{
+			index:      "entrypoint_path_prefix",
+			args:       []any{filter.Entrypoint, filter.PathPrefix},
+			enabled:    filter.Entrypoint != "" && filter.PathPrefix != "",
+			skipFilter: true,
+		},
+		routeLookupCandidate{index: "entrypoint", args: []any{filter.Entrypoint}, enabled: filter.Entrypoint != "", skipFilter: true},
+		routeLookupCandidate{index: "service", args: []any{filter.Service}, enabled: filter.Service != "", skipFilter: true},
+		routeLookupCandidate{index: "host", args: []any{filter.Host}, enabled: filter.Host != "", skipFilter: true},
+		routeLookupCandidate{index: "path_prefix", args: []any{filter.PathPrefix}, enabled: filter.PathPrefix != "", skipFilter: true},
 	)
 }
 

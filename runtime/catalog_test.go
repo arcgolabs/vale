@@ -57,6 +57,31 @@ func TestCatalogQueriesRoutesByServiceAndEntrypoint(t *testing.T) {
 	}
 }
 
+func TestCatalogQueryRoutesByHostAndPathPrefixAcrossEntrypoints(t *testing.T) {
+	t.Parallel()
+
+	endpoint, err := valeruntime.NewEndpoint("http://127.0.0.1:8081", 1, http.DefaultServeMux)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := valeruntime.NewService("api", "round_robin", endpoint)
+	snapshot := valeruntime.NewSnapshot().
+		AddEntrypoint("web", ":8080", valeruntime.EntrypointRuntime{}).
+		AddEntrypoint("admin", ":8081", valeruntime.EntrypointRuntime{}).
+		AddService(service).
+		AddRoute(valeruntime.NewRoute("web-route", "web", service).WithHost("api.example.com").WithPathPrefix("/api")).
+		AddRoute(valeruntime.NewRoute("admin-route", "admin", service).WithHost("api.example.com").WithPathPrefix("/api")).
+		BuildMatchers()
+
+	byHostAndPathPrefix := snapshot.QueryRoutes(valeruntime.RouteFilter{
+		Host:       "api.example.com",
+		PathPrefix: "/api",
+	})
+	if byHostAndPathPrefix.Len() != 2 {
+		t.Fatalf("routes by host and path_prefix len = %d, want 2", byHostAndPathPrefix.Len())
+	}
+}
+
 func TestCatalogFallsBackWhenMissing(t *testing.T) {
 	t.Parallel()
 
