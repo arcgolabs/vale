@@ -8,6 +8,9 @@ on:
       - .github/workflows/release.yml
     tags:
       - "v*"
+      - "*/v*"
+      - "*/*/v*"
+      - "*/*/*/v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -36,9 +39,13 @@ jobs:
           set -euo pipefail
 
           tag=""
+          module_path="."
+          is_root="false"
+          module_version=""
+
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             tag="${{ inputs.tag }}"
-          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             tag="${GITHUB_REF_NAME}"
           elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             message="$(jq -r '.head_commit.message // ""' "${GITHUB_EVENT_PATH}")"
@@ -53,8 +60,46 @@ jobs:
             exit 0
           fi
 
+          if [[ "${tag}" == v* ]]; then
+            module_path="."
+            is_root="true"
+            module_version="${tag}"
+          elif [[ "${tag}" == */v* ]]; then
+            module_path="${tag%/*}"
+            module_version="${tag##*/}"
+            if [[ ! -d "${module_path}" ]]; then
+              echo "skip=true" >> "${GITHUB_OUTPUT}"
+              echo "Tag ${tag} points to unknown module path: ${module_path}." >&2
+              exit 0
+            fi
+            if [[ "${module_version}" != v* ]]; then
+              echo "skip=true" >> "${GITHUB_OUTPUT}"
+              echo "Tag ${tag} has invalid module version suffix: ${module_version}." >&2
+              exit 0
+            fi
+          else
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+            echo "Tag ${tag} does not match a supported release format." >&2
+            exit 0
+          fi
+
+          module_slug="${module_path//\//-}"
+          if [[ "${module_slug}" == "." ]]; then
+            module_slug="core"
+          fi
+
+          release_title="Vale ${tag}"
+          if [[ "${is_root}" == "false" ]]; then
+            release_title="Vale (${module_path}) ${module_version}"
+          fi
+
           echo "skip=false" >> "${GITHUB_OUTPUT}"
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "module_path=${module_path}" >> "${GITHUB_OUTPUT}"
+          echo "module_version=${module_version}" >> "${GITHUB_OUTPUT}"
+          echo "module_slug=${module_slug}" >> "${GITHUB_OUTPUT}"
+          echo "release_title=${release_title}" >> "${GITHUB_OUTPUT}"
+          echo "is_root=${is_root}" >> "${GITHUB_OUTPUT}"
 
       - name: Checkout
         if: steps.release.outputs.skip != 'true'
@@ -74,32 +119,34 @@ jobs:
           echo "commit=$(git rev-parse --short=12 HEAD)" >> "${GITHUB_OUTPUT}"
           echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"
 
-      - name: Set up Go
-        if: steps.release.outputs.skip != 'true'
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
       - name: Build release notes
         if: steps.release.outputs.skip != 'true'
         shell: bash
         run: |
           set -euo pipefail
-          tag="${{ steps.release.outputs.tag }}"
+          module_version="${{ steps.release.outputs.module_version }}"
 
-          awk -v tag="${tag}" '
+          awk -v tag="${module_version}" '
             $0 == "## " tag || $0 ~ ("^## " tag " - ") { found = 1; next }
             found && /^## / { exit }
             found { print }
           ' CHANGELOG.md > release-notes.md
 
           if ! grep -q '[^[:space:]]' release-notes.md; then
-            printf 'See CHANGELOG.md for %s.\n' "${tag}" > release-notes.md
+            printf 'See CHANGELOG.md for %s.\n' "${module_version}" > release-notes.md
           fi
 
-      - name: Build release artifacts
-        if: steps.release.outputs.skip != 'true'
+      - name: Set up Go
+        if: >
+          steps.release.outputs.skip != 'true' &&
+          (steps.release.outputs.is_root == 'true' || steps.release.outputs.module_path == 'cmd')
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build root release artifacts
+        if: steps.release.outputs.skip != 'true' && steps.release.outputs.is_root == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -151,8 +198,69 @@ jobs:
 
           (cd dist/artifacts && sha256sum *.tar.gz *.zip > checksums.txt)
 
+      - name: Build cmd module artifacts
+        if: steps.release.outputs.skip != 'true' && steps.release.outputs.module_path == 'cmd'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          module_version="${{ steps.release.outputs.module_version }}"
+          commit="${{ steps.tag.outputs.commit }}"
+          date="${{ steps.tag.outputs.date }}"
+          ldflags="-s -w -X main.version=${module_version} -X main.commit=${commit} -X main.date=${date}"
+          platforms=(
+            linux/amd64
+            linux/arm64
+            darwin/amd64
+            darwin/arm64
+            windows/amd64
+            windows/arm64
+          )
+
+          mkdir -p dist/artifacts dist/work
+          for platform in "${platforms[@]}"; do
+            os="${platform%/*}"
+            arch="${platform#*/}"
+            artifact="valed_cmd_${module_version}_${os}_${arch}"
+            binary="valed"
+            archive="${artifact}.tar.gz"
+            if [[ "${os}" == "windows" ]]; then
+              binary="valed.exe"
+              archive="${artifact}.zip"
+            fi
+
+            mkdir -p "dist/work/${artifact}"
+            GOOS="${os}" GOARCH="${arch}" CGO_ENABLED=0 \
+              go build -C cmd -trimpath -ldflags="${ldflags}" -o "../dist/work/${artifact}/${binary}" .
+            cp README.md LICENSE "dist/work/${artifact}/"
+
+            if [[ "${os}" == "windows" ]]; then
+              (cd "dist/work/${artifact}" && zip -qr "../../artifacts/${archive}" .)
+            else
+              tar -C "dist/work/${artifact}" -czf "dist/artifacts/${archive}" .
+            fi
+            rm -rf "dist/work/${artifact}"
+          done
+
+          (cd dist/artifacts && sha256sum *.tar.gz *.zip > checksums.txt)
+
+      - name: Build module source artifacts
+        if: steps.release.outputs.skip != 'true' && steps.release.outputs.is_root != 'true' && steps.release.outputs.module_path != 'cmd'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          module_path="${{ steps.release.outputs.module_path }}"
+          module_slug="${{ steps.release.outputs.module_slug }}"
+          module_version="${{ steps.release.outputs.module_version }}"
+          tag="${{ steps.release.outputs.tag }}"
+
+          mkdir -p dist/artifacts
+          git archive --format=zip --output="dist/artifacts/${module_slug}_${module_version}.zip" "${tag}" "${module_path}"
+          (cd dist/artifacts && sha256sum *.zip > checksums.txt)
+
       - name: Prepare container image metadata
-        if: steps.release.outputs.skip != 'true'
+        if: steps.release.outputs.skip != 'true' && steps.release.outputs.is_root == 'true'
         id: image
         env:
           PRERELEASE: ${{ inputs.prerelease || 'false' }}
@@ -182,15 +290,15 @@ jobs:
           cp Dockerfile.release dist/image/Dockerfile
 
       - name: Set up QEMU
-        if: steps.release.outputs.skip != 'true'
+        if: steps.release.outputs.skip != 'true' && steps.release.outputs.is_root == 'true'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        if: steps.release.outputs.skip != 'true'
+        if: steps.release.outputs.skip != 'true' && steps.release.outputs.is_root == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        if: steps.release.outputs.skip != 'true'
+        if: steps.release.outputs.skip != 'true' && steps.release.outputs.is_root == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -198,7 +306,7 @@ jobs:
           password: ${{ github.token }}
 
       - name: Build and push container image
-        if: steps.release.outputs.skip != 'true'
+        if: steps.release.outputs.skip != 'true' && steps.release.outputs.is_root == 'true'
         uses: docker/build-push-action@v6
         with:
           context: dist/image
@@ -223,18 +331,17 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ steps.release.outputs.tag }}"
-          title="Vale ${tag}"
 
           if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release edit "${tag}" \
               --repo "${GITHUB_REPOSITORY}" \
-              --title "${title}" \
+              --title "${{ steps.release.outputs.release_title }}" \
               --notes-file release-notes.md
           else
             args=(
               release create "${tag}"
               --repo "${GITHUB_REPOSITORY}"
-              --title "${title}"
+              --title "${{ steps.release.outputs.release_title }}"
               --notes-file release-notes.md
               --verify-tag
             )
