@@ -65,7 +65,7 @@ func (g *Gateway) closeStartFailureListeners(listeners *collectionlist.List[net.
 }
 
 func (g *Gateway) restartServersLocked(ctx context.Context, snapshot *runtime.CompiledSnapshot) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	restartCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	if g.health != nil {
@@ -73,7 +73,7 @@ func (g *Gateway) restartServersLocked(ctx context.Context, snapshot *runtime.Co
 		g.health = nil
 	}
 	g.servers.Range(func(_ int, server *http.Server) bool {
-		if err := server.Shutdown(ctx); err != nil {
+		if err := server.Shutdown(restartCtx); err != nil {
 			g.logger.Error("server shutdown before restart failed", "addr", server.Addr, "error", err)
 		}
 		return true
@@ -81,7 +81,7 @@ func (g *Gateway) restartServersLocked(ctx context.Context, snapshot *runtime.Co
 	g.servers = nil
 
 	g.runtime = runtime.NewGatewayWithMiddlewareRegistry(snapshot, g.logger, snapshot.AccessLogEnabled, g.buildMetrics(snapshot.MetricsEnabled), g.config.Middleware)
-	servers, listeners, entrypointNames, err := g.buildServers(ctx, snapshot)
+	servers, listeners, entrypointNames, err := g.buildServers(restartCtx, snapshot)
 	if err != nil {
 		g.runtime.ObserveReload("failed")
 		g.runtime = nil

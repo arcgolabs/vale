@@ -25,10 +25,11 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 - Built-in middleware plus a runtime middleware registry for embedded extensions
 - Built-in basic auth, forward auth, gzip compression, IP allow list, CORS, rate limit, circuit breaker, security headers, path/header/redirect policies
 - Static TLS and ACME with secure defaults
+- Gossip-based discovery for Raft cluster bootstrap
 
 ## Status
 
-The project has published `v0.1.0`. The public import path follows the current
+The latest root release is `v0.1.2`. The public import path follows the current
 git remote: `github.com/arcgolabs/vale`.
 
 ## Architecture Boundary
@@ -58,6 +59,16 @@ go run ./cmd
 
 The workspace should not rely on local `replace` directives in `go.mod`. As the repo grows into multiple modules, local module wiring should live in `go.work`, while each module keeps publishable module paths in its own `go.mod`.
 
+Local sibling modules are intentionally resolved by `go.work` during repository
+development. Do not add local sibling requirements or `replace` directives only
+to make a workspace build run outside `go.work`.
+
+Releases are tag-scoped:
+
+- Root releases use normal semantic tags such as `v0.1.2`.
+- Optional submodules use path-prefixed tags when they are released, for example
+  `cmd/v0.1.2`, `provider/docker/v0.1.2`, or `cluster/raftnode/v0.1.2`.
+
 Current workspace modules:
 
 - `github.com/arcgolabs/vale`: library-first core module.
@@ -71,9 +82,9 @@ Current workspace modules:
 - `github.com/arcgolabs/vale/examples/embedded_multi_provider`: example that consumes optional provider modules.
 - `github.com/arcgolabs/vale/examples/embedded_static_config`: example that consumes the core event bus.
 
-Local workspace modules are intentionally not declared as `replace` directives. `go.work`
-resolves them during repository development; published modules should use real released
-versions when consumed outside this workspace.
+Local workspace modules are intentionally not declared as `replace` directives.
+`go.work` resolves them during repository development; released submodules are
+identified by their own module path tags.
 
 ## arcgolabs Integration
 
@@ -107,7 +118,7 @@ go run ./cmd
 Run the published container image:
 
 ```bash
-docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.0
+docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.2
 ```
 
 To run with an HCL file, copy sample config:
@@ -401,6 +412,41 @@ memberlist-based discovery. Gossip only discovers candidates; the current Raft
 leader still performs Dragonboat membership changes. Nodes started with
 `--gossip-seeds` and no explicit `--raft-bootstrap` flag join as non-bootstrap
 nodes by default, so only the first node needs to bootstrap.
+
+Example three-node cluster:
+
+```powershell
+docker network create vale-cluster
+
+docker run -d --name vale-1 --network vale-cluster -p 19091:19090 `
+  ghcr.io/arcgolabs/vale:v0.1.2 `
+  --raft-node-id node-1 `
+  --raft-bind vale-1:17000 `
+  --raft-bootstrap=true `
+  --cluster-discovery gossip `
+  --gossip-bind :17100
+
+docker run -d --name vale-2 --network vale-cluster -p 19092:19090 `
+  ghcr.io/arcgolabs/vale:v0.1.2 `
+  --raft-node-id node-2 `
+  --raft-bind vale-2:17000 `
+  --cluster-discovery gossip `
+  --gossip-bind :17100 `
+  --gossip-seeds vale-1:17100
+
+docker run -d --name vale-3 --network vale-cluster -p 19093:19090 `
+  ghcr.io/arcgolabs/vale:v0.1.2 `
+  --raft-node-id node-3 `
+  --raft-bind vale-3:17000 `
+  --cluster-discovery gossip `
+  --gossip-bind :17100 `
+  --gossip-seeds vale-1:17100
+
+curl http://127.0.0.1:19091/admin/cluster/peers?group=data
+```
+
+After convergence, the `metadata`, `data`, and `certificates` groups should show
+the discovered nodes as voters.
 Embedded users can keep using `vale.WithClusterFactory` for a custom cluster
 implementation or pass an externally owned Dragonboat `NodeHost` to
 `cluster/raftnode`. When a `NodeHost` is supplied, its owner keeps responsibility
@@ -442,7 +488,7 @@ through UPX in the optimize stage to keep the runtime image small.
 For example:
 
 ```bash
-docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.0
+docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.2
 ```
 
 ## Benchmarks

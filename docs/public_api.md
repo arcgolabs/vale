@@ -43,6 +43,12 @@ embedded users; subpackages remain available for advanced wiring and optional mo
 - Runtime route catalog queries return collectionx lists and keep request matching on the optimized matcher.
 - Runtime snapshot diff helpers return collectionx-backed route/service/endpoint change sets for reload observability.
 - Admin HTTP responses are stable plain JSON DTOs and should not expose collectionx serialization details.
+- Repository-local sibling modules are resolved by `go.work` only. Optional modules
+  should not add local `replace` directives or sibling requirements just to support
+  workspace development outside `go.work`.
+- Root releases use tags such as `v0.1.2`. Optional modules are released with
+  path-prefixed tags such as `cmd/v0.1.2`, `provider/docker/v0.1.2`, or
+  `cluster/raftnode/v0.1.2`.
 - Middleware config type is strict: empty type means builtin, non-empty unknown values fail compilation.
 - Builtin middleware covers path transforms, redirects, headers, secure headers, CORS, rate limit, circuit breaker, basic auth, forward auth, gzip compression, IP allow list, body limits, and chains.
 - `cluster/raftnode` can use an externally owned Dragonboat `NodeHost`; callers own the data directories and must isolate Dragonboat `DeploymentID`, group IDs, node IDs, and NodeHost/WAL directories.
