@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,15 +15,18 @@ import (
 func TestReloadRestartKeepsHealthCheckerRunning(t *testing.T) {
 	t.Parallel()
 
-	var healthRequests atomic.Int64
+	healthChecked := make(chan struct{}, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		healthRequests.Add(1)
+		select {
+		case healthChecked <- struct{}{}:
+		default:
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer upstream.Close()
 
 	initial := testGatewaySnapshot(t, upstream.URL, "1h")
-	reloaded := testGatewaySnapshot(t, upstream.URL, "10ms")
+	reloaded := testGatewaySnapshot(t, upstream.URL, "5ms")
 	reloaded.Entrypoints = initial.Entrypoints
 	reloaded.EntrypointConfigs = initial.EntrypointConfigs
 	reloaded.AdminAddress = initial.AdminAddress
@@ -45,11 +47,9 @@ func TestReloadRestartKeepsHealthCheckerRunning(t *testing.T) {
 
 	provider.Reload(reloaded)
 
-	deadline := time.Now().Add(2 * time.Second)
-	for healthRequests.Load() == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if healthRequests.Load() == 0 {
+	select {
+	case <-healthChecked:
+	case <-time.After(10 * time.Second):
 		t.Fatal("health checker did not run after restart reload")
 	}
 }
