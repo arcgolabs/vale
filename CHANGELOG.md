@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## v0.1.2 - 2026-05-14
+
+- Added built-in forward auth middleware and Traefik-compatible `forwardauth.*` labels.
+- Added gossip-based cluster discovery backed by memberlist, with Dragonboat membership still controlled by the Raft leader.
+- Added container-validated auto-discovery flow for metadata, data, and certificates Raft groups.
+- Updated selected dependencies while preserving Dragonboat-compatible dependency boundaries.
+- Fixed extension component example module metadata for `logx`.
+
 ## v0.1.1 - 2026-05-10
 
 - Expanded Traefik-compatible Docker labels for basic auth, compression, IP allow lists, CORS, and rate limits.

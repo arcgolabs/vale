@@ -204,6 +204,10 @@ func newTestNodeWithConfig(t *testing.T, config raftnode.Config) *raftnode.Node 
 		NodeHost:       config.NodeHost,
 		LogDB:          config.LogDB,
 		Groups:         config.Groups,
+		Discovery:      config.Discovery,
+
+		DiscoveryReconcileInterval: config.DiscoveryReconcileInterval,
+		DiscoveryJoinTimeout:       config.DiscoveryJoinTimeout,
 	}, discardLogger())
 	if err != nil {
 		t.Fatal(err)

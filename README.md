@@ -371,6 +371,11 @@ Standalone flags:
 - `--raft-bind`
 - `--raft-data-dir`
 - `--raft-bootstrap`
+- `--raft-initial-members`
+- `--cluster-discovery`
+- `--gossip-bind`
+- `--gossip-advertise`
+- `--gossip-seeds`
 
 `cmd` wires the optional `cluster/raftnode` module into the gateway by default,
 starts an embedded Dragonboat node, and exposes status at:
@@ -391,6 +396,11 @@ Without `--raft-initial-members`, `valed` starts a single-replica Dragonboat
 cluster with `metadata` and `data` groups. Supplying initial members starts the
 same groups with the provided voters so the node can be expanded into a
 multi-node cluster.
+For simpler multi-node bootstrap, `--cluster-discovery=gossip` enables
+memberlist-based discovery. Gossip only discovers candidates; the current Raft
+leader still performs Dragonboat membership changes. Nodes started with
+`--gossip-seeds` and no explicit `--raft-bootstrap` flag join as non-bootstrap
+nodes by default, so only the first node needs to bootstrap.
 Embedded users can keep using `vale.WithClusterFactory` for a custom cluster
 implementation or pass an externally owned Dragonboat `NodeHost` to
 `cluster/raftnode`. When a `NodeHost` is supplied, its owner keeps responsibility
@@ -408,6 +418,11 @@ node IDs, and NodeHost/WAL directories across independent owners.
 - `VALE_RAFT_BIND`
 - `VALE_RAFT_DATA_DIR`
 - `VALE_RAFT_BOOTSTRAP`
+- `VALE_RAFT_INITIAL_MEMBERS`
+- `VALE_CLUSTER_DISCOVERY`
+- `VALE_GOSSIP_BIND`
+- `VALE_GOSSIP_ADVERTISE`
+- `VALE_GOSSIP_SEEDS`
 
 Admin/observability/health runtime knobs are read from the HCL snapshot.
 

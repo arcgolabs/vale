@@ -95,6 +95,10 @@ func provideClusterOption(cfg valedConfig) (vale.Option, error) {
 		DataDir:   cfg.RaftDataDir,
 		Bootstrap: cfg.RaftBoot,
 	}
+	discoveryConfig, discoveryEnabled, err := clusterDiscoveryConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
 	if !initialMembers.IsEmpty() {
 		raftConfig.Groups = collectionlist.NewList(
 			raftnode.GroupConfig{
@@ -112,8 +116,31 @@ func provideClusterOption(cfg valedConfig) (vale.Option, error) {
 		)
 	}
 	return vale.WithClusterFactory(func(logger *slog.Logger) (vale.Cluster, error) {
-		return raftnode.New(raftConfig, logger)
+		runtimeConfig := raftConfig
+		if discoveryEnabled {
+			runtimeConfig.Discovery = raftnode.NewMemberlistDiscovery(discoveryConfig, logger)
+		}
+		return raftnode.New(runtimeConfig, logger)
 	}), nil
+}
+
+func clusterDiscoveryConfig(cfg valedConfig) (raftnode.MemberlistDiscoveryConfig, bool, error) {
+	mode := strings.ToLower(strings.TrimSpace(cfg.ClusterDiscovery))
+	switch {
+	case mode == "" && strings.TrimSpace(cfg.GossipSeeds) == "":
+		return raftnode.MemberlistDiscoveryConfig{}, false, nil
+	case mode == "", mode == "gossip":
+		return raftnode.MemberlistDiscoveryConfig{
+			BindAddr:      cfg.GossipBind,
+			AdvertiseAddr: cfg.GossipAdvertise,
+			Seeds:         parseCSV(cfg.GossipSeeds),
+		}, true, nil
+	default:
+		return raftnode.MemberlistDiscoveryConfig{}, false, oops.
+			In("cmd").
+			With("cluster_discovery", cfg.ClusterDiscovery).
+			New("unsupported cluster discovery mode")
+	}
 }
 
 func provideEventBusOption(bus eventx.BusRuntime) vale.Option {

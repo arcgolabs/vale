@@ -14,12 +14,19 @@ import (
 )
 
 type Node struct {
-	nodeHost     *dragonboat.NodeHost
-	ownsNodeHost bool
-	groups       *mapping.Map[string, *raftGroup]
-	nodeID       uint64
-	nodeName     string
-	logger       *slog.Logger
+	nodeHost                 *dragonboat.NodeHost
+	ownsNodeHost             bool
+	groups                   *mapping.Map[string, *raftGroup]
+	nodeID                   uint64
+	nodeName                 string
+	deploymentID             uint64
+	logger                   *slog.Logger
+	discovery                Discovery
+	discoveryCancel          context.CancelFunc
+	discoveryDone            chan struct{}
+	discoveryChanged         chan struct{}
+	discoveryJoinTimeout     time.Duration
+	discoveryReconcilePeriod time.Duration
 }
 
 func New(config Config, logger *slog.Logger) (*Node, error) {
@@ -46,6 +53,7 @@ func New(config Config, logger *slog.Logger) (*Node, error) {
 		groups:       mapping.NewMap[string, *raftGroup](),
 		nodeID:       nodeID,
 		nodeName:     config.NodeID,
+		deploymentID: config.DeploymentID,
 		logger:       logger,
 	}
 	if err := node.startGroups(config); err != nil {
@@ -53,6 +61,12 @@ func New(config Config, logger *slog.Logger) (*Node, error) {
 		return nil, oops.
 			In("raftnode").
 			Wrapf(errors.Join(err, closeErr), "start raft groups")
+	}
+	if err := node.startDiscovery(config); err != nil {
+		closeErr := node.Shutdown()
+		return nil, oops.
+			In("raftnode").
+			Wrapf(errors.Join(err, closeErr), "start raft discovery")
 	}
 	return node, nil
 }
@@ -83,6 +97,10 @@ func (n *Node) Status() *mapping.Map[string, any] {
 	status.Set("enabled", true)
 	status.Set("node_id", n.nodeName)
 	status.Set("numeric_node_id", n.nodeID)
+	status.Set("discovery_enabled", n.discovery != nil)
+	if n.discovery != nil {
+		status.Set("discovered_peers", discoveryStatus(n.discovery.Peers()))
+	}
 	groups := mapping.NewMap[string, any]()
 	n.groups.Range(func(name string, group *raftGroup) bool {
 		groupStatus := mapping.NewMap[string, any]()
@@ -102,11 +120,34 @@ func (n *Node) Status() *mapping.Map[string, any] {
 	return status
 }
 
+func discoveryStatus(peers *collectionlist.List[DiscoveryNode]) *collectionlist.List[*mapping.Map[string, any]] {
+	status := collectionlist.NewList[*mapping.Map[string, any]]()
+	if peers == nil {
+		return status
+	}
+	peers.Range(func(_ int, peer DiscoveryNode) bool {
+		item := mapping.NewMap[string, any]()
+		item.Set("id", peer.ID)
+		item.Set("raft_address", peer.RaftAddress)
+		item.Set("deployment_id", peer.DeploymentID)
+		item.Set("groups", peer.Groups)
+		status.Add(item)
+		return true
+	})
+	return status
+}
+
 func (n *Node) Peers() (*collectionlist.List[*Peer], error) {
 	return n.GroupPeers(DefaultGroupName)
 }
 
 func (n *Node) GroupPeers(group string) (*collectionlist.List[*Peer], error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return n.groupPeers(ctx, group)
+}
+
+func (n *Node) groupPeers(ctx context.Context, group string) (*collectionlist.List[*Peer], error) {
 	if !n.IsEnabled() {
 		return collectionlist.NewList[*Peer](), nil
 	}
@@ -117,8 +158,6 @@ func (n *Node) GroupPeers(group string) (*collectionlist.List[*Peer], error) {
 			With("group", group).
 			New("raft group is not configured")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	membership, err := n.nodeHost.SyncGetClusterMembership(ctx, raftGroup.id)
 	if err != nil {
 		return nil, oops.
@@ -135,6 +174,12 @@ func (n *Node) AddVoter(id, address string, timeout time.Duration) error {
 }
 
 func (n *Node) AddGroupVoter(group, id, address string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return n.addGroupVoter(ctx, group, id, address)
+}
+
+func (n *Node) addGroupVoter(ctx context.Context, group, id, address string) error {
 	if !n.IsEnabled() {
 		return ErrNotRunning
 	}
@@ -151,8 +196,6 @@ func (n *Node) AddGroupVoter(group, id, address string, timeout time.Duration) e
 			With("group", group).
 			New("raft group is not configured")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 	configChangeID, err := n.syncConfigChangeID(ctx, raftGroup)
 	if err != nil {
 		return err
@@ -161,7 +204,7 @@ func (n *Node) AddGroupVoter(group, id, address string, timeout time.Duration) e
 	if err != nil {
 		return oops.
 			In("raftnode").
-			With("group", raftGroup.name, "id", id, "address", address, "timeout", timeout.String()).
+			With("group", raftGroup.name, "id", id, "address", address).
 			Wrapf(err, "add raft voter")
 	}
 	raftGroup.memberNames.Set(stableNodeID(id), id)

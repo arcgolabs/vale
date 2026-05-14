@@ -18,6 +18,10 @@ func init() {
 	f.String("raft-data-dir", "", "raft data directory")
 	f.Bool("raft-bootstrap", false, "bootstrap raft cluster if no existing state")
 	f.String("raft-initial-members", "", "comma-separated raft initial members in id=address form")
+	f.String("cluster-discovery", "", "cluster discovery mode: gossip or empty")
+	f.String("gossip-bind", "", "gossip bind address")
+	f.String("gossip-advertise", "", "gossip advertise address")
+	f.String("gossip-seeds", "", "comma-separated gossip seed addresses")
 }
 
 var rootCmd = &cobra.Command{

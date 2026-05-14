@@ -13,12 +13,36 @@ func (n *Node) Shutdown() error {
 	if n.logger != nil {
 		n.logger.Info("raft shutdown started")
 	}
+	discoveryErr := n.stopDiscovery()
 	stopErr := n.stopGroups()
 	if n.ownsNodeHost {
 		n.nodeHost.Stop()
 	}
 	n.nodeHost = nil
-	return stopErr
+	return errors.Join(discoveryErr, stopErr)
+}
+
+func (n *Node) stopDiscovery() error {
+	if n == nil || n.discovery == nil {
+		return nil
+	}
+	if n.discoveryCancel != nil {
+		n.discoveryCancel()
+	}
+	if n.discoveryDone != nil {
+		<-n.discoveryDone
+	}
+	err := n.discovery.Shutdown()
+	n.discovery = nil
+	n.discoveryCancel = nil
+	n.discoveryDone = nil
+	n.discoveryChanged = nil
+	if err != nil {
+		return oops.
+			In("raftnode").
+			Wrapf(err, "stop discovery")
+	}
+	return nil
 }
 
 func (n *Node) stopGroups() error {

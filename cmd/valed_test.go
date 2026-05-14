@@ -95,6 +95,12 @@ func TestProvideValedConfigKeepsDefaultsForUnchangedFlags(t *testing.T) {
 	if !cfg.RaftBoot {
 		t.Fatal("RaftBoot = false, want true")
 	}
+	if cfg.ClusterDiscovery != "" {
+		t.Fatalf("ClusterDiscovery = %q, want empty", cfg.ClusterDiscovery)
+	}
+	if cfg.GossipBind != "127.0.0.1:17100" {
+		t.Fatalf("GossipBind = %q, want 127.0.0.1:17100", cfg.GossipBind)
+	}
 }
 
 func TestProvideValedConfigAppliesChangedFlags(t *testing.T) {
@@ -105,6 +111,9 @@ func TestProvideValedConfigAppliesChangedFlags(t *testing.T) {
 		"--raft-node-id", "node-9",
 		"--raft-data-dir", "/tmp/vale/raft",
 		"--raft-bootstrap=false",
+		"--cluster-discovery", "gossip",
+		"--gossip-bind", "127.0.0.1:27100",
+		"--gossip-seeds", "127.0.0.1:17100",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -120,6 +129,33 @@ func TestProvideValedConfigAppliesChangedFlags(t *testing.T) {
 	}
 	if cfg.RaftBoot {
 		t.Fatal("RaftBoot = true, want false")
+	}
+	if cfg.ClusterDiscovery != "gossip" {
+		t.Fatalf("ClusterDiscovery = %q, want gossip", cfg.ClusterDiscovery)
+	}
+	if cfg.GossipBind != "127.0.0.1:27100" {
+		t.Fatalf("GossipBind = %q, want 127.0.0.1:27100", cfg.GossipBind)
+	}
+	if cfg.GossipSeeds != "127.0.0.1:17100" {
+		t.Fatalf("GossipSeeds = %q, want 127.0.0.1:17100", cfg.GossipSeeds)
+	}
+}
+
+func TestProvideValedConfigUsesGossipSeedsAsJoinerByDefault(t *testing.T) {
+	t.Parallel()
+
+	fs := newValedTestFlagSet(t)
+	if err := fs.Parse([]string{
+		"--gossip-seeds", "127.0.0.1:17100",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := provideValedConfig(fs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RaftBoot {
+		t.Fatal("RaftBoot = true, want false when gossip seeds are configured")
 	}
 }
 
@@ -160,5 +196,9 @@ func newValedTestFlagSet(t *testing.T) *pflag.FlagSet {
 	fs.String("raft-data-dir", "", "")
 	fs.Bool("raft-bootstrap", false, "")
 	fs.String("raft-initial-members", "", "")
+	fs.String("cluster-discovery", "", "")
+	fs.String("gossip-bind", "", "")
+	fs.String("gossip-advertise", "", "")
+	fs.String("gossip-seeds", "", "")
 	return fs
 }

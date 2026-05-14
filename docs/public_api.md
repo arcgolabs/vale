@@ -46,3 +46,4 @@ embedded users; subpackages remain available for advanced wiring and optional mo
 - Middleware config type is strict: empty type means builtin, non-empty unknown values fail compilation.
 - Builtin middleware covers path transforms, redirects, headers, secure headers, CORS, rate limit, circuit breaker, basic auth, forward auth, gzip compression, IP allow list, body limits, and chains.
 - `cluster/raftnode` can use an externally owned Dragonboat `NodeHost`; callers own the data directories and must isolate Dragonboat `DeploymentID`, group IDs, node IDs, and NodeHost/WAL directories.
+- `cluster/raftnode` exposes a discovery interface. The built-in memberlist implementation only discovers candidate peers; Raft membership remains leader-controlled through Dragonboat config changes.

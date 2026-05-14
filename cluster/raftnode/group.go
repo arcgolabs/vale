@@ -76,6 +76,9 @@ func normalizeGroupConfig(config Config, groupConfig GroupConfig) GroupConfig {
 	if groupConfig.InitialMembers == nil || groupConfig.InitialMembers.IsEmpty() {
 		groupConfig.Bootstrap = groupConfig.Bootstrap || config.Bootstrap
 	}
+	if config.Discovery != nil && !groupConfig.Bootstrap && (groupConfig.InitialMembers == nil || groupConfig.InitialMembers.IsEmpty()) {
+		groupConfig.Join = true
+	}
 	return groupConfig
 }
 

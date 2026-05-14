@@ -26,6 +26,11 @@ type valedConfig struct {
 	RaftDataDir string `koanf:"raft_data_dir"`
 	RaftBoot    bool   `koanf:"raft_bootstrap"`
 	RaftMembers string `koanf:"raft_initial_members"`
+
+	ClusterDiscovery string `koanf:"cluster_discovery"`
+	GossipBind       string `koanf:"gossip_bind"`
+	GossipAdvertise  string `koanf:"gossip_advertise"`
+	GossipSeeds      string `koanf:"gossip_seeds"`
 }
 
 // valedStandaloneApp is the sole DI assembly entry for this process.
@@ -69,6 +74,9 @@ func provideValedConfig(fs *pflag.FlagSet) (valedConfig, error) {
 	if err != nil {
 		return def, err
 	}
+	if shouldJoinGossipCluster(fs, cfg) {
+		cfg.RaftBoot = false
+	}
 	return cfg, nil
 }
 
@@ -83,6 +91,11 @@ func defaultValedConfig() valedConfig {
 		RaftDataDir: "./data/raft",
 		RaftBoot:    true,
 		RaftMembers: "",
+
+		ClusterDiscovery: "",
+		GossipBind:       "127.0.0.1:17100",
+		GossipAdvertise:  "",
+		GossipSeeds:      "",
 	}
 }
 
@@ -97,7 +110,23 @@ func defaultValedConfigValues(cfg valedConfig) map[string]any {
 		"raft_data_dir":        cfg.RaftDataDir,
 		"raft_bootstrap":       cfg.RaftBoot,
 		"raft_initial_members": cfg.RaftMembers,
+		"cluster_discovery":    cfg.ClusterDiscovery,
+		"gossip_bind":          cfg.GossipBind,
+		"gossip_advertise":     cfg.GossipAdvertise,
+		"gossip_seeds":         cfg.GossipSeeds,
 	}
+}
+
+func shouldJoinGossipCluster(fs *pflag.FlagSet, cfg valedConfig) bool {
+	if fs == nil || fs.Changed("raft-bootstrap") {
+		return false
+	}
+	return strings.TrimSpace(cfg.GossipSeeds) != "" && gossipDiscoveryEnabled(cfg)
+}
+
+func gossipDiscoveryEnabled(cfg valedConfig) bool {
+	mode := strings.ToLower(strings.TrimSpace(cfg.ClusterDiscovery))
+	return mode == "gossip" || (mode == "" && strings.TrimSpace(cfg.GossipSeeds) != "")
 }
 
 func cliFlagKoanfPath(name string) string {

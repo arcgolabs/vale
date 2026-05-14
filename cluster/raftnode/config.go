@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
@@ -33,6 +34,10 @@ type Config struct {
 	NodeHost       *dragonboat.NodeHost
 	LogDB          dragonconfig.LogDBConfig
 	Groups         *collectionlist.List[GroupConfig]
+	Discovery      Discovery
+
+	DiscoveryReconcileInterval time.Duration
+	DiscoveryJoinTimeout       time.Duration
 }
 
 type GroupConfig struct {
