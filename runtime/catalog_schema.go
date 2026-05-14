@@ -17,6 +17,13 @@ func catalogSchema() *memdb.DBSchema {
 					"entrypoint_host":             compoundStringIndex("entrypoint_host", "Entrypoint", "Host"),
 					"entrypoint_path_prefix":      compoundStringIndex("entrypoint_path_prefix", "Entrypoint", "PathPrefix"),
 					"entrypoint_host_path_prefix": compoundStringIndex("entrypoint_host_path_prefix", "Entrypoint", "Host", "PathPrefix"),
+					"entrypoint_host_path_prefix_service": compoundStringIndex(
+						"entrypoint_host_path_prefix_service",
+						"Entrypoint",
+						"Host",
+						"PathPrefix",
+						"Service",
+					),
 				},
 			},
 			catalogTableService: {

@@ -212,6 +212,11 @@ type routeLookupCandidate struct {
 func routeLookupCandidates(filter RouteFilter) *collectionlist.List[routeLookupCandidate] {
 	return collectionlist.NewList(
 		routeLookupCandidate{
+			index:   "entrypoint_host_path_prefix_service",
+			args:    []any{filter.Entrypoint, filter.Host, filter.PathPrefix, filter.Service},
+			enabled: filter.Entrypoint != "" && filter.Host != "" && filter.PathPrefix != "" && filter.Service != "",
+		},
+		routeLookupCandidate{
 			index:   "entrypoint_host_path_prefix",
 			args:    []any{filter.Entrypoint, filter.Host, filter.PathPrefix},
 			enabled: filter.Entrypoint != "" && filter.Host != "" && filter.PathPrefix != "",
