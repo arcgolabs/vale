@@ -32,6 +32,7 @@ type (
 	EntrypointOption   = provider.EntrypointOption
 	RouteOption        = provider.RouteOption
 	MiddlewareOption   = provider.MiddlewareOption
+	ForwardAuthOption  = provider.ForwardAuthOption
 )
 
 func NewSnapshot() *RuntimeSnapshot {
@@ -163,4 +164,32 @@ func MiddlewareCompress(minBytes int) MiddlewareOption {
 
 func MiddlewareIPAllowList(trustForwardHeader bool, sourceRange ...string) MiddlewareOption {
 	return provider.MiddlewareIPAllowList(trustForwardHeader, sourceRange...)
+}
+
+func MiddlewareForwardAuth(address string, options ...ForwardAuthOption) MiddlewareOption {
+	return provider.MiddlewareForwardAuth(address, options...)
+}
+
+func ForwardAuthTimeout(timeout string) ForwardAuthOption {
+	return provider.ForwardAuthTimeout(timeout)
+}
+
+func ForwardAuthTrustForwardHeader(enabled bool) ForwardAuthOption {
+	return provider.ForwardAuthTrustForwardHeader(enabled)
+}
+
+func ForwardAuthForwardBody(maxBodyBytes int64) ForwardAuthOption {
+	return provider.ForwardAuthForwardBody(maxBodyBytes)
+}
+
+func ForwardAuthRequestHeaders(headers ...string) ForwardAuthOption {
+	return provider.ForwardAuthRequestHeaders(headers...)
+}
+
+func ForwardAuthResponseHeaders(headers ...string) ForwardAuthOption {
+	return provider.ForwardAuthResponseHeaders(headers...)
+}
+
+func ForwardAuthMaxResponseBodyBytes(maxBodyBytes int64) ForwardAuthOption {
+	return provider.ForwardAuthMaxResponseBodyBytes(maxBodyBytes)
 }

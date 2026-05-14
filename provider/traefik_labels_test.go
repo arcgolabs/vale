@@ -36,6 +36,14 @@ func TestParseTraefikLabelsProjectsHTTPResources(t *testing.T) {
 		"traefik.http.middlewares.allow.ipallowlist.trustforwardheader":               "true",
 		"traefik.http.middlewares.limit.ratelimit.average":                            "10",
 		"traefik.http.middlewares.limit.ratelimit.burst":                              "20",
+		"traefik.http.middlewares.forward.forwardauth.address":                        "http://auth.local/validate",
+		"traefik.http.middlewares.forward.forwardauth.trustforwardheader":             "true",
+		"traefik.http.middlewares.forward.forwardauth.authrequestheaders":             "Authorization,X-Request-ID",
+		"traefik.http.middlewares.forward.forwardauth.authresponseheaders":            "X-Authenticated-Subject",
+		"traefik.http.middlewares.forward.forwardauth.forwardbody":                    "true",
+		"traefik.http.middlewares.forward.forwardauth.maxbodysize":                    "4096",
+		"traefik.http.middlewares.forward.forwardauth.maxresponsebodysize":            "2048",
+		"traefik.http.middlewares.forward.forwardauth.timeout":                        "750ms",
 		"traefik.http.middlewares.cors.headers.accesscontrolalloworiginlist":          "https://ui.example.com,https://admin.example.com",
 		"traefik.http.middlewares.cors.headers.accesscontrolallowmethods":             "GET,POST",
 		"traefik.http.middlewares.cors.headers.accesscontrolallowcredentials":         "true",
@@ -141,6 +149,7 @@ func assertTraefikPolicyMiddlewares(t *testing.T, labels provider.TraefikLabels)
 	assertTraefikCompressMiddleware(t, labels)
 	assertTraefikIPAllowListMiddleware(t, labels)
 	assertTraefikRateLimitMiddleware(t, labels)
+	assertTraefikForwardAuthMiddleware(t, labels)
 	assertTraefikCORSMiddleware(t, labels)
 }
 
@@ -173,6 +182,22 @@ func assertTraefikRateLimitMiddleware(t *testing.T, labels provider.TraefikLabel
 	limit, _ := labels.Middlewares.Get("limit")
 	if limit.RateLimit == nil || limit.RateLimit.Rate != 10 || limit.RateLimit.Burst != 20 {
 		t.Fatalf("rate limit = %#v", limit.RateLimit)
+	}
+}
+
+func assertTraefikForwardAuthMiddleware(t *testing.T, labels provider.TraefikLabels) {
+	t.Helper()
+	forward, _ := labels.Middlewares.Get("forward")
+	if forward.ForwardAuth == nil ||
+		forward.ForwardAuth.Address != "http://auth.local/validate" ||
+		!forward.ForwardAuth.TrustForwardHeader ||
+		!forward.ForwardAuth.ForwardBody ||
+		forward.ForwardAuth.MaxBodyBytes != 4096 ||
+		forward.ForwardAuth.MaxResponseBodyBytes != 2048 ||
+		forward.ForwardAuth.Timeout != "750ms" ||
+		len(forward.ForwardAuth.AuthRequestHeaders) != 2 ||
+		forward.ForwardAuth.AuthResponseHeaders[0] != "X-Authenticated-Subject" {
+		t.Fatalf("forward auth = %#v", forward.ForwardAuth)
 	}
 }
 

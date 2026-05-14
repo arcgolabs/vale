@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
+	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	collectionset "github.com/arcgolabs/collectionx/set"
@@ -18,6 +20,7 @@ var middlewareValidators = collectionlist.NewList[middlewareValidator](
 	validateSecurePolicy,
 	validateCompressPolicy,
 	validateIPAllowListPolicy,
+	validateForwardAuthPolicy,
 )
 
 func validateMiddleware(middleware *Middleware, middlewareSet *collectionset.Set[string]) error {
@@ -91,6 +94,56 @@ func validateIPAllowListPolicy(middleware *Middleware) error {
 		if _, _, err := net.ParseCIDR(source); err != nil {
 			return fmt.Errorf("middleware %q ip_allow_list source_range %q is not an IP or CIDR", middleware.Name, source)
 		}
+	}
+	return nil
+}
+
+func validateForwardAuthPolicy(middleware *Middleware) error {
+	if middleware.ForwardAuth == nil {
+		return nil
+	}
+	if err := validateForwardAuthAddress(middleware.Name, middleware.ForwardAuth.Address); err != nil {
+		return err
+	}
+	if err := validateForwardAuthTimeout(middleware.Name, middleware.ForwardAuth.Timeout); err != nil {
+		return err
+	}
+	return validateForwardAuthLimits(middleware.Name, middleware.ForwardAuth)
+}
+
+func validateForwardAuthAddress(middlewareName, rawAddress string) error {
+	address := strings.TrimSpace(rawAddress)
+	if address == "" {
+		return fmt.Errorf("middleware %q forward_auth address cannot be empty", middlewareName)
+	}
+	parsed, err := url.Parse(address)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("middleware %q forward_auth address %q is invalid", middlewareName, address)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("middleware %q forward_auth address scheme must be http or https", middlewareName)
+	}
+	return nil
+}
+
+func validateForwardAuthTimeout(middlewareName, rawTimeout string) error {
+	timeout := strings.TrimSpace(rawTimeout)
+	if timeout == "" {
+		return nil
+	}
+	parsedTimeout, err := time.ParseDuration(timeout)
+	if err != nil || parsedTimeout <= 0 {
+		return fmt.Errorf("middleware %q forward_auth timeout %q is invalid", middlewareName, timeout)
+	}
+	return nil
+}
+
+func validateForwardAuthLimits(middlewareName string, forwardAuth *ForwardAuth) error {
+	if forwardAuth.MaxBodyBytes < 0 {
+		return fmt.Errorf("middleware %q forward_auth max_body_bytes cannot be negative", middlewareName)
+	}
+	if forwardAuth.MaxResponseBodyBytes < 0 {
+		return fmt.Errorf("middleware %q forward_auth max_response_body_bytes cannot be negative", middlewareName)
 	}
 	return nil
 }

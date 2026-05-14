@@ -3,6 +3,7 @@ package compiler
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
@@ -55,6 +56,7 @@ func compileMiddleware(middleware *config.Middleware, supportedTypes *collection
 		BasicAuth:              compileBasicAuth(middleware.BasicAuth),
 		Compress:               compileCompress(middleware.Compress),
 		IPAllowList:            compileIPAllowList(middleware.IPAllowList),
+		ForwardAuth:            compileForwardAuth(middleware.ForwardAuth),
 	}, nil
 }
 
@@ -213,6 +215,30 @@ func compileIPAllowList(ipAllowList *config.IPAllowList) runtime.IPAllowListRunt
 		Enabled:            ipAllowList.Enabled || !sourceRange.IsEmpty(),
 		SourceRange:        sourceRange,
 		TrustForwardHeader: ipAllowList.TrustForwardHeader,
+	}
+}
+
+func compileForwardAuth(forwardAuth *config.ForwardAuth) runtime.ForwardAuthRuntime {
+	if forwardAuth == nil {
+		return runtime.ForwardAuthRuntime{}
+	}
+	timeout := 5 * time.Second
+	if strings.TrimSpace(forwardAuth.Timeout) != "" {
+		parsed, err := time.ParseDuration(strings.TrimSpace(forwardAuth.Timeout))
+		if err == nil && parsed > 0 {
+			timeout = parsed
+		}
+	}
+	return runtime.ForwardAuthRuntime{
+		Enabled:              forwardAuth.Enabled || strings.TrimSpace(forwardAuth.Address) != "",
+		Address:              strings.TrimSpace(forwardAuth.Address),
+		Timeout:              timeout,
+		TrustForwardHeader:   forwardAuth.TrustForwardHeader,
+		ForwardBody:          forwardAuth.ForwardBody,
+		MaxBodyBytes:         forwardAuth.MaxBodyBytes,
+		AuthRequestHeaders:   cleanStringList(forwardAuth.AuthRequestHeaders),
+		AuthResponseHeaders:  cleanStringList(forwardAuth.AuthResponseHeaders),
+		MaxResponseBodyBytes: forwardAuth.MaxResponseBodyBytes,
 	}
 }
 

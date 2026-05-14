@@ -49,6 +49,16 @@ func TestCompileTLSMiddlewareAndSecurity(t *testing.T) {
 				SourceRange:        []string{"127.0.0.1"},
 				TrustForwardHeader: true,
 			},
+			ForwardAuth: &config.ForwardAuth{
+				Address:              "http://auth.local/validate",
+				Timeout:              "750ms",
+				TrustForwardHeader:   true,
+				ForwardBody:          true,
+				MaxBodyBytes:         4096,
+				AuthRequestHeaders:   []string{"Authorization"},
+				AuthResponseHeaders:  []string{"X-Authenticated-Subject"},
+				MaxResponseBodyBytes: 2048,
+			},
 		}},
 		Routes: []config.Route{{
 			Name:        "api",
@@ -100,6 +110,29 @@ func assertCompiledMiddleware(t *testing.T, snapshot *runtime.CompiledSnapshot) 
 	}
 	if !middleware.IPAllowList.Enabled || !middleware.IPAllowList.TrustForwardHeader {
 		t.Fatalf("ip allow list middleware = %#v", middleware.IPAllowList)
+	}
+	assertCompiledForwardAuth(t, middleware.ForwardAuth)
+}
+
+func assertCompiledForwardAuth(t *testing.T, forwardAuth runtime.ForwardAuthRuntime) {
+	t.Helper()
+	if !forwardAuth.Enabled {
+		t.Fatalf("forward auth middleware = %#v", forwardAuth)
+	}
+	if forwardAuth.Address != "http://auth.local/validate" || forwardAuth.Timeout.String() != "750ms" {
+		t.Fatalf("forward auth middleware = %#v", forwardAuth)
+	}
+	if !forwardAuth.TrustForwardHeader || !forwardAuth.ForwardBody {
+		t.Fatalf("forward auth middleware = %#v", forwardAuth)
+	}
+	if forwardAuth.MaxBodyBytes != 4096 || forwardAuth.MaxResponseBodyBytes != 2048 {
+		t.Fatalf("forward auth middleware = %#v", forwardAuth)
+	}
+	if forwardAuth.AuthRequestHeaders.Len() != 1 {
+		t.Fatalf("forward auth request headers = %#v", forwardAuth.AuthRequestHeaders)
+	}
+	if forwardAuth.AuthResponseHeaders.GetFirstOption().OrElse("") != "X-Authenticated-Subject" {
+		t.Fatalf("forward auth response headers = %#v", forwardAuth.AuthResponseHeaders)
 	}
 }
 

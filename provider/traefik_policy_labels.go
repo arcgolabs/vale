@@ -8,6 +8,7 @@ import (
 
 func applyTraefikPolicyMiddleware(middleware *config.Middleware, option, value string) bool {
 	return applyTraefikAuthMiddleware(middleware, option, value) ||
+		applyTraefikForwardAuthMiddleware(middleware, option, value) ||
 		applyTraefikCompressMiddleware(middleware, option, value) ||
 		applyTraefikIPAllowListMiddleware(middleware, option, value) ||
 		applyTraefikRateLimitMiddleware(middleware, option, value) ||
@@ -22,6 +23,38 @@ func applyTraefikAuthMiddleware(middleware *config.Middleware, option, value str
 	case "basicauth.users":
 		middleware.BasicAuth = ensureBasicAuth(middleware.BasicAuth)
 		middleware.BasicAuth.Users = parseTraefikBasicAuthUsers(value)
+	default:
+		return false
+	}
+	return true
+}
+
+func applyTraefikForwardAuthMiddleware(middleware *config.Middleware, option, value string) bool {
+	switch option {
+	case "forwardauth.address":
+		middleware.ForwardAuth = ensureForwardAuth(middleware.ForwardAuth)
+		middleware.ForwardAuth.Address = strings.TrimSpace(value)
+	case "forwardauth.trustforwardheader":
+		middleware.ForwardAuth = ensureForwardAuth(middleware.ForwardAuth)
+		middleware.ForwardAuth.TrustForwardHeader = parseTraefikBool(value)
+	case "forwardauth.authrequestheaders":
+		middleware.ForwardAuth = ensureForwardAuth(middleware.ForwardAuth)
+		middleware.ForwardAuth.AuthRequestHeaders = SplitCSV(value).Values()
+	case "forwardauth.authresponseheaders":
+		middleware.ForwardAuth = ensureForwardAuth(middleware.ForwardAuth)
+		middleware.ForwardAuth.AuthResponseHeaders = SplitCSV(value).Values()
+	case "forwardauth.forwardbody":
+		middleware.ForwardAuth = ensureForwardAuth(middleware.ForwardAuth)
+		middleware.ForwardAuth.ForwardBody = parseTraefikBool(value)
+	case "forwardauth.maxbodysize":
+		middleware.ForwardAuth = ensureForwardAuth(middleware.ForwardAuth)
+		middleware.ForwardAuth.MaxBodyBytes = int64(parseTraefikInt(value))
+	case "forwardauth.maxresponsebodysize":
+		middleware.ForwardAuth = ensureForwardAuth(middleware.ForwardAuth)
+		middleware.ForwardAuth.MaxResponseBodyBytes = int64(parseTraefikInt(value))
+	case "forwardauth.timeout":
+		middleware.ForwardAuth = ensureForwardAuth(middleware.ForwardAuth)
+		middleware.ForwardAuth.Timeout = strings.TrimSpace(value)
 	default:
 		return false
 	}
@@ -149,4 +182,12 @@ func ensureCORS(cors *config.CORSMiddleware) *config.CORSMiddleware {
 	}
 	cors.Enabled = true
 	return cors
+}
+
+func ensureForwardAuth(forwardAuth *config.ForwardAuth) *config.ForwardAuth {
+	if forwardAuth == nil {
+		return &config.ForwardAuth{Enabled: true}
+	}
+	forwardAuth.Enabled = true
+	return forwardAuth
 }

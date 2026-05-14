@@ -23,7 +23,7 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 - Library-first builders for runtime snapshots and config source assembly
 - Provider reload coalescing with stable config fingerprints
 - Built-in middleware plus a runtime middleware registry for embedded extensions
-- Built-in basic auth, gzip compression, IP allow list, CORS, rate limit, circuit breaker, security headers, path/header/redirect policies
+- Built-in basic auth, forward auth, gzip compression, IP allow list, CORS, rate limit, circuit breaker, security headers, path/header/redirect policies
 - Static TLS and ACME with secure defaults
 
 ## Status
@@ -308,6 +308,7 @@ Built-in middleware supports:
 - rate limit
 - circuit breaker
 - basic auth
+- forward auth
 - gzip compression
 - IP allow list
 - request body limits
@@ -357,7 +358,7 @@ The default `observabilityx` metrics recorder exposes:
   `traefik.enable`, `traefik.http.routers.*.rule`, `entrypoints`, `middlewares`,
   `service`, `traefik.http.services.*.loadbalancer.server.port/scheme`, and
   `addPrefix`, `stripPrefix`, `replacePath`, `redirectScheme`, `redirectRegex`,
-  chain, headers, CORS headers, buffering, basicAuth, compress, ipAllowList,
+  chain, headers, CORS headers, buffering, basicAuth, forwardAuth, compress, ipAllowList,
   ipWhiteList, and rateLimit middleware labels.
 - `provider/k8s`: optional module, route/endpoint projection from k8s-like source model (source pluggable).
 - both packages include `MemorySource` for local embedding/tests and can be replaced by real API clients later.

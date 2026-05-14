@@ -56,6 +56,14 @@ func TestConfigBuilderFluentAPI(t *testing.T) {
 			provider.MiddlewareRequestHeader("X-Test", "ok"),
 			provider.MiddlewareResponseHeader("X-Response", "set"),
 			provider.MiddlewareMaxBodyBytes(1024),
+			provider.MiddlewareForwardAuth("http://auth.local/validate",
+				provider.ForwardAuthTimeout("750ms"),
+				provider.ForwardAuthTrustForwardHeader(true),
+				provider.ForwardAuthForwardBody(4096),
+				provider.ForwardAuthRequestHeaders("Authorization"),
+				provider.ForwardAuthResponseHeaders("X-Authenticated-Subject"),
+				provider.ForwardAuthMaxResponseBodyBytes(2048),
+			),
 		).
 		RouteTo("api", "websecure", "api",
 			provider.RouteHost("api.example.com"),
@@ -80,8 +88,25 @@ func TestConfigBuilderFluentAPI(t *testing.T) {
 	if cfg.Middlewares[0].StripPrefix != "/api" || cfg.Middlewares[0].RequestHeaders["X-Test"] != "ok" {
 		t.Fatalf("middleware = %#v", cfg.Middlewares[0])
 	}
+	assertBuilderForwardAuth(t, cfg.Middlewares[0].ForwardAuth)
 	if cfg.Routes[0].Method != http.MethodGet || cfg.Routes[0].Middlewares[0] != "strip-api" {
 		t.Fatalf("route = %#v", cfg.Routes[0])
+	}
+}
+
+func assertBuilderForwardAuth(t *testing.T, forwardAuth *config.ForwardAuth) {
+	t.Helper()
+	if forwardAuth == nil {
+		t.Fatal("forward auth was not configured")
+	}
+	if forwardAuth.Address != "http://auth.local/validate" || forwardAuth.Timeout != "750ms" {
+		t.Fatalf("forward auth = %#v", forwardAuth)
+	}
+	if !forwardAuth.TrustForwardHeader || !forwardAuth.ForwardBody {
+		t.Fatalf("forward auth = %#v", forwardAuth)
+	}
+	if forwardAuth.MaxBodyBytes != 4096 || forwardAuth.MaxResponseBodyBytes != 2048 {
+		t.Fatalf("forward auth = %#v", forwardAuth)
 	}
 }
 

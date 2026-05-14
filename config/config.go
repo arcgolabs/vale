@@ -78,6 +78,7 @@ type Middleware struct {
 	BasicAuth              *BasicAuth        `hcl:"basic_auth,block"`
 	Compress               *Compress         `hcl:"compress,block"`
 	IPAllowList            *IPAllowList      `hcl:"ip_allow_list,block"`
+	ForwardAuth            *ForwardAuth      `hcl:"forward_auth,block"`
 }
 
 type SecureMiddleware struct {
@@ -141,6 +142,18 @@ type IPAllowList struct {
 	Enabled            bool     `hcl:"enabled,optional"`
 	SourceRange        []string `hcl:"source_range,optional"`
 	TrustForwardHeader bool     `hcl:"trust_forward_header,optional"`
+}
+
+type ForwardAuth struct {
+	Enabled              bool     `hcl:"enabled,optional"`
+	Address              string   `hcl:"address"`
+	Timeout              string   `hcl:"timeout,optional"`
+	TrustForwardHeader   bool     `hcl:"trust_forward_header,optional"`
+	ForwardBody          bool     `hcl:"forward_body,optional"`
+	MaxBodyBytes         int64    `hcl:"max_body_bytes,optional"`
+	AuthRequestHeaders   []string `hcl:"auth_request_headers,optional"`
+	AuthResponseHeaders  []string `hcl:"auth_response_headers,optional"`
+	MaxResponseBodyBytes int64    `hcl:"max_response_body_bytes,optional"`
 }
 
 type Admin struct {

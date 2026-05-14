@@ -188,6 +188,76 @@ func MiddlewareIPAllowList(trustForwardHeader bool, sourceRange ...string) Middl
 	}
 }
 
+type ForwardAuthOption func(*config.ForwardAuth)
+
+func MiddlewareForwardAuth(address string, options ...ForwardAuthOption) MiddlewareOption {
+	return func(middleware *config.Middleware) {
+		if middleware == nil {
+			return
+		}
+		forwardAuth := &config.ForwardAuth{
+			Enabled: true,
+			Address: strings.TrimSpace(address),
+		}
+		collectionlist.NewList(options...).Range(func(_ int, option ForwardAuthOption) bool {
+			if option != nil {
+				option(forwardAuth)
+			}
+			return true
+		})
+		middleware.ForwardAuth = forwardAuth
+	}
+}
+
+func ForwardAuthTimeout(timeout string) ForwardAuthOption {
+	return func(forwardAuth *config.ForwardAuth) {
+		if forwardAuth != nil {
+			forwardAuth.Timeout = strings.TrimSpace(timeout)
+		}
+	}
+}
+
+func ForwardAuthTrustForwardHeader(enabled bool) ForwardAuthOption {
+	return func(forwardAuth *config.ForwardAuth) {
+		if forwardAuth != nil {
+			forwardAuth.TrustForwardHeader = enabled
+		}
+	}
+}
+
+func ForwardAuthForwardBody(maxBodyBytes int64) ForwardAuthOption {
+	return func(forwardAuth *config.ForwardAuth) {
+		if forwardAuth != nil {
+			forwardAuth.ForwardBody = true
+			forwardAuth.MaxBodyBytes = maxBodyBytes
+		}
+	}
+}
+
+func ForwardAuthRequestHeaders(headers ...string) ForwardAuthOption {
+	return func(forwardAuth *config.ForwardAuth) {
+		if forwardAuth != nil {
+			forwardAuth.AuthRequestHeaders = cleanStrings(collectionlist.NewList(headers...)).Values()
+		}
+	}
+}
+
+func ForwardAuthResponseHeaders(headers ...string) ForwardAuthOption {
+	return func(forwardAuth *config.ForwardAuth) {
+		if forwardAuth != nil {
+			forwardAuth.AuthResponseHeaders = cleanStrings(collectionlist.NewList(headers...)).Values()
+		}
+	}
+}
+
+func ForwardAuthMaxResponseBodyBytes(maxBodyBytes int64) ForwardAuthOption {
+	return func(forwardAuth *config.ForwardAuth) {
+		if forwardAuth != nil {
+			forwardAuth.MaxResponseBodyBytes = maxBodyBytes
+		}
+	}
+}
+
 func cleanStrings(values *collectionlist.List[string]) *collectionlist.List[string] {
 	return collectionlist.FilterMapList(values, func(_ int, value string) (string, bool) {
 		trimmed := strings.TrimSpace(value)

@@ -38,6 +38,7 @@ feature parity.
 | `headers.framedeny/contenttypenosniff/browserxssfilter/stsseconds/referrerpolicy` | Security headers. |
 | `buffering.maxrequestbodybytes` | Request body limit. |
 | `basicauth.realm/users` | Basic auth with plain `user:password` values. |
+| `forwardauth.address`, `trustforwardheader`, `authrequestheaders`, `authresponseheaders`, `forwardbody`, `maxbodysize`, `maxresponsebodysize`, `timeout` | Forward auth middleware. |
 | `compress` / `compress.minresponsebodybytes` | Gzip compression. |
 | `ipallowlist.sourcerange` / `ipwhitelist.sourcerange` | IP allow list. |
 | `ratelimit.average/burst` | Token-bucket rate limit. |

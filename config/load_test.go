@@ -141,4 +141,17 @@ func TestValidateMiddlewarePolicyOptions(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "sts_seconds") {
 		t.Fatalf("Validate error = %v, want secure error", err)
 	}
+
+	cfg.Middlewares[0].Secure = nil
+	cfg.Middlewares[0].ForwardAuth = &config.ForwardAuth{Address: "ftp://auth.local"}
+	err = config.Validate(cfg)
+	if err == nil || !strings.Contains(err.Error(), "scheme") {
+		t.Fatalf("Validate error = %v, want forward auth scheme error", err)
+	}
+
+	cfg.Middlewares[0].ForwardAuth = &config.ForwardAuth{Address: "http://auth.local/validate", Timeout: "-1s"}
+	err = config.Validate(cfg)
+	if err == nil || !strings.Contains(err.Error(), "timeout") {
+		t.Fatalf("Validate error = %v, want forward auth timeout error", err)
+	}
 }

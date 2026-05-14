@@ -95,6 +95,7 @@ type MiddlewareRuntime struct {
 	BasicAuth              BasicAuthRuntime
 	Compress               CompressRuntime
 	IPAllowList            IPAllowListRuntime
+	ForwardAuth            ForwardAuthRuntime
 }
 
 type SecureMiddlewareRuntime struct {
@@ -158,6 +159,18 @@ type IPAllowListRuntime struct {
 	Enabled            bool
 	SourceRange        *collectionlist.List[string]
 	TrustForwardHeader bool
+}
+
+type ForwardAuthRuntime struct {
+	Enabled              bool
+	Address              string
+	Timeout              time.Duration
+	TrustForwardHeader   bool
+	ForwardBody          bool
+	MaxBodyBytes         int64
+	AuthRequestHeaders   *collectionlist.List[string]
+	AuthResponseHeaders  *collectionlist.List[string]
+	MaxResponseBodyBytes int64
 }
 
 type ServiceRuntime struct {

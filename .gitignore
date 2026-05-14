@@ -44,3 +44,4 @@ Temporary Items
 .apdisk
 .idea
 benchmarks/results/
+cmd/data/
