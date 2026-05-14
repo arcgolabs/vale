@@ -108,7 +108,7 @@ func (s *CompiledSnapshot) QueryRoutes(filter RouteFilter) *collectionlist.List[
 			return views
 		}
 	}
-	return filterRouteViews(s.routesFallback(), filter)
+	return s.routesFallback(filter)
 }
 
 func (c *Catalog) RouteViews(filter RouteFilter) (*collectionlist.List[RouteView], error) {
@@ -158,39 +158,34 @@ func (c *Catalog) Routes(filter RouteFilter) (*collectionlist.List[RouteRecord],
 	return routes, nil
 }
 
-func (s *CompiledSnapshot) routesFallback() *collectionlist.List[RouteView] {
+func (s *CompiledSnapshot) routesFallback(filter RouteFilter) *collectionlist.List[RouteView] {
 	routeList := collectionlist.NewList[RouteView]()
 	if s == nil || s.RoutesByEntrypoint == nil {
 		return routeList
 	}
-	s.RoutesByEntrypoint.Range(func(entrypoint string, routes []*CompiledRoute) bool {
+	filter = normalizeRouteFilter(filter)
+	if filter.Entrypoint != "" {
+		routes := s.RoutesByEntrypoint.Get(filter.Entrypoint)
 		for _, route := range routes {
-			serviceName := ""
-			if route.Service != nil {
-				serviceName = route.Service.Name
+			addedRoute := buildRouteView(route)
+			if addedRoute == nil || !routeViewMatchesFilter(*addedRoute, filter) {
+				continue
 			}
-			routeList.Add(RouteView{
-				Name:       route.Name,
-				Entrypoint: entrypoint,
-				Host:       route.Host,
-				PathPrefix: route.PathPrefix,
-				Method:     route.Method,
-				Service:    serviceName,
-			})
+			routeList.Add(*addedRoute)
+		}
+		return routeList
+	}
+	s.RoutesByEntrypoint.Range(func(_ string, routes []*CompiledRoute) bool {
+		for _, route := range routes {
+			addedRoute := buildRouteView(route)
+			if addedRoute == nil || !routeViewMatchesFilter(*addedRoute, filter) {
+				continue
+			}
+			routeList.Add(*addedRoute)
 		}
 		return true
 	})
 	return routeList
-}
-
-func filterRouteViews(routes *collectionlist.List[RouteView], filter RouteFilter) *collectionlist.List[RouteView] {
-	filter = normalizeRouteFilter(filter)
-	if routes == nil {
-		return collectionlist.NewList[RouteView]()
-	}
-	return collectionlist.FilterList(routes, func(_ int, route RouteView) bool {
-		return routeMatchesFilter(RouteRecord(route), filter)
-	})
 }
 
 func routeLookup(filter RouteFilter) (string, []any, bool) {
@@ -201,6 +196,40 @@ func routeLookup(filter RouteFilter) (string, []any, bool) {
 		return "id", nil, false
 	}
 	return candidate.index, candidate.args, candidate.skipFilter
+}
+
+func buildRouteView(route *CompiledRoute) *RouteView {
+	if route == nil {
+		return nil
+	}
+	serviceName := ""
+	if route.Service != nil {
+		serviceName = route.Service.Name
+	}
+	return &RouteView{
+		Name:       route.Name,
+		Entrypoint: route.Entrypoint,
+		Host:       route.Host,
+		PathPrefix: route.PathPrefix,
+		Method:     route.Method,
+		Service:    serviceName,
+	}
+}
+
+func routeViewMatchesFilter(route RouteView, filter RouteFilter) bool {
+	if filter.Entrypoint != "" && route.Entrypoint != filter.Entrypoint {
+		return false
+	}
+	if filter.Service != "" && route.Service != filter.Service {
+		return false
+	}
+	if filter.Host != "" && route.Host != filter.Host {
+		return false
+	}
+	if filter.PathPrefix != "" && route.PathPrefix != filter.PathPrefix {
+		return false
+	}
+	return true
 }
 
 type routeLookupCandidate struct {

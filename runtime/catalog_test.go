@@ -103,6 +103,31 @@ func TestCatalogFallsBackWhenMissing(t *testing.T) {
 	}
 }
 
+func TestCatalogFallbackFiltersInMemory(t *testing.T) {
+	t.Parallel()
+
+	endpoint, err := valeruntime.NewEndpoint("http://127.0.0.1:8081", 1, http.DefaultServeMux)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := valeruntime.NewService("api", "round_robin", endpoint)
+	snapshot := valeruntime.NewSnapshot().
+		AddEntrypoint("web", ":8080", valeruntime.EntrypointRuntime{}).
+		AddService(service).
+		AddRoute(valeruntime.NewRoute("api-route", "web", service).WithHost("api.example.com").WithPathPrefix("/api")).
+		AddRoute(valeruntime.NewRoute("admin-route", "admin", service).WithHost("api.example.com").WithPathPrefix("/api")).
+		BuildMatchers()
+	snapshot.Catalog = nil
+
+	routes := snapshot.QueryRoutes(valeruntime.RouteFilter{Entrypoint: "admin", Host: "api.example.com"})
+	if routes.Len() != 1 {
+		t.Fatalf("fallback routes len = %d, want 1", routes.Len())
+	}
+	if name, _ := routes.Get(0); name.Name != "admin-route" {
+		t.Fatalf("fallback route = %s, want admin-route", name.Name)
+	}
+}
+
 func TestDiffSnapshotsReportsRouteAndServiceChanges(t *testing.T) {
 	t.Parallel()
 
