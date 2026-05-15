@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## v0.1.6 - 2026-05-16
+
+- Added an embedded `GatewayBuilder` component example module.
+- Switched CI to a per-module test/lint/vet matrix for root, optional modules, and examples.
+- Documented public API tiers for stable root APIs, DTO boundaries, advanced packages, optional modules, and binary assembly.
+- Reduced route cache miss work by reusing computed route match cache keys.
+- Removed avoidable allocations in single-route entrypoint fast-path and route cache eligibility checks.
+- Stabilized reload health checking by running an immediate health pass on health checker start and avoiding test port reuse races.
+
 ## v0.1.3 - 2026-05-14
 
 - Added CI golangci-lint coverage for root and workspace modules.

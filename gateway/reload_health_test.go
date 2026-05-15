@@ -89,8 +89,8 @@ func testGatewaySnapshot(t *testing.T, endpointURL, healthInterval string) *vale
 	}
 	service := valeruntime.NewService("test", "round_robin", endpoint)
 	route := valeruntime.NewRoute("test", "web", service).WithPathPrefix("/")
-	entrypointAddr := freeAddr(t)
-	adminAddr := freeAddr(t)
+	entrypointAddr := "127.0.0.1:0"
+	adminAddr := "127.0.0.1:0"
 	snapshot := valeruntime.NewSnapshot().
 		AddEntrypoint("web", entrypointAddr, valeruntime.EntrypointRuntime{
 			Name:    "web",

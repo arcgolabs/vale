@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strings"
 
-	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 )
 
@@ -65,7 +64,7 @@ func singleCompiledRoute(routes []*CompiledRoute) (*CompiledRoute, bool) {
 	if len(routes) != 1 {
 		return nil, false
 	}
-	return collectionlist.NewList(routes...).GetFirst()
+	return routes[0], routes[0] != nil
 }
 
 func singleServiceEndpoint(service *ServiceRuntime) (*EndpointRuntime, bool) {

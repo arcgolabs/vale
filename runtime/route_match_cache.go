@@ -2,8 +2,8 @@ package runtime
 
 import (
 	"net/http"
+	"slices"
 
-	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	lru "github.com/hashicorp/golang-lru/v2"
 )
@@ -53,29 +53,30 @@ func (c *routeMatchCache) get(
 	snapshot *CompiledSnapshot,
 	entrypoint string,
 	request *http.Request,
-) (*CompiledRoute, bool) {
+) (*CompiledRoute, routeMatchCacheKey, bool, bool) {
 	entrypointCache, ok := c.entrypointCache(snapshot, entrypoint)
 	if !ok || request == nil {
-		return nil, false
+		return nil, routeMatchCacheKey{}, false, false
 	}
-	value, ok := entrypointCache.Get(newRouteMatchCacheKey(request))
+	key := newRouteMatchCacheKey(request)
+	value, ok := entrypointCache.Get(key)
 	if !ok {
-		return nil, false
+		return nil, key, true, false
 	}
-	return value.route, true
+	return value.route, key, true, true
 }
 
 func (c *routeMatchCache) add(
 	snapshot *CompiledSnapshot,
 	entrypoint string,
-	request *http.Request,
+	key routeMatchCacheKey,
 	route *CompiledRoute,
 ) {
 	entrypointCache, ok := c.entrypointCache(snapshot, entrypoint)
-	if !ok || request == nil {
+	if !ok {
 		return
 	}
-	entrypointCache.Add(newRouteMatchCacheKey(request), routeMatchCacheEntry{route: route})
+	entrypointCache.Add(key, routeMatchCacheEntry{route: route})
 }
 
 func (c *routeMatchCache) entrypointCache(
@@ -92,9 +93,7 @@ func routesAreCacheable(routes []*CompiledRoute) bool {
 	if len(routes) < defaultRouteMatchCacheMinRoutes {
 		return false
 	}
-	return !collectionlist.NewList(routes...).AnyMatch(func(_ int, route *CompiledRoute) bool {
-		return routeDependsOnHeaders(route)
-	})
+	return !slices.ContainsFunc(routes, routeDependsOnHeaders)
 }
 
 func routeDependsOnHeaders(route *CompiledRoute) bool {

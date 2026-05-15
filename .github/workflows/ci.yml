@@ -9,10 +9,47 @@ on:
 permissions:
   contents: read
 
+env:
+  GOLANGCI_LINT_VERSION: v2.12.2
+
 jobs:
   lint:
-    name: golangci-lint
+    name: lint / ${{ matrix.module }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - module: root
+            path: .
+          - module: cluster/raftnode
+            path: cluster/raftnode
+          - module: cmd
+            path: cmd
+          - module: observability/prometheus
+            path: observability/prometheus
+          - module: provider/docker
+            path: provider/docker
+          - module: provider/file
+            path: provider/file
+          - module: provider/fileconfig
+            path: provider/fileconfig
+          - module: provider/k8s
+            path: provider/k8s
+          - module: examples/embedded_builder_components
+            path: examples/embedded_builder_components
+          - module: examples/embedded_custom_middleware
+            path: examples/embedded_custom_middleware
+          - module: examples/embedded_custom_provider
+            path: examples/embedded_custom_provider
+          - module: examples/embedded_extension_components
+            path: examples/embedded_extension_components
+          - module: examples/embedded_jwt_middleware
+            path: examples/embedded_jwt_middleware
+          - module: examples/embedded_multi_provider
+            path: examples/embedded_multi_provider
+          - module: examples/embedded_static_config
+            path: examples/embedded_static_config
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,26 +63,47 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
-          args: >
-            ./...
-            ./cluster/raftnode/...
-            ./cmd/...
-            ./observability/prometheus/...
-            ./provider/docker/...
-            ./provider/file/...
-            ./provider/fileconfig/...
-            ./provider/k8s/...
-            ./examples/embedded_custom_middleware/...
-            ./examples/embedded_custom_provider/...
-            ./examples/embedded_extension_components/...
-            ./examples/embedded_jwt_middleware/...
-            ./examples/embedded_multi_provider/...
-            ./examples/embedded_static_config/...
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: ${{ matrix.path }}
+          args: ./...
 
   test:
-    name: Go test and vet
+    name: test / ${{ matrix.module }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - module: root
+            path: .
+          - module: cluster/raftnode
+            path: cluster/raftnode
+          - module: cmd
+            path: cmd
+          - module: observability/prometheus
+            path: observability/prometheus
+          - module: provider/docker
+            path: provider/docker
+          - module: provider/file
+            path: provider/file
+          - module: provider/fileconfig
+            path: provider/fileconfig
+          - module: provider/k8s
+            path: provider/k8s
+          - module: examples/embedded_builder_components
+            path: examples/embedded_builder_components
+          - module: examples/embedded_custom_middleware
+            path: examples/embedded_custom_middleware
+          - module: examples/embedded_custom_provider
+            path: examples/embedded_custom_provider
+          - module: examples/embedded_extension_components
+            path: examples/embedded_extension_components
+          - module: examples/embedded_jwt_middleware
+            path: examples/embedded_jwt_middleware
+          - module: examples/embedded_multi_provider
+            path: examples/embedded_multi_provider
+          - module: examples/embedded_static_config
+            path: examples/embedded_static_config
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,42 +114,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Root tests
+      - name: Go test
         run: go test ./...
+        working-directory: ${{ matrix.path }}
 
-      - name: Workspace module tests
-        run: >
-          go test
-          ./cluster/raftnode/...
-          ./cmd/...
-          ./observability/prometheus/...
-          ./provider/docker/...
-          ./provider/file/...
-          ./provider/fileconfig/...
-          ./provider/k8s/...
-          ./examples/embedded_custom_middleware/...
-          ./examples/embedded_custom_provider/...
-          ./examples/embedded_extension_components/...
-          ./examples/embedded_jwt_middleware/...
-          ./examples/embedded_multi_provider/...
-          ./examples/embedded_static_config/...
-
-      - name: Root vet
+      - name: Go vet
         run: go vet ./...
-
-      - name: Workspace module vet
-        run: >
-          go vet
-          ./cluster/raftnode/...
-          ./cmd/...
-          ./observability/prometheus/...
-          ./provider/docker/...
-          ./provider/file/...
-          ./provider/fileconfig/...
-          ./provider/k8s/...
-          ./examples/embedded_custom_middleware/...
-          ./examples/embedded_custom_provider/...
-          ./examples/embedded_extension_components/...
-          ./examples/embedded_jwt_middleware/...
-          ./examples/embedded_multi_provider/...
-          ./examples/embedded_static_config/...
+        working-directory: ${{ matrix.path }}

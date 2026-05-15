@@ -124,7 +124,7 @@ func matchSnapshotRoute(snapshot *CompiledSnapshot, entrypoint string, request *
 }
 
 func linearMatch(routes *collectionlist.List[*CompiledRoute], request *http.Request) *CompiledRoute {
-	host := strings.ToLower(request.Host)
+	host := normalizeRequestHost(request.Host)
 	method := normalizeRequestMethod(request.Method)
 	matched, ok := collectionlist.FindList(routes, func(_ int, route *CompiledRoute) bool {
 		return linearRouteMatches(route, request, host, method)

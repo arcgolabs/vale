@@ -44,6 +44,7 @@ func (h *HealthChecker) Start(ctx context.Context, gateway *Gateway) {
 	ticker := time.NewTicker(h.interval)
 	go func() {
 		defer ticker.Stop()
+		h.check(ctx, gateway)
 		for {
 			select {
 			case <-ticker.C:

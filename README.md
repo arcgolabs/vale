@@ -29,7 +29,7 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 
 ## Status
 
-The latest root release is `v0.1.5`. The public import path follows the current
+The latest root release is `v0.1.6`. The public import path follows the current
 git remote: `github.com/arcgolabs/vale`.
 
 ## Architecture Boundary
@@ -53,7 +53,7 @@ This repository includes a `go.work` file for local development and release buil
 ```bash
 go work sync
 go test ./...
-go test ./cluster/raftnode/... ./cmd/... ./observability/prometheus/... ./provider/docker/... ./provider/file/... ./provider/fileconfig/... ./provider/k8s/... ./examples/embedded_multi_provider/... ./examples/embedded_static_config/...
+go test ./cluster/raftnode/... ./cmd/... ./observability/prometheus/... ./provider/docker/... ./provider/file/... ./provider/fileconfig/... ./provider/k8s/... ./examples/embedded_builder_components/... ./examples/embedded_multi_provider/... ./examples/embedded_static_config/...
 go run ./cmd
 ```
 
@@ -65,9 +65,9 @@ to make a workspace build run outside `go.work`.
 
 Releases are tag-scoped:
 
-- Root releases use normal semantic tags such as `v0.1.3`.
+- Root releases use normal semantic tags such as `v0.1.6`.
 - Optional submodules use path-prefixed tags when they are released, for example
-  `cmd/v0.1.3`, `provider/docker/v0.1.3`, or `cluster/raftnode/v0.1.3`.
+  `cmd/v0.1.6`, `provider/docker/v0.1.6`, or `cluster/raftnode/v0.1.6`.
 
 Current workspace modules:
 
@@ -79,6 +79,7 @@ Current workspace modules:
 - `github.com/arcgolabs/vale/provider/file`: optional HCL snapshot provider.
 - `github.com/arcgolabs/vale/provider/fileconfig`: optional HCL config source provider.
 - `github.com/arcgolabs/vale/provider/k8s`: optional K8s-like config provider.
+- `github.com/arcgolabs/vale/examples/embedded_builder_components`: example that consumes the root gateway builder component API.
 - `github.com/arcgolabs/vale/examples/embedded_multi_provider`: example that consumes optional provider modules.
 - `github.com/arcgolabs/vale/examples/embedded_static_config`: example that consumes the core event bus.
 
@@ -118,7 +119,7 @@ go run ./cmd
 Run the published container image:
 
 ```bash
-docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.5
+docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.6
 ```
 
 To run with an HCL file, copy sample config:
@@ -219,6 +220,9 @@ g, err := vale.NewGatewayBuilder(
   ),
 ).Build()
 ```
+
+See `examples/embedded_builder_components/main.go` for a complete builder-based
+example that registers a custom middleware component through the public registry.
 
 For code-first runtime construction, the root `vale` package exposes
 collectionx-backed helpers:
@@ -438,7 +442,7 @@ Example three-node cluster:
 docker network create vale-cluster
 
 docker run -d --name vale-1 --network vale-cluster -p 19091:19090 `
-  ghcr.io/arcgolabs/vale:v0.1.3 `
+  ghcr.io/arcgolabs/vale:v0.1.6 `
   --raft-node-id node-1 `
   --raft-bind vale-1:17000 `
   --raft-bootstrap=true `
@@ -446,7 +450,7 @@ docker run -d --name vale-1 --network vale-cluster -p 19091:19090 `
   --gossip-bind :17100
 
 docker run -d --name vale-2 --network vale-cluster -p 19092:19090 `
-  ghcr.io/arcgolabs/vale:v0.1.3 `
+  ghcr.io/arcgolabs/vale:v0.1.6 `
   --raft-node-id node-2 `
   --raft-bind vale-2:17000 `
   --cluster-discovery gossip `
@@ -454,7 +458,7 @@ docker run -d --name vale-2 --network vale-cluster -p 19092:19090 `
   --gossip-seeds vale-1:17100
 
 docker run -d --name vale-3 --network vale-cluster -p 19093:19090 `
-  ghcr.io/arcgolabs/vale:v0.1.3 `
+  ghcr.io/arcgolabs/vale:v0.1.6 `
   --raft-node-id node-3 `
   --raft-bind vale-3:17000 `
   --cluster-discovery gossip `
@@ -507,7 +511,7 @@ through UPX in the optimize stage to keep the runtime image small.
 For example:
 
 ```bash
-docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.3
+docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.6
 ```
 
 ## Benchmarks
