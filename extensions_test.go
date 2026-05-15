@@ -69,6 +69,40 @@ func TestNewAcceptsRegisteredMiddlewareType(t *testing.T) {
 	})
 }
 
+func TestGatewayBuilderComposesExtensionAndOptions(t *testing.T) {
+	t.Parallel()
+
+	cfg := vale.NewConfigBuilder().
+		Entrypoint("web", "127.0.0.1:0").
+		MiddlewareNamed("mark-request", vale.MiddlewareType("mark")).
+		Service("api", "http://127.0.0.1:1").
+		RouteTo("api-route", "web", "api", vale.RouteMiddlewares("mark-request")).
+		Admin("127.0.0.1:0").
+		Build()
+	gateway, err := vale.NewGatewayBuilder(
+		vale.GatewayExtensions(vale.ExtensionFunc(func(registry *vale.Registry) error {
+			return registry.RegisterMiddleware("mark", markMiddleware)
+		})),
+		vale.GatewayOptions(
+			vale.WithLogger(slog.New(slog.DiscardHandler)),
+			vale.WithStaticConfig(cfg),
+		),
+	).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gateway.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := gateway.Stop(ctx); err != nil {
+			t.Fatalf("stop gateway: %v", err)
+		}
+	})
+}
+
 func registerTestExtension(registry *vale.Registry) error {
 	if err := registry.RegisterConfigProvider("memory", newTestExtensionConfigProvider); err != nil {
 		return fmt.Errorf("register config provider: %w", err)

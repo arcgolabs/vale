@@ -53,35 +53,35 @@ func provideExtensionRegistry(obs observabilityx.Observability) (*vale.Registry,
 	return registry, nil
 }
 
-func provideWatchOption(cfg valedConfig) vale.Option {
-	return vale.WithWatch(cfg.Watch)
+func provideWatchComponent(cfg valedConfig) vale.GatewayComponent {
+	return vale.GatewayOptions(vale.WithWatch(cfg.Watch))
 }
 
-func provideLoggerOption(logger *slog.Logger) vale.Option {
-	return vale.WithLogger(logger)
+func provideLoggerComponent(logger *slog.Logger) vale.GatewayComponent {
+	return vale.GatewayOptions(vale.WithLogger(logger))
 }
 
-func provideObservabilityOption(obs observabilityx.Observability) vale.Option {
-	return vale.WithObservability(obs)
+func provideObservabilityComponent(obs observabilityx.Observability) vale.GatewayComponent {
+	return vale.GatewayOptions(vale.WithObservability(obs))
 }
 
-func provideMetricsOption(registry *vale.Registry) vale.Option {
-	return vale.WithMetricsFromRegistry(registry, defaultMetricsName)
+func provideMetricsComponent(registry *vale.Registry) vale.GatewayComponent {
+	return vale.GatewayOptions(vale.WithMetricsFromRegistry(registry, defaultMetricsName))
 }
 
-func provideConfigSourceOption(cfg valedConfig) vale.Option {
+func provideConfigSourceComponent(cfg valedConfig) vale.GatewayComponent {
 	files := parseCSV(cfg.ConfigFiles)
 	switch {
 	case !files.IsEmpty():
-		return fileconfig.WithConfigFileList(files)
+		return vale.GatewayOptions(fileconfig.WithConfigFileList(files))
 	case strings.TrimSpace(cfg.ConfigPath) != "":
-		return fileconfig.WithConfigPath(cfg.ConfigPath)
+		return vale.GatewayOptions(fileconfig.WithConfigPath(cfg.ConfigPath))
 	default:
-		return noopGatewayOption
+		return vale.GatewayComponentFunc(noopGatewayComponent)
 	}
 }
 
-func provideClusterOption(cfg valedConfig) (vale.Option, error) {
+func provideClusterComponent(cfg valedConfig) (vale.GatewayComponent, error) {
 	initialMembers, err := parseRaftInitialMembers(cfg.RaftMembers)
 	if err != nil {
 		return nil, oops.
@@ -115,13 +115,13 @@ func provideClusterOption(cfg valedConfig) (vale.Option, error) {
 			},
 		)
 	}
-	return vale.WithClusterFactory(func(logger *slog.Logger) (vale.Cluster, error) {
+	return vale.GatewayOptions(vale.WithClusterFactory(func(logger *slog.Logger) (vale.Cluster, error) {
 		runtimeConfig := raftConfig
 		if discoveryEnabled {
 			runtimeConfig.Discovery = raftnode.NewMemberlistDiscovery(discoveryConfig, logger)
 		}
 		return raftnode.New(runtimeConfig, logger)
-	}), nil
+	})), nil
 }
 
 func clusterDiscoveryConfig(cfg valedConfig) (raftnode.MemberlistDiscoveryConfig, bool, error) {
@@ -143,15 +143,19 @@ func clusterDiscoveryConfig(cfg valedConfig) (raftnode.MemberlistDiscoveryConfig
 	}
 }
 
-func provideEventBusOption(bus eventx.BusRuntime) vale.Option {
-	return vale.WithEventBus(bus)
+func provideEventBusComponent(bus eventx.BusRuntime) vale.GatewayComponent {
+	return vale.GatewayOptions(vale.WithEventBus(bus))
 }
 
-func provideGateway(options *collectionlist.List[vale.Option]) (*vale.Gateway, error) {
-	if options == nil {
-		options = collectionlist.NewList[vale.Option]()
+func provideGateway(components *collectionlist.List[vale.GatewayComponent]) (*vale.Gateway, error) {
+	builder := vale.NewGatewayBuilder()
+	if components != nil {
+		components.Range(func(_ int, component vale.GatewayComponent) bool {
+			builder.WithComponents(component)
+			return true
+		})
 	}
-	gateway, err := vale.New(options.Values()...)
+	gateway, err := builder.Build()
 	if err != nil {
 		return nil, oops.
 			In("cmd").
@@ -160,6 +164,6 @@ func provideGateway(options *collectionlist.List[vale.Option]) (*vale.Gateway, e
 	return gateway, nil
 }
 
-func noopGatewayOption(*vale.Config) error {
+func noopGatewayComponent(*vale.GatewayBuilder) error {
 	return nil
 }

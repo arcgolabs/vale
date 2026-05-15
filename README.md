@@ -29,7 +29,7 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 
 ## Status
 
-The latest root release is `v0.1.3`. The public import path follows the current
+The latest root release is `v0.1.5`. The public import path follows the current
 git remote: `github.com/arcgolabs/vale`.
 
 ## Architecture Boundary
@@ -118,7 +118,7 @@ go run ./cmd
 Run the published container image:
 
 ```bash
-docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.3
+docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.5
 ```
 
 To run with an HCL file, copy sample config:
@@ -200,6 +200,25 @@ func runEmbedded() error {
 ```
 
 `vale.NewFromConfig(vale.Config{...})` is also available for struct-based construction.
+
+For composable library assembly, use `GatewayComponent` values with
+`NewGatewayBuilder`. Each component can register extensions or add construction
+options, and the standalone `valed` binary uses the same component model inside
+its `dix` graph:
+
+```go
+component := vale.GatewayComponentFunc(func(builder *vale.GatewayBuilder) error {
+  return builder.Registry().RegisterMiddleware("custom", customMiddleware)
+})
+
+g, err := vale.NewGatewayBuilder(
+  component,
+  vale.GatewayOptions(
+    vale.WithLogger(slog.Default()),
+    vale.WithStaticConfig(cfg),
+  ),
+).Build()
+```
 
 For code-first runtime construction, the root `vale` package exposes
 collectionx-backed helpers:

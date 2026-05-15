@@ -21,7 +21,7 @@ func TestValedDefaultOptionsCreateGatewayWithoutConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clusterOption, err := provideClusterOption(cfg)
+	clusterComponent, err := provideClusterComponent(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,16 +31,16 @@ func TestValedDefaultOptionsCreateGatewayWithoutConfigFile(t *testing.T) {
 			t.Fatalf("close bus: %v", closeErr)
 		}
 	})
-	options := collectionlist.NewList(
-		provideWatchOption(cfg),
-		provideLoggerOption(slog.New(slog.DiscardHandler)),
-		provideObservabilityOption(obs),
-		provideMetricsOption(registry),
-		provideConfigSourceOption(cfg),
-		clusterOption,
-		provideEventBusOption(bus),
+	components := collectionlist.NewList(
+		provideWatchComponent(cfg),
+		provideLoggerComponent(slog.New(slog.DiscardHandler)),
+		provideObservabilityComponent(obs),
+		provideMetricsComponent(registry),
+		provideConfigSourceComponent(cfg),
+		clusterComponent,
+		provideEventBusComponent(bus),
 	)
-	gateway, err := provideGateway(options)
+	gateway, err := provideGateway(components)
 	if err != nil {
 		t.Fatal(err)
 	}

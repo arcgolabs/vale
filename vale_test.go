@@ -21,6 +21,25 @@ func TestNewUsesDefaultConfigWhenNoSourceIsConfigured(t *testing.T) {
 	}
 }
 
+func TestNewDoesNotApplyBuilderRegistryUnlessConfigured(t *testing.T) {
+	t.Parallel()
+
+	sawNilMiddleware := false
+	_, err := vale.New(
+		vale.WithLogger(slog.New(slog.DiscardHandler)),
+		func(cfg *vale.Config) error {
+			sawNilMiddleware = cfg.Middleware == nil
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sawNilMiddleware {
+		t.Fatal("custom option observed an implicit middleware registry")
+	}
+}
+
 func TestDefaultConfigModelIsValid(t *testing.T) {
 	t.Parallel()
 

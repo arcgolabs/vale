@@ -7,7 +7,7 @@ embedded users; subpackages remain available for advanced wiring and optional mo
 
 | Package | Stability target | Purpose |
 | --- | --- | --- |
-| `github.com/arcgolabs/vale` | Public | Primary embedded API, functional options, runtime builders, config builders. |
+| `github.com/arcgolabs/vale` | Public | Primary embedded API, gateway components, functional options, runtime builders, config builders. |
 | `github.com/arcgolabs/vale/config` | Public DTO | HCL/JSON config structs, validation, fingerprinting. Native slices/maps remain here for decoder compatibility. |
 | `github.com/arcgolabs/vale/runtime` | Public advanced | Compiled data-plane model, matcher, control-plane catalog, middleware registry, metrics contracts. Uses collectionx containers. |
 | `github.com/arcgolabs/vale/provider` | Public advanced | Provider interfaces, config builder implementation, events, fallback provider, closers. |
@@ -35,9 +35,15 @@ embedded users; subpackages remain available for advanced wiring and optional mo
 ## Compatibility Notes
 
 - The root package should remain the stable surface for typical embedded usage.
+- `vale.NewGatewayBuilder` and `vale.GatewayComponent` are the preferred
+  composition API when applications want feature-level assembly. `vale.New`
+  remains the short functional-option constructor.
 - Extensions are compile-time library composition points, not runtime plugins. Embedded
   users should import Vale and register custom providers, middleware, certificate
   storage, cluster factories, metrics, or observability factories through `vale.Registry`.
+- The standalone `valed` binary should be assembled from public gateway
+  components in its `dix` graph. Optional modules remain selected there instead
+  of becoming mandatory root-module dependencies.
 - `config` DTO structs intentionally use native Go collections because HCL/JSON decoding is their boundary.
 - Compiled runtime structs intentionally use `collectionx` containers.
 - Runtime route catalog queries return collectionx lists and keep request matching on the optimized matcher.
@@ -46,9 +52,9 @@ embedded users; subpackages remain available for advanced wiring and optional mo
 - Repository-local sibling modules are resolved by `go.work` only. Optional modules
   should not add local `replace` directives or sibling requirements just to support
   workspace development outside `go.work`.
-- Root releases use tags such as `v0.1.3`. Optional modules are released with
-  path-prefixed tags such as `cmd/v0.1.3`, `provider/docker/v0.1.3`, or
-  `cluster/raftnode/v0.1.3`.
+- Root releases use tags such as `v0.1.5`. Optional modules are released with
+  path-prefixed tags such as `cmd/v0.1.5`, `provider/docker/v0.1.5`, or
+  `cluster/raftnode/v0.1.5`.
 - Middleware config type is strict: empty type means builtin, non-empty unknown values fail compilation.
 - Builtin middleware covers path transforms, redirects, headers, secure headers, CORS, rate limit, circuit breaker, basic auth, forward auth, gzip compression, IP allow list, body limits, and chains.
 - `cluster/raftnode` can use an externally owned Dragonboat `NodeHost`; callers own the data directories and must isolate Dragonboat `DeploymentID`, group IDs, node IDs, and NodeHost/WAL directories.

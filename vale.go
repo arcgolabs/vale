@@ -28,25 +28,7 @@ type (
 )
 
 func New(options ...Option) (*Gateway, error) {
-	cfg := DefaultConfig()
-	for _, option := range options {
-		if option == nil {
-			continue
-		}
-		if err := option(&cfg); err != nil {
-			return nil, oops.
-				In("vale").
-				Wrapf(err, "apply vale option")
-		}
-	}
-	applyDefaultConfigSource(&cfg)
-	gw, err := gateway.NewFromConfig(cfg)
-	if err != nil {
-		return nil, oops.
-			In("vale").
-			Wrapf(err, "create gateway")
-	}
-	return gw, nil
+	return NewGatewayBuilder(GatewayOptions(options...)).Build()
 }
 
 func NewFromConfig(cfg Config) (*Gateway, error) {
