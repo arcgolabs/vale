@@ -158,36 +158,6 @@ func (c *Catalog) Routes(filter RouteFilter) (*collectionlist.List[RouteRecord],
 	return routes, nil
 }
 
-func (s *CompiledSnapshot) routesFallback(filter RouteFilter) *collectionlist.List[RouteView] {
-	routeList := collectionlist.NewList[RouteView]()
-	if s == nil || s.RoutesByEntrypoint == nil {
-		return routeList
-	}
-	filter = normalizeRouteFilter(filter)
-	if filter.Entrypoint != "" {
-		routes := s.RoutesByEntrypoint.Get(filter.Entrypoint)
-		for _, route := range routes {
-			addedRoute := buildRouteView(route)
-			if addedRoute == nil || !routeViewMatchesFilter(*addedRoute, filter) {
-				continue
-			}
-			routeList.Add(*addedRoute)
-		}
-		return routeList
-	}
-	s.RoutesByEntrypoint.Range(func(_ string, routes []*CompiledRoute) bool {
-		for _, route := range routes {
-			addedRoute := buildRouteView(route)
-			if addedRoute == nil || !routeViewMatchesFilter(*addedRoute, filter) {
-				continue
-			}
-			routeList.Add(*addedRoute)
-		}
-		return true
-	})
-	return routeList
-}
-
 func routeLookup(filter RouteFilter) (string, []any, bool) {
 	candidate, ok := collectionlist.FindList(routeLookupCandidates(filter), func(_ int, candidate routeLookupCandidate) bool {
 		return candidate.enabled

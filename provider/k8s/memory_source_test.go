@@ -1,4 +1,4 @@
-package k8s
+package k8s_test
 
 import (
 	"context"
@@ -6,14 +6,15 @@ import (
 	"testing"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
+	providerk8s "github.com/arcgolabs/vale/provider/k8s"
 )
 
 func TestMemorySourceListEndpointsReturnsSnapshot(t *testing.T) {
 	t.Parallel()
 
-	source := NewMemorySource(
+	source := providerk8s.NewMemorySource(
 		nil,
-		collectionlist.NewList(ServiceEndpoint{
+		collectionlist.NewList(providerk8s.ServiceEndpoint{
 			Service: "api",
 			URL:     "http://10.0.0.2",
 			Weight:  1,
@@ -24,7 +25,7 @@ func TestMemorySourceListEndpointsReturnsSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list failed: %v", err)
 	}
-	endpoints.Add(ServiceEndpoint{Service: "hack"})
+	endpoints.Add(providerk8s.ServiceEndpoint{Service: "hack"})
 
 	current, err := source.ListEndpoints(context.Background())
 	if err != nil {
@@ -38,9 +39,9 @@ func TestMemorySourceListEndpointsReturnsSnapshot(t *testing.T) {
 func TestMemorySourceWatchNotifiesOncePerUpdate(t *testing.T) {
 	t.Parallel()
 
-	source := NewMemorySource(
-		collectionlist.NewList(HTTPRoute{Name: "route"}),
-		collectionlist.NewList(ServiceEndpoint{Service: "svc", URL: "http://10.0.0.1"}),
+	source := providerk8s.NewMemorySource(
+		collectionlist.NewList(providerk8s.HTTPRoute{Name: "route"}),
+		collectionlist.NewList(providerk8s.ServiceEndpoint{Service: "svc", URL: "http://10.0.0.1"}),
 	)
 	var calls atomic.Int32
 
@@ -57,8 +58,8 @@ func TestMemorySourceWatchNotifiesOncePerUpdate(t *testing.T) {
 	})
 
 	source.Update(
-		collectionlist.NewList(HTTPRoute{Name: "route-updated"}),
-		collectionlist.NewList(ServiceEndpoint{Service: "svc", URL: "http://10.0.0.2"}),
+		collectionlist.NewList(providerk8s.HTTPRoute{Name: "route-updated"}),
+		collectionlist.NewList(providerk8s.ServiceEndpoint{Service: "svc", URL: "http://10.0.0.2"}),
 	)
 	if calls.Load() != 1 {
 		t.Fatalf("expected 1 notification, got %d", calls.Load())

@@ -105,7 +105,8 @@ func (s *ServiceRuntime) nextStart(count int) int {
 	if count <= 0 {
 		return 0
 	}
-	return int(s.rrCounter.Add(1) % uint64(count))
+	slot := s.rrCounter.Add(1) % uint64(count)
+	return safeUint64ToInt(slot)
 }
 
 func (s *ServiceRuntime) nextTicket(totalWeight uint64) uint64 {
@@ -113,4 +114,12 @@ func (s *ServiceRuntime) nextTicket(totalWeight uint64) uint64 {
 		return 0
 	}
 	return s.rrCounter.Add(1) % totalWeight
+}
+
+func safeUint64ToInt(value uint64) int {
+	maxInt := uint64(^uint(0) >> 1)
+	if value > maxInt {
+		return 0
+	}
+	return int(value)
 }

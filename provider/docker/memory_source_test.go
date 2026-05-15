@@ -1,21 +1,23 @@
-package docker
+package docker_test
 
 import (
 	"context"
 	"sync/atomic"
 	"testing"
+
+	providerdocker "github.com/arcgolabs/vale/provider/docker"
 )
 
 func TestMemorySourceListContainersReturnsSnapshot(t *testing.T) {
 	t.Parallel()
 
-	source := NewMemorySource(Container{Name: "api"})
+	source := providerdocker.NewMemorySource(providerdocker.Container{Name: "api"})
 	containers, err := source.ListContainers(context.Background())
 	if err != nil {
 		t.Fatalf("list failed: %v", err)
 	}
 
-	containers.Add(Container{Name: "hack"})
+	containers.Add(providerdocker.Container{Name: "hack"})
 	current, err := source.ListContainers(context.Background())
 	if err != nil {
 		t.Fatalf("list failed: %v", err)
@@ -28,7 +30,7 @@ func TestMemorySourceListContainersReturnsSnapshot(t *testing.T) {
 func TestMemorySourceWatchNotifiesOncePerUpdate(t *testing.T) {
 	t.Parallel()
 
-	source := NewMemorySource(Container{Name: "api"})
+	source := providerdocker.NewMemorySource(providerdocker.Container{Name: "api"})
 	var calls atomic.Int32
 
 	closer, err := source.Watch(context.Background(), func() {
@@ -43,8 +45,8 @@ func TestMemorySourceWatchNotifiesOncePerUpdate(t *testing.T) {
 		}
 	})
 
-	source.Update(Container{Name: "api2"})
-	source.Update(Container{Name: "api3"}, Container{Name: "api4"})
+	source.Update(providerdocker.Container{Name: "api2"})
+	source.Update(providerdocker.Container{Name: "api3"}, providerdocker.Container{Name: "api4"})
 	if calls.Load() != 2 {
 		t.Fatalf("expected 2 notifications, got %d", calls.Load())
 	}
@@ -53,7 +55,7 @@ func TestMemorySourceWatchNotifiesOncePerUpdate(t *testing.T) {
 func TestMemorySourceUpdateCanAcceptNoArgs(t *testing.T) {
 	t.Parallel()
 
-	source := NewMemorySource(Container{Name: "api"})
+	source := providerdocker.NewMemorySource(providerdocker.Container{Name: "api"})
 	source.Update()
 
 	containers, err := source.ListContainers(context.Background())

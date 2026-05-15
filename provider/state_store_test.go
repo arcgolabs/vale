@@ -1,16 +1,17 @@
-package provider
+package provider_test
 
 import (
 	"sync/atomic"
 	"testing"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
+	"github.com/arcgolabs/vale/provider"
 )
 
 func TestStateStoreLoadUsesSnapshot(t *testing.T) {
 	t.Parallel()
 
-	store := NewStateStore(
+	store := provider.NewStateStore(
 		collectionlist.NewList("a", "b"),
 		func(input *collectionlist.List[string]) *collectionlist.List[string] {
 			if input == nil {
@@ -21,7 +22,9 @@ func TestStateStoreLoadUsesSnapshot(t *testing.T) {
 	)
 
 	closer := store.Watch(func() {})
-	closer.Close()
+	if err := closer.Close(); err != nil {
+		t.Fatalf("close error: %v", err)
+	}
 
 	list := store.Load()
 	list.Add("x")
@@ -35,7 +38,7 @@ func TestStateStoreLoadUsesSnapshot(t *testing.T) {
 func TestStateStoreUpdateNotifiesWatchers(t *testing.T) {
 	t.Parallel()
 
-	store := NewStateStore("v1", nil)
+	store := provider.NewStateStore("v1", nil)
 	var calls atomic.Int32
 
 	closer := store.Watch(func() {
@@ -58,7 +61,7 @@ func TestStateStoreUpdateNotifiesWatchers(t *testing.T) {
 func TestStateStoreSetDoesNotNotifyWatchers(t *testing.T) {
 	t.Parallel()
 
-	store := NewStateStore("v1", nil)
+	store := provider.NewStateStore("v1", nil)
 	var calls atomic.Int32
 
 	closer := store.Watch(func() {
@@ -79,13 +82,13 @@ func TestStateStoreSetDoesNotNotifyWatchers(t *testing.T) {
 func TestStateStoreLoadOnNilReturnsZeroValue(t *testing.T) {
 	t.Parallel()
 	t.Run("nil store", func(t *testing.T) {
-		var store *StateStore[string]
+		var store *provider.StateStore[string]
 		if got := store.Load(); got != "" {
 			t.Fatalf("expected zero value, got %q", got)
 		}
 	})
 	t.Run("watch on nil store", func(t *testing.T) {
-		var store *StateStore[string]
+		var store *provider.StateStore[string]
 		closer := store.Watch(func() {})
 		if closer == nil {
 			t.Fatalf("expected non-nil closer")

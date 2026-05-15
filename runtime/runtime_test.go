@@ -120,14 +120,17 @@ func TestGatewayInvokesExtendedMetricsRecorder(t *testing.T) {
 
 	metrics := &testExtendedMetricsRecorder{}
 	gateway := valeruntime.NewGateway(valeruntime.NewSnapshot(), nil, false, metrics)
-	if metrics.snapshots != 1 {
-		t.Fatalf("snapshots = %d, want 1 after NewGateway", metrics.snapshots)
-	}
+	assertMetricCount(t, "snapshots after NewGateway", metrics.snapshots, 1)
 
 	gateway.Swap(valeruntime.NewSnapshot())
-	if metrics.snapshots != 2 {
-		t.Fatalf("snapshots = %d, want 2 after Swap", metrics.snapshots)
-	}
+	assertMetricCount(t, "snapshots after Swap", metrics.snapshots, 2)
+
+	observeExtendedMetrics(t, gateway)
+	assertExtendedMetricCounts(t, metrics)
+}
+
+func observeExtendedMetrics(t *testing.T, gateway *valeruntime.Gateway) {
+	t.Helper()
 
 	endpointURL, err := url.Parse("http://127.0.0.1:8081")
 	if err != nil {
@@ -135,41 +138,37 @@ func TestGatewayInvokesExtendedMetricsRecorder(t *testing.T) {
 	}
 	endpoint := &valeruntime.EndpointRuntime{URL: endpointURL}
 	gateway.ObserveHealth(endpoint, true)
-	if metrics.healthChecks != 1 {
-		t.Fatalf("health checks = %d, want 1", metrics.healthChecks)
-	}
 	gateway.ObserveHealthCheck(endpoint, true, time.Millisecond)
-	if metrics.healthCheckDurations != 1 {
-		t.Fatalf("health check durations = %d, want 1", metrics.healthCheckDurations)
-	}
 	gateway.ObserveRouteCache(true)
-	if metrics.routeCacheHits != 1 {
-		t.Fatalf("route cache hits = %d, want 1", metrics.routeCacheHits)
-	}
 	gateway.ObserveRouteCache(false)
-	if metrics.routeCacheMisses != 1 {
-		t.Fatalf("route cache misses = %d, want 1", metrics.routeCacheMisses)
-	}
 	gateway.ObserveReloadDuration("swapped", 100*time.Millisecond)
-	if metrics.reloadDurations != 1 {
-		t.Fatalf("reload durations = %d, want 1", metrics.reloadDurations)
-	}
 	gateway.ObserveReloadDebounce(100*time.Millisecond, 2)
-	if metrics.reloadDebounces != 1 {
-		t.Fatalf("reload debounces = %d, want 1", metrics.reloadDebounces)
-	}
-
 	gateway.ObserveRaftApply("data", 50*time.Millisecond, "success")
-	if metrics.raftApplys != 1 {
-		t.Fatalf("raft applys = %d, want 1", metrics.raftApplys)
-	}
-	if metrics.raftApplySuccess != 1 {
-		t.Fatalf("raft apply successes = %d, want 1", metrics.raftApplySuccess)
-	}
-
 	gateway.ObserveReload("swapped")
-	if metrics.reloads != 1 || metrics.lastReloadResult != "swapped" {
-		t.Fatalf("reloads = %d result = %q, want one swapped reload", metrics.reloads, metrics.lastReloadResult)
+}
+
+func assertExtendedMetricCounts(t *testing.T, metrics *testExtendedMetricsRecorder) {
+	t.Helper()
+
+	assertMetricCount(t, "health checks", metrics.healthChecks, 1)
+	assertMetricCount(t, "health check durations", metrics.healthCheckDurations, 1)
+	assertMetricCount(t, "route cache hits", metrics.routeCacheHits, 1)
+	assertMetricCount(t, "route cache misses", metrics.routeCacheMisses, 1)
+	assertMetricCount(t, "reload durations", metrics.reloadDurations, 1)
+	assertMetricCount(t, "reload debounces", metrics.reloadDebounces, 1)
+	assertMetricCount(t, "raft applys", metrics.raftApplys, 1)
+	assertMetricCount(t, "raft apply successes", metrics.raftApplySuccess, 1)
+	assertMetricCount(t, "reloads", metrics.reloads, 1)
+	if metrics.lastReloadResult != "swapped" {
+		t.Fatalf("reload result = %q, want swapped", metrics.lastReloadResult)
+	}
+}
+
+func assertMetricCount(t *testing.T, name string, got, want int) {
+	t.Helper()
+
+	if got != want {
+		t.Fatalf("%s = %d, want %d", name, got, want)
 	}
 }
 
