@@ -3,8 +3,73 @@ module github.com/arcgolabs/vale/examples/embedded_extension_components
 go 1.26.2
 
 require (
-	github.com/arcgolabs/collectionx/list v0.8.0
-	github.com/arcgolabs/collectionx/mapping v0.8.0
-	github.com/arcgolabs/logx v0.1.2
+	github.com/arcgolabs/collectionx/list v0.9.0
+	github.com/arcgolabs/collectionx/mapping v0.9.0
+	github.com/arcgolabs/logx v0.1.3
 	github.com/arcgolabs/observabilityx v0.4.0
+	github.com/arcgolabs/vale v0.1.6
+)
+
+require (
+	github.com/arcgolabs/collectionx/bitset v0.9.0 // indirect
+	github.com/arcgolabs/collectionx/graph v0.9.0 // indirect
+	github.com/arcgolabs/collectionx/prefix v0.9.0 // indirect
+	github.com/arcgolabs/collectionx/set v0.9.0 // indirect
+	github.com/arcgolabs/eventx v0.1.2 // indirect
+	github.com/arcgolabs/httpx v0.1.7 // indirect
+	github.com/arcgolabs/httpx/adapter/std v0.1.7 // indirect
+	github.com/arcgolabs/mapper v0.2.0 // indirect
+	github.com/arcgolabs/pkg/option v0.0.3 // indirect
+	github.com/caddyserver/certmagic v0.25.3 // indirect
+	github.com/caddyserver/zerossl v0.1.5 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/danielgtaylor/huma/v2 v2.38.0 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
+	github.com/go-chi/chi/v5 v5.3.0 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
+	github.com/go-playground/locales v0.14.1 // indirect
+	github.com/go-playground/universal-translator v0.18.1 // indirect
+	github.com/go-playground/validator/v10 v10.30.3 // indirect
+	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
+	github.com/hashicorp/go-memdb v1.3.5 // indirect
+	github.com/hashicorp/golang-lru v1.0.2 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/leodido/go-urn v1.4.0 // indirect
+	github.com/libdns/libdns v1.1.1 // indirect
+	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
+	github.com/mattn/go-colorable v0.1.15 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
+	github.com/mholt/acmez/v3 v3.1.6 // indirect
+	github.com/miekg/dns v1.1.72 // indirect
+	github.com/oklog/ulid/v2 v2.1.1 // indirect
+	github.com/panjf2000/ants/v2 v2.12.1 // indirect
+	github.com/rs/cors v1.11.1 // indirect
+	github.com/rs/zerolog v1.35.1 // indirect
+	github.com/samber/lo v1.53.0 // indirect
+	github.com/samber/mo v1.17.0 // indirect
+	github.com/samber/oops v1.22.0 // indirect
+	github.com/samber/slog-common v0.22.0 // indirect
+	github.com/samber/slog-zerolog/v2 v2.9.2 // indirect
+	github.com/sony/gobreaker v1.0.0 // indirect
+	github.com/spf13/cobra v1.10.2 // indirect
+	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/unrolled/secure v1.17.0 // indirect
+	github.com/vulcand/oxy/v2 v2.1.1 // indirect
+	github.com/zeebo/blake3 v0.2.4 // indirect
+	go.opentelemetry.io/otel v1.44.0 // indirect
+	go.opentelemetry.io/otel/trace v1.44.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
+	go.uber.org/zap v1.28.0 // indirect
+	go.uber.org/zap/exp v0.3.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
+	golang.org/x/mod v0.36.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
+	golang.org/x/tools v0.45.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
