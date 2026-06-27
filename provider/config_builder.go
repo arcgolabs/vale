@@ -10,13 +10,16 @@ import (
 
 type EntrypointOption func(*config.Entrypoint)
 type RouteOption func(*config.Route)
+type TCPRouteOption func(*config.TCPRoute)
 type MiddlewareOption func(*config.Middleware)
 
 type ConfigBuilder struct {
 	entrypoints *collectionlist.List[config.Entrypoint]
 	services    *collectionlist.List[config.Service]
+	tcpServices *collectionlist.List[config.TCPService]
 	middlewares *collectionlist.List[config.Middleware]
 	routes      *collectionlist.List[config.Route]
+	tcpRoutes   *collectionlist.List[config.TCPRoute]
 	cfg         *config.Config
 	errors      *collectionlist.List[error]
 }
@@ -25,8 +28,10 @@ func NewConfigBuilder() *ConfigBuilder {
 	return &ConfigBuilder{
 		entrypoints: collectionlist.NewList[config.Entrypoint](),
 		services:    collectionlist.NewList[config.Service](),
+		tcpServices: collectionlist.NewList[config.TCPService](),
 		middlewares: collectionlist.NewList[config.Middleware](),
 		routes:      collectionlist.NewList[config.Route](),
+		tcpRoutes:   collectionlist.NewList[config.TCPRoute](),
 		cfg:         &config.Config{},
 		errors:      collectionlist.NewList[error](),
 	}
@@ -39,8 +44,10 @@ func (b *ConfigBuilder) Build() *config.Config {
 	cfg := *b.cfg
 	cfg.Entrypoints = b.entrypoints.Values()
 	cfg.Services = b.services.Values()
+	cfg.TCPServices = b.tcpServices.Values()
 	cfg.Middlewares = b.middlewares.Values()
 	cfg.Routes = b.routes.Values()
+	cfg.TCPRoutes = b.tcpRoutes.Values()
 	return &cfg
 }
 

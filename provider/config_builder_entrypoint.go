@@ -35,6 +35,19 @@ func (b *ConfigBuilder) Entrypoint(name, address string, options ...EntrypointOp
 	return b
 }
 
+func EntrypointProtocol(protocol string) EntrypointOption {
+	return func(entrypoint *config.Entrypoint) {
+		if entrypoint == nil {
+			return
+		}
+		entrypoint.Protocol = strings.TrimSpace(protocol)
+	}
+}
+
+func EntrypointTCP() EntrypointOption {
+	return EntrypointProtocol(config.EntrypointProtocolTCP)
+}
+
 func EntrypointTLS(certFile, keyFile string) EntrypointOption {
 	return func(entrypoint *config.Entrypoint) {
 		if entrypoint == nil {

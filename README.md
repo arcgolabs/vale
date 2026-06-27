@@ -15,6 +15,7 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 - Compiled route index: exact-host -> wildcard-host -> path-prefix/method/header predicates
 - Round-robin and weighted round-robin endpoint picking
 - Built-in reverse proxy engine based on `oxy`
+- Built-in TCP port proxy entrypoints for L4 stream forwarding
 - File-based config watching with invalid-config rollback behavior
 - JSON access logging and Prometheus metrics
 - Admin API for routes/services/endpoints and `/metrics`
@@ -147,6 +148,27 @@ go run ./cmd -config-files "./base.hcl,./service.hcl,./override.hcl"
 ```
 
 The reverse proxy engine is built in and uses `oxy`.
+### TCP Port Proxy
+
+TCP entrypoints use `protocol = "tcp"` and map the full listener port to a TCP service. This is L4 stream forwarding, not HTTP routing; each TCP entrypoint should have one `tcp_route`.
+
+```hcl
+entrypoint "postgres" {
+  address  = ":15432"
+  protocol = "tcp"
+}
+
+tcp_service "postgres" {
+  endpoint {
+    address = "127.0.0.1:5432"
+  }
+}
+
+tcp_route "postgres" {
+  entrypoint = "postgres"
+  service    = "postgres"
+}
+```
 
 TLS and ACME defaults:
 

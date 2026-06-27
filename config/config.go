@@ -3,8 +3,10 @@ package config
 type Config struct {
 	Entrypoints   []Entrypoint   `hcl:"entrypoint,block"`
 	Services      []Service      `hcl:"service,block"`
+	TCPServices   []TCPService   `hcl:"tcp_service,block"`
 	Middlewares   []Middleware   `hcl:"middleware,block"`
 	Routes        []Route        `hcl:"route,block"`
+	TCPRoutes     []TCPRoute     `hcl:"tcp_route,block"`
 	Admin         *Admin         `hcl:"admin,block"`
 	Observability *Observability `hcl:"observability,block"`
 	Health        *Health        `hcl:"health,block"`
@@ -12,10 +14,11 @@ type Config struct {
 }
 
 type Entrypoint struct {
-	Name    string          `hcl:",label"`
-	Address string          `hcl:"address"`
-	TLS     *EntrypointTLS  `hcl:"tls,block"`
-	ACME    *EntrypointACME `hcl:"acme,block"`
+	Name     string          `hcl:",label"`
+	Address  string          `hcl:"address"`
+	Protocol string          `hcl:"protocol,optional"`
+	TLS      *EntrypointTLS  `hcl:"tls,block"`
+	ACME     *EntrypointACME `hcl:"acme,block"`
 }
 
 type EntrypointTLS struct {
@@ -42,6 +45,17 @@ type Endpoint struct {
 	Weight int    `hcl:"weight,optional"`
 }
 
+type TCPService struct {
+	Name      string        `hcl:",label"`
+	Strategy  string        `hcl:"strategy,optional"`
+	Endpoints []TCPEndpoint `hcl:"endpoint,block"`
+}
+
+type TCPEndpoint struct {
+	Address string `hcl:"address"`
+	Weight  int    `hcl:"weight,optional"`
+}
+
 type Route struct {
 	Name        string            `hcl:",label"`
 	Entrypoint  string            `hcl:"entrypoint"`
@@ -51,6 +65,12 @@ type Route struct {
 	Method      string            `hcl:"method,optional"`
 	Headers     map[string]string `hcl:"headers,optional"`
 	Middlewares []string          `hcl:"middlewares,optional"`
+}
+
+type TCPRoute struct {
+	Name       string `hcl:",label"`
+	Entrypoint string `hcl:"entrypoint"`
+	Service    string `hcl:"service"`
 }
 
 type Middleware struct {

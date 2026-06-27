@@ -257,3 +257,37 @@ func TestCompileMiddlewareChainExpandsBuiltins(t *testing.T) {
 		t.Fatalf("redirect middleware = %#v", redirect)
 	}
 }
+
+func TestCompileTCPResources(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Entrypoints: []config.Entrypoint{{Name: "db", Address: ":15432", Protocol: "tcp"}},
+		TCPServices: []config.TCPService{{
+			Name:     "postgres",
+			Strategy: "weighted_round_robin",
+			Endpoints: []config.TCPEndpoint{
+				{Address: "127.0.0.1:5432", Weight: 2},
+				{Address: "127.0.0.1:5433", Weight: 1},
+			},
+		}},
+		TCPRoutes: []config.TCPRoute{{Name: "postgres", Entrypoint: "db", Service: "postgres"}},
+	}
+
+	snapshot, err := compiler.Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entrypoint, _ := snapshot.EntrypointConfigs.Get("db")
+	if entrypoint.Protocol != runtime.EntrypointProtocolTCP {
+		t.Fatalf("entrypoint protocol = %q, want tcp", entrypoint.Protocol)
+	}
+	service, ok := snapshot.TCPServices.Get("postgres")
+	if !ok || service.Strategy != "weighted_round_robin" || service.Endpoints.Len() != 2 {
+		t.Fatalf("tcp service = %#v", service)
+	}
+	route, ok := snapshot.TCPRoutes.Get("db")
+	if !ok || route.Service != service {
+		t.Fatalf("tcp route = %#v", route)
+	}
+}

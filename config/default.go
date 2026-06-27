@@ -3,7 +3,7 @@ package config
 func Default() *Config {
 	return &Config{
 		Entrypoints: []Entrypoint{
-			{Name: "web", Address: ":8080"},
+			{Name: "web", Address: ":8080", Protocol: EntrypointProtocolHTTP},
 		},
 		Services: []Service{
 			{

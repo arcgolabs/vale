@@ -132,3 +132,19 @@ func TestConfigBuilderBuildValidatedReturnsAccumulatedErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigBuilderTCPResources(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := provider.NewConfigBuilder().
+		Entrypoint("db", ":15432", provider.EntrypointTCP()).
+		TCPService("postgres", "127.0.0.1:5432").
+		TCPRouteTo("postgres", "db", "postgres").
+		BuildValidated()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Entrypoints[0].Protocol != config.EntrypointProtocolTCP || len(cfg.TCPServices) != 1 || len(cfg.TCPRoutes) != 1 {
+		t.Fatalf("tcp config = %#v", cfg)
+	}
+}

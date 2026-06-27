@@ -53,7 +53,9 @@ func NewEntrypointConfig(name, address string) *config.Config {
 		},
 		Middlewares: make([]config.Middleware, 0),
 		Services:    make([]config.Service, 0),
+		TCPServices: make([]config.TCPService, 0),
 		Routes:      make([]config.Route, 0),
+		TCPRoutes:   make([]config.TCPRoute, 0),
 	}
 }
 
@@ -80,4 +82,29 @@ func AppendSortedRoutes(cfg *config.Config, routes *mapping.Map[string, config.R
 		return route
 	})
 	cfg.Routes = collectionlist.NewList(cfg.Routes...).Merge(sortedRoutes).Values()
+}
+
+func AppendSortedTCPServices(cfg *config.Config, services *mapping.Map[string, *config.TCPService]) {
+	if cfg == nil || services == nil {
+		return
+	}
+	sortedServices := collectionlist.FilterMapList(SortedStrings(collectionlist.NewList(services.Keys()...)), func(_ int, serviceName string) (config.TCPService, bool) {
+		service, _ := services.Get(serviceName)
+		if service != nil {
+			return *service, true
+		}
+		return config.TCPService{}, false
+	})
+	cfg.TCPServices = collectionlist.NewList(cfg.TCPServices...).Merge(sortedServices).Values()
+}
+
+func AppendSortedTCPRoutes(cfg *config.Config, routes *mapping.Map[string, config.TCPRoute]) {
+	if cfg == nil || routes == nil {
+		return
+	}
+	sortedRoutes := collectionlist.MapList(SortedStrings(collectionlist.NewList(routes.Keys()...)), func(_ int, routeName string) config.TCPRoute {
+		route, _ := routes.Get(routeName)
+		return route
+	})
+	cfg.TCPRoutes = collectionlist.NewList(cfg.TCPRoutes...).Merge(sortedRoutes).Values()
 }

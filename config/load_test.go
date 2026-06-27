@@ -155,3 +155,37 @@ func TestValidateMiddlewarePolicyOptions(t *testing.T) {
 		t.Fatalf("Validate error = %v, want forward auth timeout error", err)
 	}
 }
+
+func TestValidateTCPConfigAndProtocolBoundaries(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Entrypoints: []config.Entrypoint{{Name: "db", Address: ":15432", Protocol: "tcp"}},
+		TCPServices: []config.TCPService{{
+			Name:      "postgres",
+			Endpoints: []config.TCPEndpoint{{Address: "127.0.0.1:5432"}},
+		}},
+		TCPRoutes: []config.TCPRoute{{Name: "postgres", Entrypoint: "db", Service: "postgres"}},
+	}
+	if err := config.Validate(cfg); err != nil {
+		t.Fatalf("Validate tcp config error = %v", err)
+	}
+
+	cfg.Routes = []config.Route{{Name: "http-on-tcp", Entrypoint: "db", Service: "api"}}
+	cfg.Services = []config.Service{{Name: "api", Endpoints: []config.Endpoint{{URL: "http://127.0.0.1:8081"}}}}
+	if err := config.Validate(cfg); err == nil || !strings.Contains(err.Error(), "references tcp entrypoint") {
+		t.Fatalf("Validate error = %v, want http route on tcp entrypoint error", err)
+	}
+
+	cfg = &config.Config{
+		Entrypoints: []config.Entrypoint{{Name: "web", Address: ":8080"}},
+		TCPServices: []config.TCPService{{
+			Name:      "postgres",
+			Endpoints: []config.TCPEndpoint{{Address: "127.0.0.1:5432"}},
+		}},
+		TCPRoutes: []config.TCPRoute{{Name: "postgres", Entrypoint: "web", Service: "postgres"}},
+	}
+	if err := config.Validate(cfg); err == nil || !strings.Contains(err.Error(), "references non-tcp entrypoint") {
+		t.Fatalf("Validate error = %v, want tcp route on http entrypoint error", err)
+	}
+}

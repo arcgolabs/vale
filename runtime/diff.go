@@ -71,7 +71,10 @@ func diffNamedRecords(current, next *mapping.Map[string, string]) ResourceDiff {
 
 func routeFingerprints(snapshot *CompiledSnapshot) *mapping.Map[string, string] {
 	records := mapping.NewMap[string, string]()
-	if snapshot == nil || snapshot.RoutesByEntrypoint == nil {
+	if snapshot == nil {
+		return records
+	}
+	if snapshot.RoutesByEntrypoint == nil {
 		return records
 	}
 	snapshot.RoutesByEntrypoint.Range(func(entrypoint string, routes []*CompiledRoute) bool {
@@ -91,12 +94,27 @@ func routeFingerprints(snapshot *CompiledSnapshot) *mapping.Map[string, string] 
 		})
 		return true
 	})
+	if snapshot.TCPRoutes != nil {
+		snapshot.TCPRoutes.Range(func(entrypoint string, route *CompiledTCPRoute) bool {
+			if route == nil {
+				return true
+			}
+			records.Set("tcp:"+route.Name, strings.Join([]string{
+				entrypoint,
+				tcpRouteServiceName(route),
+			}, "\x00"))
+			return true
+		})
+	}
 	return records
 }
 
 func serviceFingerprints(snapshot *CompiledSnapshot) *mapping.Map[string, string] {
 	records := mapping.NewMap[string, string]()
-	if snapshot == nil || snapshot.Services == nil {
+	if snapshot == nil {
+		return records
+	}
+	if snapshot.Services == nil {
 		return records
 	}
 	snapshot.Services.Range(func(name string, service *ServiceRuntime) bool {
@@ -106,12 +124,24 @@ func serviceFingerprints(snapshot *CompiledSnapshot) *mapping.Map[string, string
 		records.Set(name, service.Strategy+"\x00"+serviceEndpointFingerprint(service))
 		return true
 	})
+	if snapshot.TCPServices != nil {
+		snapshot.TCPServices.Range(func(name string, service *TCPServiceRuntime) bool {
+			if service == nil {
+				return true
+			}
+			records.Set("tcp:"+name, service.Strategy+"\x00"+tcpServiceEndpointFingerprint(service))
+			return true
+		})
+	}
 	return records
 }
 
 func endpointFingerprints(snapshot *CompiledSnapshot) *mapping.Map[string, string] {
 	records := mapping.NewMap[string, string]()
-	if snapshot == nil || snapshot.Services == nil {
+	if snapshot == nil {
+		return records
+	}
+	if snapshot.Services == nil {
 		return records
 	}
 	snapshot.Services.Range(func(serviceName string, service *ServiceRuntime) bool {
@@ -128,6 +158,22 @@ func endpointFingerprints(snapshot *CompiledSnapshot) *mapping.Map[string, strin
 		})
 		return true
 	})
+	if snapshot.TCPServices != nil {
+		snapshot.TCPServices.Range(func(serviceName string, service *TCPServiceRuntime) bool {
+			if service == nil || service.Endpoints == nil {
+				return true
+			}
+			service.Endpoints.Range(func(_ int, endpoint *TCPEndpointRuntime) bool {
+				if endpoint == nil || endpoint.Address == "" {
+					return true
+				}
+				name := fmt.Sprintf("tcp:%s/%s", serviceName, endpoint.Address)
+				records.Set(name, strconv.Itoa(endpoint.Weight))
+				return true
+			})
+			return true
+		})
+	}
 	return records
 }
 
@@ -167,4 +213,27 @@ func sortStringList(values *collectionlist.List[string]) {
 		return
 	}
 	values.Sort(strings.Compare)
+}
+
+func tcpRouteServiceName(route *CompiledTCPRoute) string {
+	if route == nil || route.Service == nil {
+		return ""
+	}
+	return route.Service.Name
+}
+
+func tcpServiceEndpointFingerprint(service *TCPServiceRuntime) string {
+	if service == nil || service.Endpoints == nil {
+		return ""
+	}
+	endpoints := collectionlist.NewListWithCapacity[string](service.Endpoints.Len())
+	service.Endpoints.Range(func(_ int, endpoint *TCPEndpointRuntime) bool {
+		if endpoint == nil || endpoint.Address == "" {
+			return true
+		}
+		endpoints.Add(fmt.Sprintf("%s#%d", endpoint.Address, endpoint.Weight))
+		return true
+	})
+	sortStringList(endpoints)
+	return endpoints.Join(",")
 }

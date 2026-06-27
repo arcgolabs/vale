@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -76,6 +77,12 @@ func (h *HealthChecker) check(ctx context.Context, gateway *Gateway) {
 		h.checkService(groupCtx, group, gateway, service)
 		return true
 	})
+	if snapshot.TCPServices != nil {
+		snapshot.TCPServices.Range(func(_ string, service *TCPServiceRuntime) bool {
+			h.checkTCPService(groupCtx, group, service)
+			return true
+		})
+	}
 	if err := group.Wait(); err != nil && h.logger != nil {
 		h.logger.Error("health check cycle failed", "error", oops.
 			In("runtime").
@@ -95,6 +102,43 @@ func (h *HealthChecker) checkService(ctx context.Context, group *errgroup.Group,
 		})
 		return true
 	})
+}
+
+func (h *HealthChecker) checkTCPService(ctx context.Context, group *errgroup.Group, service *TCPServiceRuntime) {
+	if group == nil || service == nil || service.Endpoints == nil {
+		return
+	}
+	service.Endpoints.Range(func(_ int, endpoint *TCPEndpointRuntime) bool {
+		checkedEndpoint := endpoint
+		group.Go(func() error {
+			h.checkTCPEndpoint(ctx, checkedEndpoint)
+			return nil
+		})
+		return true
+	})
+}
+
+func (h *HealthChecker) checkTCPEndpoint(ctx context.Context, endpoint *TCPEndpointRuntime) {
+	if endpoint == nil || endpoint.Address == "" {
+		return
+	}
+	requestCtx, cancel := context.WithTimeout(ctx, h.client.Timeout)
+	defer cancel()
+
+	var dialer net.Dialer
+	conn, err := dialer.DialContext(requestCtx, "tcp", endpoint.Address)
+	if err != nil {
+		h.setTCPEndpointHealth(ctx, endpoint, false, "dial_failed", oops.
+			In("runtime").
+			With("address", endpoint.Address).
+			Wrapf(err, "execute tcp health check"))
+		return
+	}
+	if err := conn.Close(); err != nil && h.logger != nil {
+		h.logger.Error("tcp health connection close failed", "address", endpoint.Address, "error", err)
+	}
+	h.setTCPEndpointHealth(ctx, endpoint, true, "dial_succeeded", nil)
+	endpoint.LastChecked.Store(time.Now().Unix())
 }
 
 func (h *HealthChecker) checkEndpoint(ctx context.Context, gateway *Gateway, endpoint *EndpointRuntime) {
@@ -164,4 +208,27 @@ func (h *HealthChecker) setEndpointHealth(ctx context.Context, endpoint *Endpoin
 		attrs = append(attrs, slog.Any("error", err))
 	}
 	h.logger.LogAttrs(ctx, level, "endpoint health changed", attrs...)
+}
+
+func (h *HealthChecker) setTCPEndpointHealth(ctx context.Context, endpoint *TCPEndpointRuntime, healthy bool, reason string, err error) {
+	previous := endpoint.Healthy.Swap(healthy)
+	if h.logger == nil || previous == healthy {
+		return
+	}
+	level := slog.LevelInfo
+	if !healthy {
+		level = slog.LevelWarn
+		if endpoint.LastChecked.Load() == 0 {
+			level = slog.LevelDebug
+		}
+	}
+	attrs := []slog.Attr{
+		slog.String("endpoint", endpoint.Address),
+		slog.Bool("healthy", healthy),
+		slog.String("reason", reason),
+	}
+	if err != nil {
+		attrs = append(attrs, slog.Any("error", err))
+	}
+	h.logger.LogAttrs(ctx, level, "tcp endpoint health changed", attrs...)
 }

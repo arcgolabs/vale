@@ -17,7 +17,9 @@ func NewSnapshot() *CompiledSnapshot {
 		EntrypointConfigs:  mapping.NewMap[string, EntrypointRuntime](),
 		RoutesByEntrypoint: mapping.NewMultiMap[string, *CompiledRoute](),
 		EntrypointMatchers: mapping.NewMap[string, *EntrypointMatcher](),
+		TCPRoutes:          mapping.NewMap[string, *CompiledTCPRoute](),
 		Services:           mapping.NewMap[string, *ServiceRuntime](),
+		TCPServices:        mapping.NewMap[string, *TCPServiceRuntime](),
 	}
 }
 
@@ -49,6 +51,9 @@ func (s *CompiledSnapshot) AddEntrypoint(name, address string, entrypoint Entryp
 	name = strings.TrimSpace(name)
 	if entrypoint.Name == "" {
 		entrypoint.Name = name
+	}
+	if entrypoint.Protocol == "" {
+		entrypoint.Protocol = EntrypointProtocolHTTP
 	}
 	address = strings.TrimSpace(address)
 	if entrypoint.Address == "" {

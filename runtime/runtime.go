@@ -16,8 +16,10 @@ type CompiledSnapshot struct {
 	EntrypointConfigs  *mapping.Map[string, EntrypointRuntime]
 	RoutesByEntrypoint *mapping.MultiMap[string, *CompiledRoute]
 	EntrypointMatchers *mapping.Map[string, *EntrypointMatcher]
+	TCPRoutes          *mapping.Map[string, *CompiledTCPRoute]
 	Catalog            *Catalog
 	Services           *mapping.Map[string, *ServiceRuntime]
+	TCPServices        *mapping.Map[string, *TCPServiceRuntime]
 	AdminAddress       string
 	AccessLogEnabled   bool
 	MetricsEnabled     bool
@@ -42,9 +44,10 @@ type CompiledRoute struct {
 }
 
 type EntrypointRuntime struct {
-	Name    string
-	Address string
-	TLS     TLSRuntime
+	Name     string
+	Address  string
+	Protocol string
+	TLS      TLSRuntime
 }
 
 type TLSRuntime struct {
@@ -186,6 +189,28 @@ type EndpointRuntime struct {
 	URL         *url.URL
 	Weight      int
 	Proxy       http.Handler
+	Healthy     atomic.Bool
+	LastChecked atomic.Int64
+}
+
+type CompiledTCPRoute struct {
+	Name       string
+	Entrypoint string
+	Service    *TCPServiceRuntime
+}
+
+type TCPServiceRuntime struct {
+	Name           string
+	Strategy       string
+	Endpoints      *collectionlist.List[*TCPEndpointRuntime]
+	weightedRanges *collectionlist.List[weightedEndpointRange]
+	totalWeight    uint64
+	rrCounter      atomic.Uint64
+}
+
+type TCPEndpointRuntime struct {
+	Address     string
+	Weight      int
 	Healthy     atomic.Bool
 	LastChecked atomic.Int64
 }

@@ -3,7 +3,6 @@ package runtime
 import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/samber/oops"
-	"sort"
 )
 
 type weightedEndpointRange struct {
@@ -84,10 +83,7 @@ func (s *ServiceRuntime) pickWeightedEndpoint() *EndpointRuntime {
 }
 
 func (s *ServiceRuntime) weightedRangeIndex(ticket uint64) int {
-	return sort.Search(s.weightedRanges.Len(), func(index int) bool {
-		weightedRange, _ := s.weightedRanges.Get(index)
-		return ticket < weightedRange.maxExclusive
-	})
+	return findWeightedRangeIndex(s.weightedRanges, ticket)
 }
 
 func (s *ServiceRuntime) pickRoundRobinEndpoint(endpointCount int) *EndpointRuntime {

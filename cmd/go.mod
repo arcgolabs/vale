@@ -20,7 +20,6 @@ require (
 )
 
 require (
-	github.com/DataDog/zstd v1.5.7 // indirect
 	github.com/VictoriaMetrics/metrics v1.6.2 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
@@ -39,11 +38,9 @@ require (
 	github.com/caddyserver/zerossl v0.1.5 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cockroachdb/errors v1.13.0 // indirect
-	github.com/cockroachdb/fifo v0.0.0-20240816210425-c5d0cb0b6fc0 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506 // indirect
-	github.com/cockroachdb/pebble v1.1.5 // indirect
+	github.com/cockroachdb/pebble v0.0.0-20210331181633-27fc006b8bfb // indirect
 	github.com/cockroachdb/redact v1.1.8 // indirect
-	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb // indirect
 	github.com/danielgtaylor/huma/v2 v2.38.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect

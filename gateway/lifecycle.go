@@ -39,9 +39,9 @@ func (g *Gateway) Start(ctx context.Context) error {
 	g.publishClusterUpdate(snapshot)
 	g.startProviderObservability()
 
-	servers, listeners, entrypointNames, err := g.buildServers(ctx, snapshot)
+	servers, listeners, entrypointNames, tcpServers, err := g.buildServers(ctx, snapshot)
 	if err != nil {
-		g.cleanupStartFailure(listeners)
+		g.cleanupStartFailure(listeners, tcpServers)
 		return oops.
 			In("gateway").
 			Wrapf(err, "build initial servers")
@@ -49,7 +49,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 
 	if g.config.Watch {
 		if err := g.startWatcher(ctx); err != nil {
-			g.cleanupStartFailure(listeners)
+			g.cleanupStartFailure(listeners, tcpServers)
 			return err
 		}
 	}
@@ -57,7 +57,8 @@ func (g *Gateway) Start(ctx context.Context) error {
 	g.startHealthChecker(ctx, snapshot)
 
 	g.servers = servers
-	g.serveServers(servers, listeners, entrypointNames)
+	g.tcpServers = tcpServers
+	g.serveServers(servers, listeners, entrypointNames, tcpServers)
 
 	g.started = true
 	g.logger.Info("gateway started", "entrypoints", snapshot.Entrypoints.Len(), "admin_addr", snapshot.AdminAddress)
@@ -139,8 +140,10 @@ func (g *Gateway) Stop(ctx context.Context) error {
 
 	g.stopWatcher()
 	g.stopHealthChecker()
+	g.stopTCPServers(ctx)
 	g.stopServers(ctx)
 
+	g.tcpServers = nil
 	g.servers = nil
 	g.runtime = nil
 	g.started = false
@@ -182,6 +185,19 @@ func (g *Gateway) stopServers(ctx context.Context) {
 			g.logger.Error("server shutdown failed", "addr", server.Addr, "error", err)
 		}
 		g.logger.Debug("server stopped", "addr", server.Addr)
+		return true
+	})
+}
+
+func (g *Gateway) stopTCPServers(ctx context.Context) {
+	if g.tcpServers == nil {
+		return
+	}
+	g.tcpServers.Range(func(_ int, server *tcpServer) bool {
+		if err := server.Shutdown(ctx); err != nil {
+			g.logger.Error("tcp server shutdown failed", "entrypoint", server.entrypoint, "addr", server.address, "error", err)
+		}
+		g.logger.Debug("tcp server stopped", "entrypoint", server.entrypoint, "addr", server.address)
 		return true
 	})
 }
@@ -258,13 +274,19 @@ func (g *Gateway) stopProviderObservability() {
 	g.unsubReloads = nil
 }
 
-func (g *Gateway) serveServers(servers *collectionlist.List[*http.Server], listeners *collectionlist.List[net.Listener], entrypointNames *collectionlist.List[string]) {
+func (g *Gateway) serveServers(servers *collectionlist.List[*http.Server], listeners *collectionlist.List[net.Listener], entrypointNames *collectionlist.List[string], tcpServers *collectionlist.List[*tcpServer]) {
 	entrypointNames.Range(func(index int, entrypoint string) bool {
 		server, _ := servers.Get(index)
 		listener, _ := listeners.Get(index)
 		go g.listenEntrypoint(entrypoint, server, listener)
 		return true
 	})
+	if tcpServers != nil {
+		tcpServers.Range(func(_ int, server *tcpServer) bool {
+			go server.Serve()
+			return true
+		})
+	}
 	adminServer, _ := servers.Get(servers.Len() - 1)
 	adminListener, _ := listeners.Get(listeners.Len() - 1)
 	go g.listenAdmin(adminServer, adminListener)

@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -34,14 +35,21 @@ func CompileWithOptions(cfg *config.Config, options Options) (*runtime.CompiledS
 	if err != nil {
 		return nil, err
 	}
+	tcpServiceMap, err := compileTCPServices(cfg.TCPServices)
+	if err != nil {
+		return nil, err
+	}
 	entrypointMap, entrypointConfigMap := compileEntrypoints(cfg.Entrypoints)
 	routesByEntrypoint := compileRoutes(cfg.Routes, serviceMap, middlewareMap)
+	tcpRoutes := compileTCPRoutes(cfg.TCPRoutes, tcpServiceMap)
 	snapshot := &runtime.CompiledSnapshot{
 		Entrypoints:        entrypointMap,
 		EntrypointConfigs:  entrypointConfigMap,
 		RoutesByEntrypoint: routesByEntrypoint,
 		EntrypointMatchers: compileEntrypointMatchers(routesByEntrypoint),
+		TCPRoutes:          tcpRoutes,
 		Services:           serviceMap,
+		TCPServices:        tcpServiceMap,
 		AdminAddress:       pickAdminAddress(cfg),
 		AccessLogEnabled:   pickAccessLogEnabled(cfg),
 		MetricsEnabled:     pickMetricsEnabled(cfg),
@@ -110,6 +118,57 @@ func compileEndpoint(serviceName string, endpoint config.Endpoint) (*runtime.End
 	return rtEndpoint, nil
 }
 
+func compileTCPServices(services []config.TCPService) (*mapping.Map[string, *runtime.TCPServiceRuntime], error) {
+	serviceMap := mapping.NewMapWithCapacity[string, *runtime.TCPServiceRuntime](len(services))
+	for index := range services {
+		service := &services[index]
+		rtService, err := compileTCPService(service)
+		if err != nil {
+			return nil, err
+		}
+		serviceMap.Set(rtService.Name, rtService)
+	}
+	return serviceMap, nil
+}
+
+func compileTCPService(service *config.TCPService) (*runtime.TCPServiceRuntime, error) {
+	strategy := strings.TrimSpace(service.Strategy)
+	if strategy == "" {
+		strategy = "round_robin"
+	}
+	if strategy != "round_robin" && strategy != "weighted_round_robin" {
+		return nil, fmt.Errorf("tcp_service %q has unsupported strategy %q", service.Name, strategy)
+	}
+	rtService := &runtime.TCPServiceRuntime{
+		Name:      service.Name,
+		Strategy:  strategy,
+		Endpoints: collectionlist.NewListWithCapacity[*runtime.TCPEndpointRuntime](len(service.Endpoints)),
+	}
+	for _, endpoint := range service.Endpoints {
+		rtEndpoint, err := compileTCPEndpoint(service.Name, endpoint)
+		if err != nil {
+			return nil, err
+		}
+		rtService.Endpoints.Add(rtEndpoint)
+	}
+	rtService.BuildSlots()
+	return rtService, nil
+}
+
+func compileTCPEndpoint(serviceName string, endpoint config.TCPEndpoint) (*runtime.TCPEndpointRuntime, error) {
+	address := strings.TrimSpace(endpoint.Address)
+	if _, _, err := net.SplitHostPort(address); err != nil {
+		return nil, fmt.Errorf("tcp_service %q endpoint address %q is invalid", serviceName, endpoint.Address)
+	}
+	weight := endpoint.Weight
+	if weight <= 0 {
+		weight = 1
+	}
+	rtEndpoint := &runtime.TCPEndpointRuntime{Address: address, Weight: weight}
+	rtEndpoint.Healthy.Store(true)
+	return rtEndpoint, nil
+}
+
 func compileEntrypoints(entrypoints []config.Entrypoint) (*mapping.Map[string, string], *mapping.Map[string, runtime.EntrypointRuntime]) {
 	entrypointMap := mapping.NewMapWithCapacity[string, string](len(entrypoints))
 	entrypointConfigMap := mapping.NewMapWithCapacity[string, runtime.EntrypointRuntime](len(entrypoints))
@@ -118,6 +177,27 @@ func compileEntrypoints(entrypoints []config.Entrypoint) (*mapping.Map[string, s
 		entrypointConfigMap.Set(entrypoint.Name, compileEntrypoint(entrypoint))
 	}
 	return entrypointMap, entrypointConfigMap
+}
+
+func compileTCPRoutes(
+	routes []config.TCPRoute,
+	serviceMap *mapping.Map[string, *runtime.TCPServiceRuntime],
+) *mapping.Map[string, *runtime.CompiledTCPRoute] {
+	routesByEntrypoint := mapping.NewMapWithCapacity[string, *runtime.CompiledTCPRoute](len(routes))
+	for index := range routes {
+		route := &routes[index]
+		service, _ := serviceMap.Get(route.Service)
+		routesByEntrypoint.Set(route.Entrypoint, compileTCPRoute(route, service))
+	}
+	return routesByEntrypoint
+}
+
+func compileTCPRoute(route *config.TCPRoute, service *runtime.TCPServiceRuntime) *runtime.CompiledTCPRoute {
+	return &runtime.CompiledTCPRoute{
+		Name:       route.Name,
+		Entrypoint: route.Entrypoint,
+		Service:    service,
+	}
 }
 
 func compileRoutes(
@@ -173,9 +253,10 @@ func normalizeHeaders(headers map[string]string) *mapping.Map[string, string] {
 
 func compileEntrypoint(entrypoint config.Entrypoint) runtime.EntrypointRuntime {
 	return runtime.EntrypointRuntime{
-		Name:    entrypoint.Name,
-		Address: entrypoint.Address,
-		TLS:     compileTLS(entrypoint),
+		Name:     entrypoint.Name,
+		Address:  entrypoint.Address,
+		Protocol: config.NormalizeEntrypointProtocol(entrypoint.Protocol),
+		TLS:      compileTLS(entrypoint),
 	}
 }
 

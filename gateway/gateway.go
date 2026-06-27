@@ -62,6 +62,7 @@ type Gateway struct {
 	watcher      io.Closer
 	watchCancel  context.CancelFunc
 	servers      *collectionlist.List[*http.Server]
+	tcpServers   *collectionlist.List[*tcpServer]
 	reload       ReloadStatusView
 	unsubReloads []func()
 }

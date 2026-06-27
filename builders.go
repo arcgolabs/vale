@@ -12,8 +12,11 @@ import (
 type (
 	RuntimeSnapshot    = runtime.CompiledSnapshot
 	RuntimeRoute       = runtime.CompiledRoute
+	RuntimeTCPRoute    = runtime.CompiledTCPRoute
 	RuntimeService     = runtime.ServiceRuntime
+	RuntimeTCPService  = runtime.TCPServiceRuntime
 	RuntimeEndpoint    = runtime.EndpointRuntime
+	RuntimeTCPEndpoint = runtime.TCPEndpointRuntime
 	RuntimeEntrypoint  = runtime.EntrypointRuntime
 	RuntimeTLS         = runtime.TLSRuntime
 	RuntimeACME        = runtime.ACMERuntime
@@ -25,12 +28,15 @@ type (
 	MiddlewareRegistry = runtime.MiddlewareRegistry
 	MiddlewareFactory  = runtime.MiddlewareFactory
 	ConfigEndpoint     = config.Endpoint
+	ConfigTCPEndpoint  = config.TCPEndpoint
 	ConfigRoute        = config.Route
+	ConfigTCPRoute     = config.TCPRoute
 	ConfigMiddleware   = config.Middleware
 	ConfigSecurity     = config.Security
 	ConfigBuilder      = provider.ConfigBuilder
 	EntrypointOption   = provider.EntrypointOption
 	RouteOption        = provider.RouteOption
+	TCPRouteOption     = provider.TCPRouteOption
 	MiddlewareOption   = provider.MiddlewareOption
 	ForwardAuthOption  = provider.ForwardAuthOption
 )
@@ -41,6 +47,18 @@ func NewSnapshot() *RuntimeSnapshot {
 
 func NewService(name, strategy string, endpoints ...*RuntimeEndpoint) *RuntimeService {
 	return runtime.NewService(name, strategy, endpoints...)
+}
+
+func NewTCPEndpoint(address string, weight int) *RuntimeTCPEndpoint {
+	return runtime.NewTCPEndpoint(address, weight)
+}
+
+func NewTCPService(name, strategy string, endpoints ...*RuntimeTCPEndpoint) *RuntimeTCPService {
+	return runtime.NewTCPService(name, strategy, endpoints...)
+}
+
+func NewTCPRoute(name, entrypoint string, service *RuntimeTCPService) *RuntimeTCPRoute {
+	return runtime.NewTCPRoute(name, entrypoint, service)
 }
 
 func NewEndpoint(rawURL string, weight int, proxy http.Handler) (*RuntimeEndpoint, error) {
@@ -78,6 +96,18 @@ func NewConfigEndpoint(rawURL string, weight int) ConfigEndpoint {
 	return provider.ConfigEndpoint(rawURL, weight)
 }
 
+func NewConfigTCPEndpoint(address string, weight int) ConfigTCPEndpoint {
+	return provider.ConfigTCPEndpoint(address, weight)
+}
+
+func EntrypointProtocol(protocol string) EntrypointOption {
+	return provider.EntrypointProtocol(protocol)
+}
+
+func EntrypointTCP() EntrypointOption {
+	return provider.EntrypointTCP()
+}
+
 func EntrypointTLS(certFile, keyFile string) EntrypointOption {
 	return provider.EntrypointTLS(certFile, keyFile)
 }
@@ -104,6 +134,10 @@ func RouteHeader(key, value string) RouteOption {
 
 func RouteMiddlewares(names ...string) RouteOption {
 	return provider.RouteMiddlewares(names...)
+}
+
+func TCPServiceEndpoint(address string, weight int) ConfigTCPEndpoint {
+	return provider.ConfigTCPEndpoint(address, weight)
 }
 
 func MiddlewareType(middlewareType string) MiddlewareOption {
