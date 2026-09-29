@@ -4,10 +4,12 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/arcgolabs/collectionx/bitset"
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
+	"github.com/arcgolabs/vale/internal/genericx"
 	"github.com/samber/oops"
 )
 
@@ -119,9 +121,35 @@ func NewEndpoint(rawURL string, weight int, proxy http.Handler) (*EndpointRuntim
 		weight = 1
 	}
 	endpoint := &EndpointRuntime{
+		Kind:   EndpointKindHTTP,
 		URL:    parsedURL,
 		Weight: weight,
 		Proxy:  proxy,
+	}
+	endpoint.Healthy.Store(true)
+	return endpoint, nil
+}
+
+func NewHandlerEndpoint(name string, weight int, handler http.Handler) (*EndpointRuntime, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, oops.
+			In("runtime").
+			New("handler endpoint requires a name")
+	}
+	if genericx.IsNil(handler) {
+		return nil, oops.
+			In("runtime").
+			New("handler endpoint requires a handler")
+	}
+	if weight <= 0 {
+		weight = 1
+	}
+	endpoint := &EndpointRuntime{
+		Kind:   EndpointKindHandler,
+		Name:   name,
+		Weight: weight,
+		Proxy:  handler,
 	}
 	endpoint.Healthy.Store(true)
 	return endpoint, nil
@@ -177,6 +205,14 @@ func (r *CompiledRoute) WithMethod(method string) *CompiledRoute {
 		}
 		r.Predicates.Set(PredicateMethod)
 	}
+	return r
+}
+
+func (r *CompiledRoute) WithWriteTimeout(timeout time.Duration) *CompiledRoute {
+	if r == nil {
+		return nil
+	}
+	r.WriteTimeout = new(timeout)
 	return r
 }
 

@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"compress/gzip"
+	"io"
 	"net/http"
 	"strings"
 
@@ -33,6 +34,8 @@ type compressResponseWriter struct {
 	buffer     bytes.Buffer
 	gzipWriter *gzip.Writer
 	started    bool
+	plain      bool
+	writeErr   error
 }
 
 func newCompressResponseWriter(w http.ResponseWriter, minBytes int) *compressResponseWriter {
@@ -48,9 +51,24 @@ func (w *compressResponseWriter) WriteHeader(statusCode int) {
 		return
 	}
 	w.status = statusCode
+	if isEventStreamContentType(w.Header().Get("Content-Type")) {
+		w.writeErr = w.startPlain()
+	}
 }
 
 func (w *compressResponseWriter) Write(data []byte) (int, error) {
+	if w.writeErr != nil {
+		return 0, w.writeErr
+	}
+	if w.plain {
+		return w.writePlain(data)
+	}
+	if isEventStreamContentType(w.Header().Get("Content-Type")) {
+		if err := w.startPlain(); err != nil {
+			return 0, err
+		}
+		return w.writePlain(data)
+	}
 	if w.gzipWriter != nil {
 		return w.writeGzip(data)
 	}
@@ -70,14 +88,34 @@ func (w *compressResponseWriter) finish() {
 		if err := w.gzipWriter.Close(); err != nil {
 			return
 		}
-	case w.buffer.Len() > 0:
-		w.ResponseWriter.WriteHeader(w.status)
-		w.started = true
-		if _, err := w.ResponseWriter.Write(w.buffer.Bytes()); err != nil {
+	case w.plain:
+		return
+	default:
+		if err := w.startPlain(); err != nil {
 			return
 		}
-	case !w.started:
-		w.ResponseWriter.WriteHeader(w.status)
+	}
+}
+
+func (w *compressResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func (w *compressResponseWriter) Flush() {
+	switch {
+	case w.gzipWriter != nil:
+		if err := w.gzipWriter.Flush(); err != nil {
+			w.writeErr = oops.In("runtime").With("middleware", "compress").Wrapf(err, "flush gzip response")
+			return
+		}
+	case !w.plain:
+		if err := w.startPlain(); err != nil {
+			w.writeErr = err
+			return
+		}
+	}
+	if err := http.NewResponseController(w.ResponseWriter).Flush(); err != nil {
+		return
 	}
 }
 
@@ -90,6 +128,14 @@ func (w *compressResponseWriter) writePlainBuffer(data []byte) (int, error) {
 		return 0, oops.In("runtime").With("middleware", "compress").Wrapf(err, "buffer response")
 	}
 	return len(data), nil
+}
+
+func (w *compressResponseWriter) writePlain(data []byte) (int, error) {
+	written, err := w.ResponseWriter.Write(data)
+	if err != nil {
+		return written, oops.In("runtime").With("middleware", "compress").Wrapf(err, "write plain response")
+	}
+	return written, nil
 }
 
 func (w *compressResponseWriter) writeGzip(data []byte) (int, error) {
@@ -123,10 +169,26 @@ func (w *compressResponseWriter) startGzip() {
 	w.started = true
 }
 
+func (w *compressResponseWriter) startPlain() error {
+	if w.started {
+		return nil
+	}
+	w.ResponseWriter.WriteHeader(w.status)
+	w.started = true
+	w.plain = true
+	if w.buffer.Len() == 0 {
+		return nil
+	}
+	if _, err := io.Copy(w.ResponseWriter, &w.buffer); err != nil {
+		return oops.In("runtime").With("middleware", "compress").Wrapf(err, "write buffered response")
+	}
+	return nil
+}
+
 func requestAcceptsGzip(r *http.Request) bool {
 	return collectionlist.NewList(strings.Split(r.Header.Get("Accept-Encoding"), ",")...).
-		AnyMatch(func(_ int, encoding string) bool {
-			name, _, _ := strings.Cut(strings.TrimSpace(encoding), ";")
-			return strings.EqualFold(strings.TrimSpace(name), "gzip")
-		})
+		Stream().Any(func(encoding string) bool {
+		name, _, _ := strings.Cut(strings.TrimSpace(encoding), ";")
+		return strings.EqualFold(strings.TrimSpace(name), "gzip")
+	})
 }

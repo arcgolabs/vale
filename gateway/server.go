@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -40,9 +39,9 @@ func (g *Gateway) buildHTTPServer(address string, handler http.Handler, security
 	}
 }
 
-func (g *Gateway) cleanupStartFailure(listeners *collectionlist.List[net.Listener], tcpServers *collectionlist.List[*tcpServer]) {
+func (g *Gateway) cleanupStartFailure(ctx context.Context, listeners *collectionlist.List[net.Listener], tcpServers *collectionlist.List[*tcpServer]) {
 	g.closeStartFailureListeners(listeners)
-	g.closeStartFailureTCPServers(tcpServers)
+	g.closeStartFailureTCPServers(ctx, tcpServers)
 	g.stopWatcher()
 	g.stopHealthChecker()
 	g.stopCluster()
@@ -66,12 +65,10 @@ func (g *Gateway) closeStartFailureListeners(listeners *collectionlist.List[net.
 	})
 }
 
-func (g *Gateway) closeStartFailureTCPServers(tcpServers *collectionlist.List[*tcpServer]) {
+func (g *Gateway) closeStartFailureTCPServers(ctx context.Context, tcpServers *collectionlist.List[*tcpServer]) {
 	if tcpServers == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 	tcpServers.Range(func(_ int, server *tcpServer) bool {
 		if server == nil {
 			return true
@@ -137,8 +134,8 @@ func (g *Gateway) buildServers(ctx context.Context, snapshot *runtime.CompiledSn
 		if entrypointConfig.Protocol == runtime.EntrypointProtocolTCP {
 			server, err := g.buildTCPEntrypointServer(ctx, entrypoint, address)
 			if err != nil {
-				closeListeners(listeners)
-				closeTCPServers(ctx, tcpServers)
+				g.closeListeners(listeners)
+				g.closeTCPServers(ctx, tcpServers)
 				buildErr = err
 				return false
 			}
@@ -147,8 +144,8 @@ func (g *Gateway) buildServers(ctx context.Context, snapshot *runtime.CompiledSn
 		}
 		server, listener, err := g.buildEntrypointServer(ctx, snapshot, entrypoint, address, entrypointConfig)
 		if err != nil {
-			closeListeners(listeners)
-			closeTCPServers(ctx, tcpServers)
+			g.closeListeners(listeners)
+			g.closeTCPServers(ctx, tcpServers)
 			buildErr = err
 			return false
 		}
@@ -163,8 +160,8 @@ func (g *Gateway) buildServers(ctx context.Context, snapshot *runtime.CompiledSn
 
 	adminServer, adminListener, err := g.buildAdminServer(ctx, snapshot)
 	if err != nil {
-		closeListeners(listeners)
-		closeTCPServers(ctx, tcpServers)
+		g.closeListeners(listeners)
+		g.closeTCPServers(ctx, tcpServers)
 		return nil, nil, nil, nil, err
 	}
 	servers.Add(adminServer)
@@ -233,28 +230,28 @@ func listenTCP(ctx context.Context, address string) (net.Listener, error) {
 	return listener, nil
 }
 
-func closeListeners(listeners *collectionlist.List[net.Listener]) {
+func (g *Gateway) closeListeners(listeners *collectionlist.List[net.Listener]) {
 	if listeners == nil {
 		return
 	}
 	listeners.Range(func(_ int, listener net.Listener) bool {
 		if listener != nil {
 			if err := listener.Close(); err != nil {
-				slog.Default().Error("listener close failed", "error", err)
+				g.logger.Error("listener close failed", "error", err)
 			}
 		}
 		return true
 	})
 }
 
-func closeTCPServers(ctx context.Context, servers *collectionlist.List[*tcpServer]) {
+func (g *Gateway) closeTCPServers(ctx context.Context, servers *collectionlist.List[*tcpServer]) {
 	if servers == nil {
 		return
 	}
 	servers.Range(func(_ int, server *tcpServer) bool {
 		if server != nil {
 			if err := server.Shutdown(ctx); err != nil {
-				slog.Default().Error("tcp server close failed", "error", err)
+				g.logger.Error("tcp server close failed", "error", err)
 			}
 		}
 		return true

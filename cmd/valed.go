@@ -64,7 +64,7 @@ func valedStandaloneApp(cliFlags *pflag.FlagSet) *dix.App {
 
 func provideValedConfig(fs *pflag.FlagSet) (valedConfig, error) {
 	def := defaultValedConfig()
-	cfg, err := configx.LoadTErr[valedConfig](
+	cfg, err := configx.Load[valedConfig](
 		configx.WithDefaults(defaultValedConfigValues(def)),
 		configx.WithEnvPrefix("VALE"),
 		configx.WithEnvSeparator("_"),

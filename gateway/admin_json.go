@@ -31,10 +31,7 @@ func adminPeersView(peers *collectionlist.List[*ClusterPeer]) []map[string]strin
 	if peers == nil {
 		return []map[string]string{}
 	}
-	view, err := mapper.Slice[map[string]string](
-		peers.Values(),
-		mapper.Converter(adminStringMapRaw),
-	)
+	view, err := adminMapper.MapSlice[map[string]string](peers.Values())
 	if err != nil {
 		return adminPeersRaw(peers)
 	}

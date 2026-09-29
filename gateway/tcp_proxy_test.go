@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,22 +39,24 @@ func TestGatewayTCPProxyEntrypoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := g.Start(t.Context()); err != nil {
-		t.Fatal(err)
+	startErr := g.Start(t.Context())
+	if startErr != nil {
+		t.Fatal(startErr)
 	}
 	defer stopGateway(t, g)
 
-	conn, err := net.DialTimeout("tcp", entryAddr, time.Second)
-	if err != nil {
-		t.Fatal(err)
+	dialer := net.Dialer{Timeout: time.Second}
+	conn, dialErr := dialer.DialContext(t.Context(), "tcp", entryAddr)
+	if dialErr != nil {
+		t.Fatal(dialErr)
 	}
 	defer closeConn(t, conn)
-	if _, err := conn.Write([]byte("ping\n")); err != nil {
-		t.Fatal(err)
+	if _, writeErr := conn.Write([]byte("ping\n")); writeErr != nil {
+		t.Fatal(writeErr)
 	}
-	got, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil {
-		t.Fatal(err)
+	got, readErr := bufio.NewReader(conn).ReadString('\n')
+	if readErr != nil {
+		t.Fatal(readErr)
 	}
 	if got != "ping\n" {
 		t.Fatalf("tcp response = %q, want ping", got)
@@ -64,23 +67,48 @@ func startTCPEchoBackend(t *testing.T) string {
 	t.Helper()
 
 	listener := listenOnLocalhost(t)
+	var handlers sync.WaitGroup
+	handlers.Add(1)
 	t.Cleanup(func() {
-		_ = listener.Close()
+		stopTCPEchoBackend(t, listener, &handlers)
 	})
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				if errors.Is(err, net.ErrClosed) {
-					return
-				}
-				return
+	go serveTCPEchoBackend(t, listener, &handlers)
+	return listener.Addr().String()
+}
+
+func stopTCPEchoBackend(t *testing.T, listener net.Listener, handlers *sync.WaitGroup) {
+	t.Helper()
+	if closeErr := listener.Close(); closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+		t.Errorf("close TCP echo listener: %v", closeErr)
+	}
+	handlers.Wait()
+}
+
+func serveTCPEchoBackend(t *testing.T, listener net.Listener, handlers *sync.WaitGroup) {
+	t.Helper()
+	defer handlers.Done()
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			if !errors.Is(err, net.ErrClosed) {
+				t.Errorf("accept TCP echo connection: %v", err)
 			}
-			go func(conn net.Conn) {
-				defer conn.Close()
-				_, _ = io.Copy(conn, conn)
-			}(conn)
+			return
+		}
+		handlers.Add(1)
+		go echoTCPConnection(t, conn, handlers)
+	}
+}
+
+func echoTCPConnection(t *testing.T, conn net.Conn, handlers *sync.WaitGroup) {
+	t.Helper()
+	defer handlers.Done()
+	defer func() {
+		if closeErr := conn.Close(); closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+			t.Errorf("close TCP echo connection: %v", closeErr)
 		}
 	}()
-	return listener.Addr().String()
+	if _, copyErr := io.Copy(conn, conn); copyErr != nil && !errors.Is(copyErr, net.ErrClosed) {
+		t.Errorf("copy TCP echo stream: %v", copyErr)
+	}
 }

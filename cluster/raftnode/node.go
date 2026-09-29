@@ -9,7 +9,7 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
-	dragonboat "github.com/lni/dragonboat/v3"
+	dragonboat "github.com/lni/dragonboat/v4"
 	"github.com/samber/oops"
 )
 
@@ -84,7 +84,7 @@ func (n *Node) IsGroupLeader(group string) bool {
 	if !ok {
 		return false
 	}
-	leader, ready, err := n.nodeHost.GetLeaderID(raftGroup.id)
+	leader, _, ready, err := n.nodeHost.GetLeaderID(raftGroup.id)
 	return err == nil && ready && leader == n.nodeID
 }
 
@@ -104,7 +104,7 @@ func (n *Node) Status() *mapping.Map[string, any] {
 	groups := mapping.NewMap[string, any]()
 	n.groups.Range(func(name string, group *raftGroup) bool {
 		groupStatus := mapping.NewMap[string, any]()
-		leader, ready, err := n.nodeHost.GetLeaderID(group.id)
+		leader, _, ready, err := n.nodeHost.GetLeaderID(group.id)
 		groupStatus.Set("cluster_id", group.id)
 		groupStatus.Set("leader_ready", ready)
 		groupStatus.Set("leader", leader)
@@ -158,7 +158,7 @@ func (n *Node) groupPeers(ctx context.Context, group string) (*collectionlist.Li
 			With("group", group).
 			New("raft group is not configured")
 	}
-	membership, err := n.nodeHost.SyncGetClusterMembership(ctx, raftGroup.id)
+	membership, err := n.nodeHost.SyncGetShardMembership(ctx, raftGroup.id)
 	if err != nil {
 		return nil, oops.
 			In("raftnode").
@@ -200,7 +200,7 @@ func (n *Node) addGroupVoter(ctx context.Context, group, id, address string) err
 	if err != nil {
 		return err
 	}
-	err = n.nodeHost.SyncRequestAddNode(ctx, raftGroup.id, stableNodeID(id), address, configChangeID)
+	err = n.nodeHost.SyncRequestAddReplica(ctx, raftGroup.id, stableNodeID(id), address, configChangeID)
 	if err != nil {
 		return oops.
 			In("raftnode").
@@ -238,7 +238,7 @@ func (n *Node) RemoveGroupServer(group, id string, timeout time.Duration) error 
 	if err != nil {
 		return err
 	}
-	err = n.nodeHost.SyncRequestDeleteNode(ctx, raftGroup.id, stableNodeID(id), configChangeID)
+	err = n.nodeHost.SyncRequestDeleteReplica(ctx, raftGroup.id, stableNodeID(id), configChangeID)
 	if err != nil {
 		return oops.
 			In("raftnode").
@@ -249,7 +249,7 @@ func (n *Node) RemoveGroupServer(group, id string, timeout time.Duration) error 
 }
 
 func (n *Node) syncConfigChangeID(ctx context.Context, group *raftGroup) (uint64, error) {
-	membership, err := n.nodeHost.SyncGetClusterMembership(ctx, group.id)
+	membership, err := n.nodeHost.SyncGetShardMembership(ctx, group.id)
 	if err != nil {
 		return 0, oops.
 			In("raftnode").

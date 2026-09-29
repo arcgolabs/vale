@@ -63,7 +63,7 @@ func noHealthyEndpointError(s *ServiceRuntime, endpointCount int) error {
 
 func (s *ServiceRuntime) pickOnlyEndpoint() *EndpointRuntime {
 	endpoint, _ := s.Endpoints.GetFirst()
-	if endpoint.Healthy.Load() {
+	if endpoint.Selectable() {
 		return endpoint
 	}
 	return nil
@@ -75,7 +75,7 @@ func (s *ServiceRuntime) pickWeightedEndpoint() *EndpointRuntime {
 	for offset := range rangeCount {
 		weightedRange, _ := s.weightedRanges.Get((start + offset) % rangeCount)
 		endpoint, _ := s.Endpoints.Get(weightedRange.index)
-		if endpoint.Healthy.Load() {
+		if endpoint.Selectable() {
 			return endpoint
 		}
 	}
@@ -90,7 +90,7 @@ func (s *ServiceRuntime) pickRoundRobinEndpoint(endpointCount int) *EndpointRunt
 	start := s.nextStart(endpointCount)
 	for offset := range endpointCount {
 		endpoint, _ := s.Endpoints.Get((start + offset) % endpointCount)
-		if endpoint.Healthy.Load() {
+		if endpoint.Selectable() {
 			return endpoint
 		}
 	}

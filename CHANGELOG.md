@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## v0.1.7 - 2026-09-30
+
+- Upgraded the workspace to Go 1.27.1 and refreshed all direct dependencies and CI tooling.
+- Added in-process HTTP handler endpoints that remain available independently of upstream health.
+- Added route-level write timeout overrides and safe unbuffered SSE streaming with cancellation propagation.
+- Modernized public extension registries around generic, type-safe APIs while preserving workspace-first module wiring.
+- Removed operational uses of the default logger in favor of injected loggers.
+- Documented pure-Go Windows builds that do not require CGO or MSYS2.
+
 ## v0.1.6 - 2026-05-16
 
 - Added an embedded `GatewayBuilder` component example module.

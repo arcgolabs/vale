@@ -3,19 +3,22 @@ package runtime
 import collectionlist "github.com/arcgolabs/collectionx/list"
 
 type RouteView struct {
-	Name       string `json:"name"`
-	Entrypoint string `json:"entrypoint"`
-	Host       string `json:"host,omitempty"`
-	PathPrefix string `json:"path_prefix,omitempty"`
-	Method     string `json:"method,omitempty"`
-	Service    string `json:"service"`
+	Name         string `json:"name"`
+	Entrypoint   string `json:"entrypoint"`
+	WriteTimeout string `json:"write_timeout,omitempty"`
+	Host         string `json:"host,omitempty"`
+	PathPrefix   string `json:"path_prefix,omitempty"`
+	Method       string `json:"method,omitempty"`
+	Service      string `json:"service"`
 }
 
 type EndpointView struct {
-	URL         string `json:"url"`
-	Weight      int    `json:"weight"`
-	Healthy     bool   `json:"healthy"`
-	LastChecked int64  `json:"last_checked"`
+	Kind        EndpointKind `json:"kind"`
+	Name        string       `json:"name,omitempty"`
+	URL         string       `json:"url"`
+	Weight      int          `json:"weight"`
+	Healthy     bool         `json:"healthy"`
+	LastChecked int64        `json:"last_checked"`
 }
 
 type ServiceView struct {
@@ -50,8 +53,13 @@ func endpointViews(service *ServiceRuntime) *collectionlist.List[EndpointView] {
 		return collectionlist.NewList[EndpointView]()
 	}
 	return collectionlist.MapList(service.Endpoints, func(_ int, endpoint *EndpointRuntime) EndpointView {
+		if endpoint == nil {
+			return EndpointView{}
+		}
 		return EndpointView{
-			URL:         endpoint.URL.String(),
+			Kind:        endpoint.Kind,
+			Name:        endpoint.Name,
+			URL:         endpoint.URLString(),
 			Weight:      endpoint.Weight,
 			Healthy:     endpoint.Healthy.Load(),
 			LastChecked: endpoint.LastChecked.Load(),

@@ -57,14 +57,15 @@ type TCPEndpoint struct {
 }
 
 type Route struct {
-	Name        string            `hcl:",label"`
-	Entrypoint  string            `hcl:"entrypoint"`
-	Service     string            `hcl:"service"`
-	Host        string            `hcl:"host,optional"`
-	PathPrefix  string            `hcl:"path_prefix,optional"`
-	Method      string            `hcl:"method,optional"`
-	Headers     map[string]string `hcl:"headers,optional"`
-	Middlewares []string          `hcl:"middlewares,optional"`
+	Name         string            `hcl:",label"`
+	Entrypoint   string            `hcl:"entrypoint"`
+	Service      string            `hcl:"service"`
+	WriteTimeout string            `hcl:"write_timeout,optional"`
+	Host         string            `hcl:"host,optional"`
+	PathPrefix   string            `hcl:"path_prefix,optional"`
+	Method       string            `hcl:"method,optional"`
+	Headers      map[string]string `hcl:"headers,optional"`
+	Middlewares  []string          `hcl:"middlewares,optional"`
 }
 
 type TCPRoute struct {

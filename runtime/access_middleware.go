@@ -93,7 +93,7 @@ func firstForwardedFor(value string) string {
 }
 
 func ipAllowed(ip net.IP, ranges *collectionlist.List[ipRange]) bool {
-	return ranges.AnyMatch(func(_ int, candidate ipRange) bool {
+	return ranges.Stream().Any(func(candidate ipRange) bool {
 		if candidate.net != nil {
 			return candidate.net.Contains(ip)
 		}

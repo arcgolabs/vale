@@ -287,7 +287,7 @@ func cleanStringList(values []string) *collectionlist.List[string] {
 }
 
 func hasAnyTrue(values *collectionlist.List[bool]) bool {
-	return values.AnyMatch(func(_ int, value bool) bool {
+	return values.Stream().Any(func(value bool) bool {
 		return value
 	})
 }

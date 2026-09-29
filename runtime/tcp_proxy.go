@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"sync"
 )
@@ -16,13 +18,10 @@ type closeWriter interface {
 }
 
 func (g *Gateway) ProxyTCP(ctx context.Context, entrypoint string, downstream net.Conn) {
-	if downstream == nil {
+	if ctx == nil || downstream == nil {
 		return
 	}
-	defer downstream.Close()
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	defer closeTCPConnection(ctx, g.logger, downstream, "close downstream")
 
 	snapshot := g.current.Load()
 	route := tcpRouteForEntrypoint(snapshot, entrypoint)
@@ -40,10 +39,10 @@ func (g *Gateway) ProxyTCP(ctx context.Context, entrypoint string, downstream ne
 		endpoint.Healthy.Store(false)
 		return
 	}
-	defer upstream.Close()
+	defer closeTCPConnection(ctx, g.logger, upstream, "close upstream")
 	endpoint.Healthy.Store(true)
 
-	proxyTCPStreams(ctx, downstream, upstream)
+	proxyTCPStreams(ctx, g.logger, downstream, upstream)
 }
 
 func tcpRouteForEntrypoint(snapshot *CompiledSnapshot, entrypoint string) *CompiledTCPRoute {
@@ -54,11 +53,11 @@ func tcpRouteForEntrypoint(snapshot *CompiledSnapshot, entrypoint string) *Compi
 	return route
 }
 
-func proxyTCPStreams(ctx context.Context, downstream, upstream net.Conn) {
+func proxyTCPStreams(ctx context.Context, logger *slog.Logger, downstream, upstream net.Conn) {
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go copyTCPHalf(&wg, upstream, downstream)
-	go copyTCPHalf(&wg, downstream, upstream)
+	go copyTCPHalf(ctx, logger, &wg, upstream, downstream)
+	go copyTCPHalf(ctx, logger, &wg, downstream, upstream)
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -67,29 +66,41 @@ func proxyTCPStreams(ctx context.Context, downstream, upstream net.Conn) {
 
 	select {
 	case <-ctx.Done():
-		_ = downstream.Close()
-		_ = upstream.Close()
+		closeTCPConnection(ctx, logger, downstream, "cancel downstream")
+		closeTCPConnection(ctx, logger, upstream, "cancel upstream")
 	case <-done:
 	}
 }
 
-func copyTCPHalf(wg *sync.WaitGroup, dst, src net.Conn) {
+func copyTCPHalf(ctx context.Context, logger *slog.Logger, wg *sync.WaitGroup, dst, src net.Conn) {
 	defer wg.Done()
-	_, _ = io.Copy(dst, src)
-	closeTCPWrite(dst)
-	closeTCPRead(src)
+	_, err := io.Copy(dst, src)
+	reportTCPProxyError(ctx, logger, "copy stream", err)
+	closeTCPWrite(ctx, logger, dst)
+	closeTCPRead(ctx, logger, src)
 }
 
-func closeTCPWrite(conn net.Conn) {
+func closeTCPWrite(ctx context.Context, logger *slog.Logger, conn net.Conn) {
 	if closer, ok := conn.(closeWriter); ok {
-		_ = closer.CloseWrite()
+		reportTCPProxyError(ctx, logger, "close write", closer.CloseWrite())
 		return
 	}
-	_ = conn.Close()
+	closeTCPConnection(ctx, logger, conn, "close write connection")
 }
 
-func closeTCPRead(conn net.Conn) {
+func closeTCPRead(ctx context.Context, logger *slog.Logger, conn net.Conn) {
 	if closer, ok := conn.(closeReader); ok {
-		_ = closer.CloseRead()
+		reportTCPProxyError(ctx, logger, "close read", closer.CloseRead())
 	}
+}
+
+func closeTCPConnection(ctx context.Context, logger *slog.Logger, conn net.Conn, operation string) {
+	reportTCPProxyError(ctx, logger, operation, conn.Close())
+}
+
+func reportTCPProxyError(ctx context.Context, logger *slog.Logger, operation string, err error) {
+	if logger == nil || err == nil || errors.Is(err, net.ErrClosed) || errors.Is(err, context.Canceled) {
+		return
+	}
+	logger.DebugContext(ctx, "tcp proxy operation failed", "operation", operation, "error", err)
 }

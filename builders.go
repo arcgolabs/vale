@@ -10,35 +10,41 @@ import (
 )
 
 type (
-	RuntimeSnapshot    = runtime.CompiledSnapshot
-	RuntimeRoute       = runtime.CompiledRoute
-	RuntimeTCPRoute    = runtime.CompiledTCPRoute
-	RuntimeService     = runtime.ServiceRuntime
-	RuntimeTCPService  = runtime.TCPServiceRuntime
-	RuntimeEndpoint    = runtime.EndpointRuntime
-	RuntimeTCPEndpoint = runtime.TCPEndpointRuntime
-	RuntimeEntrypoint  = runtime.EntrypointRuntime
-	RuntimeTLS         = runtime.TLSRuntime
-	RuntimeACME        = runtime.ACMERuntime
-	RuntimeSecurity    = runtime.SecurityRuntime
-	RuntimeMiddleware  = runtime.MiddlewareRuntime
-	RuntimeCatalog     = runtime.Catalog
-	RuntimeRouteFilter = runtime.RouteFilter
-	RuntimeRouteRecord = runtime.RouteRecord
-	MiddlewareRegistry = runtime.MiddlewareRegistry
-	MiddlewareFactory  = runtime.MiddlewareFactory
-	ConfigEndpoint     = config.Endpoint
-	ConfigTCPEndpoint  = config.TCPEndpoint
-	ConfigRoute        = config.Route
-	ConfigTCPRoute     = config.TCPRoute
-	ConfigMiddleware   = config.Middleware
-	ConfigSecurity     = config.Security
-	ConfigBuilder      = provider.ConfigBuilder
-	EntrypointOption   = provider.EntrypointOption
-	RouteOption        = provider.RouteOption
-	TCPRouteOption     = provider.TCPRouteOption
-	MiddlewareOption   = provider.MiddlewareOption
-	ForwardAuthOption  = provider.ForwardAuthOption
+	RuntimeSnapshot     = runtime.CompiledSnapshot
+	RuntimeRoute        = runtime.CompiledRoute
+	RuntimeTCPRoute     = runtime.CompiledTCPRoute
+	RuntimeService      = runtime.ServiceRuntime
+	RuntimeEndpointKind = runtime.EndpointKind
+	RuntimeTCPService   = runtime.TCPServiceRuntime
+	RuntimeEndpoint     = runtime.EndpointRuntime
+	RuntimeTCPEndpoint  = runtime.TCPEndpointRuntime
+	RuntimeEntrypoint   = runtime.EntrypointRuntime
+	RuntimeTLS          = runtime.TLSRuntime
+	RuntimeACME         = runtime.ACMERuntime
+	RuntimeSecurity     = runtime.SecurityRuntime
+	RuntimeMiddleware   = runtime.MiddlewareRuntime
+	RuntimeCatalog      = runtime.Catalog
+	RuntimeRouteFilter  = runtime.RouteFilter
+	RuntimeRouteRecord  = runtime.RouteRecord
+	MiddlewareRegistry  = runtime.MiddlewareRegistry
+	MiddlewareFactory   = runtime.MiddlewareFactory
+	ConfigEndpoint      = config.Endpoint
+	ConfigTCPEndpoint   = config.TCPEndpoint
+	ConfigRoute         = config.Route
+	ConfigTCPRoute      = config.TCPRoute
+	ConfigMiddleware    = config.Middleware
+	ConfigSecurity      = config.Security
+	ConfigBuilder       = provider.ConfigBuilder
+	EntrypointOption    = provider.EntrypointOption
+	RouteOption         = provider.RouteOption
+	TCPRouteOption      = provider.TCPRouteOption
+	MiddlewareOption    = provider.MiddlewareOption
+	ForwardAuthOption   = provider.ForwardAuthOption
+)
+
+const (
+	EndpointKindHTTP    = runtime.EndpointKindHTTP
+	EndpointKindHandler = runtime.EndpointKindHandler
 )
 
 func NewSnapshot() *RuntimeSnapshot {
@@ -68,6 +74,17 @@ func NewEndpoint(rawURL string, weight int, proxy http.Handler) (*RuntimeEndpoin
 			In("vale").
 			With("url", rawURL, "weight", weight).
 			Wrapf(err, "create runtime endpoint")
+	}
+	return endpoint, nil
+}
+
+func NewHandlerEndpoint(name string, weight int, handler http.Handler) (*RuntimeEndpoint, error) {
+	endpoint, err := runtime.NewHandlerEndpoint(name, weight, handler)
+	if err != nil {
+		return nil, oops.
+			In("vale").
+			With("name", name, "weight", weight).
+			Wrapf(err, "create runtime handler endpoint")
 	}
 	return endpoint, nil
 }
@@ -134,6 +151,10 @@ func RouteHeader(key, value string) RouteOption {
 
 func RouteMiddlewares(names ...string) RouteOption {
 	return provider.RouteMiddlewares(names...)
+}
+
+func RouteWriteTimeout(timeout string) RouteOption {
+	return provider.RouteWriteTimeout(timeout)
 }
 
 func TCPServiceEndpoint(address string, weight int) ConfigTCPEndpoint {

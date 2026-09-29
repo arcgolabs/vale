@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	sm "github.com/lni/dragonboat/v3/statemachine"
+	sm "github.com/lni/dragonboat/v4/statemachine"
 	"github.com/samber/oops"
 )
 
@@ -103,7 +103,7 @@ func commandResult(version uint64, ok bool, reason string) sm.Result {
 }
 
 func lockExists(locks *collectionlist.List[CertificateLockRecord], name string) bool {
-	return locks != nil && locks.AnyMatch(func(_ int, lock CertificateLockRecord) bool {
+	return locks != nil && locks.Stream().Any(func(lock CertificateLockRecord) bool {
 		return lock.Name == name
 	})
 }

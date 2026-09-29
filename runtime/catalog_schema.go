@@ -38,6 +38,12 @@ func catalogSchema() *memdb.DBSchema {
 				Indexes: map[string]*memdb.IndexSchema{
 					"id":      stringIndex("id", "ID", true),
 					"service": stringIndex("service", "Service", false),
+					"kind":    stringIndex("kind", "Kind", false),
+					"name": {
+						Name:         "name",
+						AllowMissing: true,
+						Indexer:      &memdb.StringFieldIndex{Field: "Name"},
+					},
 				},
 			},
 			catalogTableMiddleware: {

@@ -34,7 +34,7 @@ func provideLogger(cfg valedConfig) (*slog.Logger, error) {
 	return logger, nil
 }
 
-func provideEventBus() eventx.BusRuntime {
+func provideEventBus() *eventx.Bus {
 	return eventx.New()
 }
 
@@ -143,7 +143,7 @@ func clusterDiscoveryConfig(cfg valedConfig) (raftnode.MemberlistDiscoveryConfig
 	}
 }
 
-func provideEventBusComponent(bus eventx.BusRuntime) vale.GatewayComponent {
+func provideEventBusComponent(bus *eventx.Bus) vale.GatewayComponent {
 	return vale.GatewayOptions(vale.WithEventBus(bus))
 }
 

@@ -19,6 +19,7 @@ func NewGatewayWithMiddlewareRegistry(snapshot *CompiledSnapshot, logger *slog.L
 		registry = DefaultMiddlewareRegistry()
 	}
 	gateway := &Gateway{
+		logger:             logger,
 		access:             accessLogger,
 		metrics:            metrics,
 		accessLogEnabled:   accessLogger.Enabled(),
@@ -84,7 +85,7 @@ func (g *Gateway) serveEntrypointHandler(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	if handler.endpoint != nil && handler.handler != nil {
-		if !handler.endpoint.Healthy.Load() {
+		if !handler.endpoint.Selectable() {
 			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 			return
 		}
@@ -121,6 +122,7 @@ func (g *Gateway) serveRouteHandler(
 		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	w = newRouteResponseWriter(w, route.WriteTimeout)
 	accessEnabled := g.accessEnabled()
 	metricsEnabled := g.metricsEnabled
 	if !accessEnabled && !metricsEnabled {
@@ -165,7 +167,7 @@ func (g *Gateway) observeRequest(
 		DurationMs: duration.Milliseconds(),
 		Route:      route.Name,
 		Service:    route.Service.Name,
-		Endpoint:   endpoint.URL.String(),
+		Endpoint:   endpoint.Identifier(),
 		UserAgent:  r.UserAgent(),
 		RemoteAddr: r.RemoteAddr,
 	}

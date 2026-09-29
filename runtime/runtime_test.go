@@ -46,6 +46,59 @@ func TestServiceRuntimePickSkipsUnhealthyEndpoints(t *testing.T) {
 	}
 }
 
+func TestServiceRuntimePickKeepsHandlerEndpointSelectableWhenHealthIsFalse(t *testing.T) {
+	t.Parallel()
+
+	endpoint, err := valeruntime.NewHandlerEndpoint("static", 1, http.NotFoundHandler())
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint.Healthy.Store(false)
+	service := valeruntime.NewService("static", "round_robin", endpoint)
+
+	got, err := service.Pick()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != endpoint {
+		t.Fatalf("picked endpoint = %p, want handler endpoint %p", got, endpoint)
+	}
+}
+
+func TestServiceRuntimePickKeepsHandlerEndpointSelectableAcrossStrategies(t *testing.T) {
+	t.Parallel()
+
+	for _, strategy := range []string{"round_robin", "weighted_round_robin"} {
+		t.Run(strategy, func(t *testing.T) {
+			t.Parallel()
+			assertHandlerEndpointSelectable(t, strategy)
+		})
+	}
+}
+
+func assertHandlerEndpointSelectable(t *testing.T, strategy string) {
+	t.Helper()
+	httpEndpoint, err := valeruntime.NewEndpoint("http://127.0.0.1:8081", 2, http.NotFoundHandler())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handlerEndpoint, err := valeruntime.NewHandlerEndpoint("static", 1, http.NotFoundHandler())
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpEndpoint.Healthy.Store(false)
+	handlerEndpoint.Healthy.Store(false)
+	service := valeruntime.NewService("mixed", strategy, httpEndpoint, handlerEndpoint)
+
+	got, err := service.Pick()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != handlerEndpoint {
+		t.Fatalf("picked endpoint = %p, want handler endpoint %p", got, handlerEndpoint)
+	}
+}
+
 func TestServiceRuntimePickSingleEndpoint(t *testing.T) {
 	t.Parallel()
 

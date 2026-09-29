@@ -7,6 +7,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
+
 func init() {
 	f := rootCmd.Flags()
 	f.String("config", "", "path to vale HCL config")
@@ -27,6 +33,7 @@ func init() {
 var rootCmd = &cobra.Command{
 	Use:           "valed",
 	Short:         "Vale application gateway daemon",
+	Version:       fmt.Sprintf("%s (commit %s, built %s)", version, commit, date),
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	Args:          cobra.NoArgs,

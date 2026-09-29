@@ -3,6 +3,7 @@ package runtime
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/hashicorp/go-memdb"
@@ -30,22 +31,24 @@ type RouteFilter struct {
 }
 
 type RouteRecord struct {
-	Name       string
-	Entrypoint string
-	Host       string
-	PathPrefix string
-	Method     string
-	Service    string
+	Name         string
+	Entrypoint   string
+	WriteTimeout string
+	Host         string
+	PathPrefix   string
+	Method       string
+	Service      string
 }
 
 type ServiceRecord struct {
 	Name     string
 	Strategy string
 }
-
 type EndpointRecord struct {
 	ID      string
 	Service string
+	Kind    EndpointKind
+	Name    string
 	URL     string
 	Weight  int
 }
@@ -112,15 +115,25 @@ func (s *CompiledSnapshot) QueryRoutes(filter RouteFilter) *collectionlist.List[
 }
 
 func (c *Catalog) RouteViews(filter RouteFilter) (*collectionlist.List[RouteView], error) {
+	return c.MapRoutes(filter, func(route RouteRecord) RouteView {
+		return RouteView(route)
+	})
+}
+
+// MapRoutes queries route records and maps each record to a caller-defined result.
+func (c *Catalog) MapRoutes[R any](filter RouteFilter, mapper func(RouteRecord) R) (*collectionlist.List[R], error) {
 	records, err := c.Routes(filter)
 	if err != nil {
 		return nil, oops.
 			In("runtime").
 			With("entrypoint", filter.Entrypoint, "service", filter.Service, "host", filter.Host, "path_prefix", filter.PathPrefix).
-			Wrapf(err, "query runtime route views")
+			Wrapf(err, "query and map runtime routes")
 	}
-	return collectionlist.MapList(records, func(_ int, route RouteRecord) RouteView {
-		return RouteView(route)
+	if mapper == nil {
+		return collectionlist.NewList[R](), nil
+	}
+	return collectionlist.MapList(records, func(_ int, route RouteRecord) R {
+		return mapper(route)
 	}), nil
 }
 
@@ -177,13 +190,21 @@ func buildRouteView(route *CompiledRoute) *RouteView {
 		serviceName = route.Service.Name
 	}
 	return &RouteView{
-		Name:       route.Name,
-		Entrypoint: route.Entrypoint,
-		Host:       route.Host,
-		PathPrefix: route.PathPrefix,
-		Method:     route.Method,
-		Service:    serviceName,
+		Name:         route.Name,
+		Entrypoint:   route.Entrypoint,
+		WriteTimeout: routeWriteTimeoutString(route.WriteTimeout),
+		Host:         route.Host,
+		PathPrefix:   route.PathPrefix,
+		Method:       route.Method,
+		Service:      serviceName,
 	}
+}
+
+func routeWriteTimeoutString(timeout *time.Duration) string {
+	if timeout == nil {
+		return ""
+	}
+	return timeout.String()
 }
 
 func routeViewMatchesFilter(route RouteView, filter RouteFilter) bool {

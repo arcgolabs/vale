@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"strconv"
 	"time"
+	"uuid"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
@@ -33,7 +33,7 @@ func NewRaftStorage(config RaftStorageConfig) *RaftStorage {
 	}
 	owner := config.Owner
 	if owner == "" {
-		owner = strconv.FormatInt(time.Now().UnixNano(), 36)
+		owner = uuid.New().String()
 	}
 	return &RaftStorage{
 		client:     config.Client,

@@ -95,6 +95,9 @@ func (h *HealthChecker) checkService(ctx context.Context, group *errgroup.Group,
 		return
 	}
 	service.Endpoints.Range(func(_ int, endpoint *EndpointRuntime) bool {
+		if endpoint == nil || endpoint.Kind == EndpointKindHandler {
+			return true
+		}
 		checkedEndpoint := endpoint
 		group.Go(func() error {
 			h.checkEndpoint(ctx, gateway, checkedEndpoint)
@@ -142,9 +145,10 @@ func (h *HealthChecker) checkTCPEndpoint(ctx context.Context, endpoint *TCPEndpo
 }
 
 func (h *HealthChecker) checkEndpoint(ctx context.Context, gateway *Gateway, endpoint *EndpointRuntime) {
-	if endpoint == nil || endpoint.URL == nil {
+	if endpoint == nil || endpoint.Kind == EndpointKindHandler || endpoint.URL == nil {
 		return
 	}
+	endpointURL := endpoint.URLString()
 	start := time.Now()
 	healthy := false
 	defer func() {
@@ -154,11 +158,11 @@ func (h *HealthChecker) checkEndpoint(ctx context.Context, gateway *Gateway, end
 	requestCtx, cancel := context.WithTimeout(ctx, h.client.Timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint.URL.String(), http.NoBody)
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpointURL, http.NoBody)
 	if err != nil {
 		h.markEndpointUnhealthy(ctx, gateway, endpoint, "request_build_failed", oops.
 			In("runtime").
-			With("url", endpoint.URL.String()).
+			With("url", endpointURL).
 			Wrapf(err, "build health check request"))
 		return
 	}
@@ -166,14 +170,14 @@ func (h *HealthChecker) checkEndpoint(ctx context.Context, gateway *Gateway, end
 	if err != nil {
 		h.markEndpointUnhealthy(ctx, gateway, endpoint, "request_failed", oops.
 			In("runtime").
-			With("url", endpoint.URL.String()).
+			With("url", endpointURL).
 			Wrapf(err, "execute health check request"))
 		return
 	}
 	if err := resp.Body.Close(); err != nil && h.logger != nil {
-		h.logger.Error("health response body close failed", "url", endpoint.URL.String(), "error", oops.
+		h.logger.Error("health response body close failed", "url", endpointURL, "error", oops.
 			In("runtime").
-			With("url", endpoint.URL.String()).
+			With("url", endpointURL).
 			Wrapf(err, "close health check response body"))
 	}
 	healthy = resp.StatusCode < http.StatusInternalServerError
@@ -200,7 +204,7 @@ func (h *HealthChecker) setEndpointHealth(ctx context.Context, endpoint *Endpoin
 		}
 	}
 	attrs := []slog.Attr{
-		slog.String("endpoint", endpoint.URL.String()),
+		slog.String("endpoint", endpoint.Identifier()),
 		slog.Bool("healthy", healthy),
 		slog.String("reason", reason),
 	}

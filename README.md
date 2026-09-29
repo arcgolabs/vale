@@ -21,6 +21,8 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 - Admin API for routes/services/endpoints and `/metrics`
 - Control-plane route catalog backed by `go-memdb` for admin queries and reload diffing
 - Active endpoint health checks
+- In-process HTTP handler endpoints that do not require an upstream URL or health probe
+- SSE-safe response streaming with route-level write timeout overrides and compression bypass
 - Library-first builders for runtime snapshots and config source assembly
 - Provider reload coalescing with stable config fingerprints
 - Built-in middleware plus a runtime middleware registry for embedded extensions
@@ -30,7 +32,7 @@ Product and technical specs live under [`docs/`](./docs/README.md) (Chinese).
 
 ## Status
 
-The latest root release is `v0.1.6`. The public import path follows the current
+The latest root release is `v0.1.7`. The public import path follows the current
 git remote: `github.com/arcgolabs/vale`.
 
 ## Architecture Boundary
@@ -66,9 +68,9 @@ to make a workspace build run outside `go.work`.
 
 Releases are tag-scoped:
 
-- Root releases use normal semantic tags such as `v0.1.6`.
+- Root releases use normal semantic tags such as `v0.1.7`.
 - Optional submodules use path-prefixed tags when they are released, for example
-  `cmd/v0.1.6`, `provider/docker/v0.1.6`, or `cluster/raftnode/v0.1.6`.
+  `cmd/v0.1.7`, `provider/docker/v0.1.7`, or `cluster/raftnode/v0.1.7`.
 
 Current workspace modules:
 
@@ -117,10 +119,18 @@ Start with defaults:
 go run ./cmd
 ```
 
+`valed` does not require CGO. On Windows it can be built without MSYS2 or a C
+compiler:
+
+```powershell
+$env:CGO_ENABLED = "0"
+go build -C cmd -trimpath -o valed.exe .
+```
+
 Run the published container image:
 
 ```bash
-docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.6
+docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.7
 ```
 
 To run with an HCL file, copy sample config:
@@ -250,7 +260,7 @@ For code-first runtime construction, the root `vale` package exposes
 collectionx-backed helpers:
 
 ```go
-endpoint, _ := vale.NewEndpoint("http://127.0.0.1:8081", 1, http.DefaultServeMux)
+endpoint, _ := vale.NewHandlerEndpoint("api-handler", 1, http.DefaultServeMux)
 service := vale.NewService("api", "round_robin", endpoint)
 route := vale.NewRoute("api", "web", service).WithPathPrefix("/api")
 
@@ -260,6 +270,24 @@ snapshot := vale.NewSnapshot().
   AddRoute(route).
   BuildMatchers()
 ```
+
+Handler-backed endpoints are always served in process: they have no synthetic
+upstream URL and are excluded from HTTP health probes. For a proxied endpoint,
+continue to use `vale.NewEndpoint` with the real upstream URL.
+
+SSE responses (`Content-Type: text/event-stream`) automatically clear the
+server write deadline and bypass gzip buffering. A route can also override the
+write timeout explicitly; zero disables it for that route:
+
+```go
+events := vale.NewRoute("events", "web", service).
+  WithPathPrefix("/events").
+  WithWriteTimeout(0)
+```
+
+The equivalent config-first option is `vale.RouteWriteTimeout("0s")`, and HCL
+routes accept `write_timeout = "0s"`. An omitted route timeout inherits the
+global security write timeout.
 
 For config-first construction without HCL, use `vale.NewConfigBuilder()` and pass
 the result to `vale.WithStaticConfig`:
@@ -464,7 +492,7 @@ Example three-node cluster:
 docker network create vale-cluster
 
 docker run -d --name vale-1 --network vale-cluster -p 19091:19090 `
-  ghcr.io/arcgolabs/vale:v0.1.6 `
+  ghcr.io/arcgolabs/vale:v0.1.7 `
   --raft-node-id node-1 `
   --raft-bind vale-1:17000 `
   --raft-bootstrap=true `
@@ -472,7 +500,7 @@ docker run -d --name vale-1 --network vale-cluster -p 19091:19090 `
   --gossip-bind :17100
 
 docker run -d --name vale-2 --network vale-cluster -p 19092:19090 `
-  ghcr.io/arcgolabs/vale:v0.1.6 `
+  ghcr.io/arcgolabs/vale:v0.1.7 `
   --raft-node-id node-2 `
   --raft-bind vale-2:17000 `
   --cluster-discovery gossip `
@@ -480,7 +508,7 @@ docker run -d --name vale-2 --network vale-cluster -p 19092:19090 `
   --gossip-seeds vale-1:17100
 
 docker run -d --name vale-3 --network vale-cluster -p 19093:19090 `
-  ghcr.io/arcgolabs/vale:v0.1.6 `
+  ghcr.io/arcgolabs/vale:v0.1.7 `
   --raft-node-id node-3 `
   --raft-bind vale-3:17000 `
   --cluster-discovery gossip `
@@ -519,21 +547,33 @@ Admin/observability/health runtime knobs are read from the HCL snapshot.
 
 ## Container Images
 
-Release workflow publishes multi-arch Linux images to GHCR:
+Release images are built locally and pushed as multi-arch Linux images to GHCR:
 
 - `ghcr.io/arcgolabs/vale:<tag>`
 - `ghcr.io/arcgolabs/vale:<semver-without-v>`
 - `ghcr.io/arcgolabs/vale:latest` for non-prerelease tags
 
-The release image is assembled from the Linux `valed` binary artifacts through
-[`Dockerfile.release`](./Dockerfile.release). It does not compile from source
-inside the runtime image. Both source-built and release images run the binary
-through UPX in the optimize stage to keep the runtime image small.
+From an authenticated Docker client with Buildx enabled, publish a patch release
+from the tagged source tree with:
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 --push \
+  --build-arg VERSION=v0.1.7 \
+  --build-arg COMMIT="$(git rev-parse --short=12 HEAD)" \
+  --build-arg DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -t ghcr.io/arcgolabs/vale:v0.1.7 \
+  -t ghcr.io/arcgolabs/vale:0.1.7 \
+  -t ghcr.io/arcgolabs/vale:latest .
+```
+
+The source image compiles `valed` with CGO disabled and runs the binary through
+UPX before assembling the minimal runtime image. GitHub Actions publishes the
+release archives, but does not build or push the container image.
 
 For example:
 
 ```bash
-docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.6
+docker run --rm -p 8080:8080 -p 19090:19090 ghcr.io/arcgolabs/vale:v0.1.7
 ```
 
 ## Benchmarks

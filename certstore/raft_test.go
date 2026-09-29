@@ -8,10 +8,53 @@ import (
 	"io/fs"
 	"testing"
 	"time"
+	"uuid"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/vale/certstore"
 )
+
+func TestNewRaftStorageGeneratesUniqueUUIDOwner(t *testing.T) {
+	t.Parallel()
+
+	first := raftStorageOwner(t, certstore.NewRaftStorage(certstore.RaftStorageConfig{}))
+	second := raftStorageOwner(t, certstore.NewRaftStorage(certstore.RaftStorageConfig{}))
+
+	if _, err := uuid.Parse(first); err != nil {
+		t.Fatalf("first default owner %q is not a UUID: %v", first, err)
+	}
+	if _, err := uuid.Parse(second); err != nil {
+		t.Fatalf("second default owner %q is not a UUID: %v", second, err)
+	}
+	if first == second {
+		t.Fatalf("default owners are equal: %q", first)
+	}
+}
+
+func TestNewRaftStoragePreservesExplicitOwner(t *testing.T) {
+	t.Parallel()
+
+	const owner = "node-a"
+	storage := certstore.NewRaftStorage(certstore.RaftStorageConfig{Owner: owner})
+
+	if got := raftStorageOwner(t, storage); got != owner {
+		t.Fatalf("owner = %q, want %q", got, owner)
+	}
+}
+
+func raftStorageOwner(t *testing.T, storage *certstore.RaftStorage) string {
+	t.Helper()
+
+	owner, ok := storage.Status().Get("owner")
+	if !ok {
+		t.Fatal("raft storage status has no owner")
+	}
+	value, ok := owner.(string)
+	if !ok {
+		t.Fatalf("raft storage status owner has type %T, want string", owner)
+	}
+	return value
+}
 
 func TestRaftStorageProposesAndRefreshesProjection(t *testing.T) {
 	t.Parallel()

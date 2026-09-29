@@ -1,7 +1,8 @@
 package gateway
 
 import (
-	collectionlist "github.com/arcgolabs/collectionx/list"
+	"iter"
+
 	"github.com/arcgolabs/vale/runtime"
 )
 
@@ -22,24 +23,24 @@ func adminServicesView(snapshot *runtime.CompiledSnapshot) []adminServiceView {
 	if snapshot == nil {
 		return nil
 	}
-	return collectionlist.MapList(snapshot.ServicesView(), func(_ int, service runtime.ServiceView) adminServiceView {
-		return adminServiceView{
-			Name:      service.Name,
-			Strategy:  service.Strategy,
-			Endpoints: service.Endpoints.Values(),
-		}
-	}).Values()
+	return snapshot.ServicesView().Stream().
+		Map(func(service runtime.ServiceView) adminServiceView {
+			return adminServiceView{
+				Name:      service.Name,
+				Strategy:  service.Strategy,
+				Endpoints: service.Endpoints.Values(),
+			}
+		}).
+		ToSlice()
 }
 
 func adminEndpointsView(snapshot *runtime.CompiledSnapshot) []runtime.EndpointView {
 	if snapshot == nil {
 		return nil
 	}
-	return collectionlist.ReduceList(
-		snapshot.ServicesView(),
-		collectionlist.NewList[runtime.EndpointView](),
-		func(endpoints *collectionlist.List[runtime.EndpointView], _ int, service runtime.ServiceView) *collectionlist.List[runtime.EndpointView] {
-			return endpoints.Merge(service.Endpoints)
-		},
-	).Values()
+	return snapshot.ServicesView().Stream().
+		FlatMap(func(service runtime.ServiceView) iter.Seq[runtime.EndpointView] {
+			return service.Endpoints.Stream().Values()
+		}).
+		ToSlice()
 }

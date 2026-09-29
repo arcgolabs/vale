@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
@@ -84,6 +85,7 @@ func routeFingerprints(snapshot *CompiledSnapshot) *mapping.Map[string, string] 
 			}
 			records.Set(route.Name, strings.Join([]string{
 				entrypoint,
+				routeWriteTimeoutFingerprint(route.WriteTimeout),
 				route.Host,
 				route.PathPrefix,
 				route.Method,
@@ -99,14 +101,18 @@ func routeFingerprints(snapshot *CompiledSnapshot) *mapping.Map[string, string] 
 			if route == nil {
 				return true
 			}
-			records.Set("tcp:"+route.Name, strings.Join([]string{
-				entrypoint,
-				tcpRouteServiceName(route),
-			}, "\x00"))
+			records.Set("tcp:"+route.Name, entrypoint+"\x00"+tcpRouteServiceName(route))
 			return true
 		})
 	}
 	return records
+}
+
+func routeWriteTimeoutFingerprint(timeout *time.Duration) string {
+	if timeout == nil {
+		return "inherit"
+	}
+	return timeout.String()
 }
 
 func serviceFingerprints(snapshot *CompiledSnapshot) *mapping.Map[string, string] {
@@ -141,40 +147,56 @@ func endpointFingerprints(snapshot *CompiledSnapshot) *mapping.Map[string, strin
 	if snapshot == nil {
 		return records
 	}
-	if snapshot.Services == nil {
-		return records
+	addHTTPEndpointFingerprints(records, snapshot.Services)
+	addTCPEndpointFingerprints(records, snapshot.TCPServices)
+	return records
+}
+
+func addHTTPEndpointFingerprints(
+	records *mapping.Map[string, string],
+	services *mapping.Map[string, *ServiceRuntime],
+) {
+	if services == nil {
+		return
 	}
-	snapshot.Services.Range(func(serviceName string, service *ServiceRuntime) bool {
+	services.Range(func(serviceName string, service *ServiceRuntime) bool {
 		if service == nil || service.Endpoints == nil {
 			return true
 		}
 		service.Endpoints.Range(func(_ int, endpoint *EndpointRuntime) bool {
-			if endpoint == nil || endpoint.URL == nil {
+			identifier := endpoint.Identifier()
+			if identifier == "" {
 				return true
 			}
-			name := fmt.Sprintf("%s/%s", serviceName, endpoint.URL.String())
+			name := fmt.Sprintf("%s/%s", serviceName, identifier)
 			records.Set(name, strconv.Itoa(endpoint.Weight))
 			return true
 		})
 		return true
 	})
-	if snapshot.TCPServices != nil {
-		snapshot.TCPServices.Range(func(serviceName string, service *TCPServiceRuntime) bool {
-			if service == nil || service.Endpoints == nil {
+}
+
+func addTCPEndpointFingerprints(
+	records *mapping.Map[string, string],
+	services *mapping.Map[string, *TCPServiceRuntime],
+) {
+	if services == nil {
+		return
+	}
+	services.Range(func(serviceName string, service *TCPServiceRuntime) bool {
+		if service == nil || service.Endpoints == nil {
+			return true
+		}
+		service.Endpoints.Range(func(_ int, endpoint *TCPEndpointRuntime) bool {
+			if endpoint == nil || endpoint.Address == "" {
 				return true
 			}
-			service.Endpoints.Range(func(_ int, endpoint *TCPEndpointRuntime) bool {
-				if endpoint == nil || endpoint.Address == "" {
-					return true
-				}
-				name := fmt.Sprintf("tcp:%s/%s", serviceName, endpoint.Address)
-				records.Set(name, strconv.Itoa(endpoint.Weight))
-				return true
-			})
+			name := fmt.Sprintf("tcp:%s/%s", serviceName, endpoint.Address)
+			records.Set(name, strconv.Itoa(endpoint.Weight))
 			return true
 		})
-	}
-	return records
+		return true
+	})
 }
 
 func middlewareFingerprint(middlewares *collectionlist.List[MiddlewareRuntime]) string {
@@ -194,10 +216,11 @@ func serviceEndpointFingerprint(service *ServiceRuntime) string {
 	}
 	endpoints := collectionlist.NewListWithCapacity[string](service.Endpoints.Len())
 	service.Endpoints.Range(func(_ int, endpoint *EndpointRuntime) bool {
-		if endpoint == nil || endpoint.URL == nil {
+		identifier := endpoint.Identifier()
+		if identifier == "" {
 			return true
 		}
-		endpoints.Add(fmt.Sprintf("%s#%d", endpoint.URL.String(), endpoint.Weight))
+		endpoints.Add(fmt.Sprintf("%s#%d", identifier, endpoint.Weight))
 		return true
 	})
 	sortStringList(endpoints)

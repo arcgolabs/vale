@@ -8,8 +8,8 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
-	dragonboat "github.com/lni/dragonboat/v3"
-	dragonconfig "github.com/lni/dragonboat/v3/config"
+	dragonboat "github.com/lni/dragonboat/v4"
+	dragonconfig "github.com/lni/dragonboat/v4/config"
 	"github.com/samber/oops"
 )
 

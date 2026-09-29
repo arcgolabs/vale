@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sync/atomic"
@@ -32,15 +33,16 @@ type CompiledSnapshot struct {
 }
 
 type CompiledRoute struct {
-	Name        string
-	Entrypoint  string
-	Host        string
-	PathPrefix  string
-	Method      string
-	Headers     *mapping.Map[string, string]
-	Service     *ServiceRuntime
-	Predicates  *bitset.BitSet
-	Middlewares *collectionlist.List[MiddlewareRuntime]
+	Name         string
+	Entrypoint   string
+	WriteTimeout *time.Duration
+	Host         string
+	PathPrefix   string
+	Method       string
+	Headers      *mapping.Map[string, string]
+	Service      *ServiceRuntime
+	Predicates   *bitset.BitSet
+	Middlewares  *collectionlist.List[MiddlewareRuntime]
 }
 
 type EntrypointRuntime struct {
@@ -185,12 +187,45 @@ type ServiceRuntime struct {
 	rrCounter      atomic.Uint64
 }
 
+type EndpointKind string
+
+const (
+	EndpointKindHTTP    EndpointKind = "http"
+	EndpointKindHandler EndpointKind = "handler"
+)
+
 type EndpointRuntime struct {
+	Kind        EndpointKind
+	Name        string
 	URL         *url.URL
 	Weight      int
 	Proxy       http.Handler
 	Healthy     atomic.Bool
 	LastChecked atomic.Int64
+}
+
+func (e *EndpointRuntime) Selectable() bool {
+	return e != nil && (e.Kind == EndpointKindHandler || e.Healthy.Load())
+}
+
+func (e *EndpointRuntime) Identifier() string {
+	if e == nil {
+		return ""
+	}
+	if e.Kind == EndpointKindHandler {
+		return string(EndpointKindHandler) + ":" + e.Name
+	}
+	if target := e.URLString(); target != "" {
+		return target
+	}
+	return string(e.Kind)
+}
+
+func (e *EndpointRuntime) URLString() string {
+	if e == nil || e.URL == nil {
+		return ""
+	}
+	return e.URL.String()
 }
 
 type CompiledTCPRoute struct {
@@ -220,6 +255,7 @@ type Gateway struct {
 	routeHandlers      atomic.Pointer[routeHandlerIndex]
 	entrypointHandlers atomic.Pointer[entrypointHandlerIndex]
 	routeMatches       atomic.Pointer[routeMatchCache]
+	logger             *slog.Logger
 	access             *AccessLogger
 	metrics            MetricsRecorder
 	accessLogEnabled   bool

@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"github.com/arcgolabs/eventx"
 	"net"
 	"net/http"
 	"time"
@@ -41,7 +40,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 
 	servers, listeners, entrypointNames, tcpServers, err := g.buildServers(ctx, snapshot)
 	if err != nil {
-		g.cleanupStartFailure(listeners, tcpServers)
+		g.cleanupStartFailure(ctx, listeners, tcpServers)
 		return oops.
 			In("gateway").
 			Wrapf(err, "build initial servers")
@@ -49,7 +48,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 
 	if g.config.Watch {
 		if err := g.startWatcher(ctx); err != nil {
-			g.cleanupStartFailure(listeners, tcpServers)
+			g.cleanupStartFailure(ctx, listeners, tcpServers)
 			return err
 		}
 	}
@@ -254,7 +253,7 @@ func (g *Gateway) startProviderObservability() {
 	if g.runtime == nil || g.events == nil {
 		return
 	}
-	unsub, err := eventx.Subscribe[provider.ConfigSourceDebouncedEvent](g.events, func(_ context.Context, event provider.ConfigSourceDebouncedEvent) error {
+	unsub, err := g.events.Subscribe(func(_ context.Context, event provider.ConfigSourceDebouncedEvent) error {
 		g.runtime.ObserveReloadDebounce(event.DebounceTime, event.SourceCount)
 		return nil
 	})

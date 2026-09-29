@@ -1,8 +1,10 @@
 package runtime_test
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,6 +12,58 @@ import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	valeruntime "github.com/arcgolabs/vale/runtime"
 )
+
+func TestHealthCheckerSkipsHandlerEndpointWhenHTTPUpstreamIsUnhealthy(t *testing.T) {
+	modelUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "model unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(modelUpstream.Close)
+
+	modelEndpoint, err := valeruntime.NewEndpoint(modelUpstream.URL, 1, http.NotFoundHandler())
+	if err != nil {
+		t.Fatal(err)
+	}
+	staticEndpoint, err := valeruntime.NewHandlerEndpoint("static", 1, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if _, writeErr := io.WriteString(w, "static-ready"); writeErr != nil {
+			t.Errorf("write static response: %v", writeErr)
+		}
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	modelService := valeruntime.NewService("model", "round_robin", modelEndpoint)
+	staticService := valeruntime.NewService("static", "round_robin", staticEndpoint)
+	snapshot := valeruntime.NewSnapshot().
+		AddEntrypoint("web", ":0", valeruntime.EntrypointRuntime{Name: "web", Address: ":0"}).
+		AddService(modelService).
+		AddService(staticService).
+		AddRoute(valeruntime.NewRoute("model", "web", modelService).WithPathPrefix("/model")).
+		AddRoute(valeruntime.NewRoute("static", "web", staticService).WithPathPrefix("/static")).
+		BuildMatchers()
+	gateway := valeruntime.NewGateway(snapshot, nil, false, valeruntime.NewNoopMetrics())
+	checker := valeruntime.NewHealthChecker(time.Millisecond, time.Second)
+	checker.Start(t.Context(), gateway)
+	defer checker.Stop()
+
+	waitForHealthState(t, modelEndpoint, false)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/static", http.NoBody)
+	response := httptest.NewRecorder()
+	gateway.Handler("web").ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("handler endpoint status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if body := strings.TrimSpace(response.Body.String()); body != "static-ready" {
+		t.Fatalf("handler endpoint body = %q, want static-ready", body)
+	}
+	if !staticEndpoint.Healthy.Load() {
+		t.Fatal("handler endpoint became unhealthy after HTTP health check cycle")
+	}
+	if lastChecked := staticEndpoint.LastChecked.Load(); lastChecked != 0 {
+		t.Fatalf("handler endpoint last checked = %d, want 0", lastChecked)
+	}
+}
 
 func TestHealthCheckerRunsEndpointChecksConcurrently(t *testing.T) {
 	var active atomic.Int64

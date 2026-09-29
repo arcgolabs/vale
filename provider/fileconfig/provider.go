@@ -198,7 +198,7 @@ func WithConfigFileList(paths *collectionlist.List[string]) gateway.Option {
 		if paths == nil || paths.IsEmpty() {
 			return errors.New("config files cannot be empty")
 		}
-		if paths.AnyMatch(func(_ int, path string) bool {
+		if paths.Stream().Any(func(path string) bool {
 			return path == ""
 		}) {
 			return errors.New("config file path cannot be empty")

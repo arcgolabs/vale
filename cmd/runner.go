@@ -19,12 +19,12 @@ const defaultShutdownTimeout = 10 * time.Second
 type valedRunner struct {
 	gateway         *vale.Gateway
 	logger          *slog.Logger
-	bus             eventx.BusRuntime
+	bus             *eventx.Bus
 	shutdownTimeout time.Duration
 	signals         chan os.Signal
 }
 
-func provideRunner(gateway *vale.Gateway, logger *slog.Logger, bus eventx.BusRuntime) *valedRunner {
+func provideRunner(gateway *vale.Gateway, logger *slog.Logger, bus *eventx.Bus) *valedRunner {
 	return &valedRunner{
 		gateway:         gateway,
 		logger:          logger,

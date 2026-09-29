@@ -82,6 +82,11 @@ func TestCompileTLSMiddlewareAndSecurity(t *testing.T) {
 	assertCompiledTLS(t, snapshot)
 	assertCompiledMiddleware(t, snapshot)
 	assertCompiledSecurity(t, snapshot)
+	service, _ := snapshot.Services.Get("api")
+	endpoint, _ := service.Endpoints.GetFirst()
+	if endpoint.Kind != runtime.EndpointKindHTTP {
+		t.Fatalf("compiled endpoint kind = %q, want %q", endpoint.Kind, runtime.EndpointKindHTTP)
+	}
 }
 
 func assertCompiledTLS(t *testing.T, snapshot *runtime.CompiledSnapshot) {

@@ -84,6 +84,14 @@ func RouteMiddlewares(names ...string) RouteOption {
 	}
 }
 
+func RouteWriteTimeout(timeout string) RouteOption {
+	return func(route *config.Route) {
+		if route != nil {
+			route.WriteTimeout = strings.TrimSpace(timeout)
+		}
+	}
+}
+
 func (b *ConfigBuilder) validateRoute(route config.Route) {
 	if route.Name == "" {
 		b.addError("route name cannot be empty")

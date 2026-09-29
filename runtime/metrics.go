@@ -136,7 +136,7 @@ func (m *observabilityMetrics) Observe(route *CompiledRoute, endpoint *EndpointR
 	m.requests.Add(ctx, 1,
 		observabilityx.String("route", route.Name),
 		observabilityx.String("service", route.Service.Name),
-		observabilityx.String("endpoint", endpoint.URL.String()),
+		observabilityx.String("endpoint", endpoint.Identifier()),
 		observabilityx.String("status", strconv.Itoa(status)),
 	)
 	m.latency.Record(ctx, duration.Seconds(),
@@ -207,7 +207,7 @@ func (m *observabilityMetrics) ObserveHealth(endpoint *EndpointRuntime, healthy 
 		return
 	}
 	m.healthChecks.Add(context.Background(), 1,
-		observabilityx.String("endpoint", endpoint.URL.String()),
+		observabilityx.String("endpoint", endpoint.Identifier()),
 		observabilityx.String("healthy", strconv.FormatBool(healthy)),
 	)
 }
@@ -217,7 +217,7 @@ func (m *observabilityMetrics) ObserveHealthCheck(endpoint *EndpointRuntime, hea
 		return
 	}
 	m.healthLatency.Record(context.Background(), duration.Seconds(),
-		observabilityx.String("endpoint", endpoint.URL.String()),
+		observabilityx.String("endpoint", endpoint.Identifier()),
 		observabilityx.String("healthy", strconv.FormatBool(healthy)),
 	)
 }

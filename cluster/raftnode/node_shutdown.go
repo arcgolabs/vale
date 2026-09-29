@@ -16,7 +16,7 @@ func (n *Node) Shutdown() error {
 	discoveryErr := n.stopDiscovery()
 	stopErr := n.stopGroups()
 	if n.ownsNodeHost {
-		n.nodeHost.Stop()
+		n.nodeHost.Close()
 	}
 	n.nodeHost = nil
 	return errors.Join(discoveryErr, stopErr)
@@ -54,7 +54,7 @@ func (n *Node) stopGroups() error {
 		if group == nil {
 			return true
 		}
-		if err := n.nodeHost.StopCluster(group.id); err != nil {
+		if err := n.nodeHost.StopShard(group.id); err != nil {
 			stopErr = errors.Join(stopErr, oops.
 				In("raftnode").
 				With("group", group.name, "cluster_id", group.id).

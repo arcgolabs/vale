@@ -71,6 +71,7 @@ func TestConfigBuilderFluentAPI(t *testing.T) {
 			provider.RouteMethod(http.MethodGet),
 			provider.RouteHeader("X-Env", "test"),
 			provider.RouteMiddlewares("strip-api"),
+			provider.RouteWriteTimeout("0s"),
 		).
 		Admin(":19090").
 		Observability(true, true).
@@ -89,8 +90,16 @@ func TestConfigBuilderFluentAPI(t *testing.T) {
 		t.Fatalf("middleware = %#v", cfg.Middlewares[0])
 	}
 	assertBuilderForwardAuth(t, cfg.Middlewares[0].ForwardAuth)
-	if cfg.Routes[0].Method != http.MethodGet || cfg.Routes[0].Middlewares[0] != "strip-api" {
-		t.Fatalf("route = %#v", cfg.Routes[0])
+	assertBuilderRoute(t, cfg.Routes[0])
+}
+
+func assertBuilderRoute(t *testing.T, route config.Route) {
+	t.Helper()
+	if route.Method != http.MethodGet || route.Middlewares[0] != "strip-api" {
+		t.Fatalf("route = %#v", route)
+	}
+	if route.WriteTimeout != "0s" {
+		t.Fatalf("route write timeout = %q, want 0s", route.WriteTimeout)
 	}
 }
 

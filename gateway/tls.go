@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	collectionset "github.com/arcgolabs/collectionx/set"
 	"github.com/arcgolabs/vale/runtime"
 	"github.com/caddyserver/certmagic"
 	"github.com/samber/oops"
@@ -100,7 +99,7 @@ func acmeDomainAllowed(serverName string, domains *collectionlist.List[string]) 
 	if serverName == "" || domains == nil {
 		return false
 	}
-	return domains.AnyMatch(func(_ int, domain string) bool {
+	return domains.Stream().Any(func(domain string) bool {
 		domain = strings.ToLower(strings.TrimSpace(domain))
 		return domain != "" && (serverName == domain || wildcardDomainMatch(serverName, domain))
 	})
@@ -115,16 +114,16 @@ func wildcardDomainMatch(serverName, domain string) bool {
 }
 
 func mergeTLSNextProtos(base, extra []string) []string {
-	ordered := collectionset.NewOrderedSet[string]()
-	collectionlist.FilterMapList(
-		collectionlist.NewList[string]().MergeSlice(base).MergeSlice(extra),
-		func(_ int, proto string) (string, bool) {
-			trimmed := strings.TrimSpace(proto)
-			return trimmed, trimmed != ""
-		},
-	).Range(func(_ int, proto string) bool {
-		ordered.Add(proto)
-		return true
-	})
-	return ordered.Values()
+	return collectionlist.NewList[string]().
+		MergeSlice(base).
+		MergeSlice(extra).
+		Stream().
+		Map(strings.TrimSpace).
+		Filter(func(proto string) bool {
+			return proto != ""
+		}).
+		DistinctBy(func(proto string) string {
+			return proto
+		}).
+		ToSlice()
 }

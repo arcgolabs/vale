@@ -3,6 +3,7 @@ package vale
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
@@ -10,6 +11,7 @@ import (
 	"github.com/arcgolabs/observabilityx"
 	"github.com/arcgolabs/vale/certstore"
 	"github.com/arcgolabs/vale/gateway"
+	"github.com/arcgolabs/vale/internal/genericx"
 	"github.com/arcgolabs/vale/provider"
 	"github.com/arcgolabs/vale/runtime"
 	"github.com/samber/oops"
@@ -71,9 +73,18 @@ func (r *Registry) Use(extensions ...Extension) error {
 	return nil
 }
 
-func (r *Registry) RegisterConfigProvider(providerType string, factory ConfigProviderFactory) error {
+func (r *Registry) RegisterConfigProvider[P provider.ConfigProvider](
+	providerType string,
+	factory func(context.Context, ProviderSpec) (P, error),
+) error {
+	if genericx.IsNil(factory) {
+		return oops.In("vale").With("type", providerType).New("config provider factory cannot be nil")
+	}
 	r.ensureInit()
-	if err := r.configProviders.Register(providerType, factory); err != nil {
+	erased := func(ctx context.Context, spec ProviderSpec) (provider.ConfigProvider, error) {
+		return factory(ctx, spec)
+	}
+	if err := r.configProviders.RegisterFactory(providerType, erased); err != nil {
 		return oops.In("vale").With("type", providerType).Wrapf(err, "register config provider factory")
 	}
 	return nil
@@ -98,9 +109,18 @@ func (r *Registry) ConfigProviderTypes() *collectionlist.List[string] {
 	return r.configProviders.Names()
 }
 
-func (r *Registry) RegisterSnapshotProvider(providerType string, factory SnapshotProviderFactory) error {
+func (r *Registry) RegisterSnapshotProvider[P provider.SnapshotProvider](
+	providerType string,
+	factory func(context.Context, ProviderSpec) (P, error),
+) error {
+	if genericx.IsNil(factory) {
+		return oops.In("vale").With("type", providerType).New("snapshot provider factory cannot be nil")
+	}
 	r.ensureInit()
-	if err := r.snapshotProviders.Register(providerType, factory); err != nil {
+	erased := func(ctx context.Context, spec ProviderSpec) (provider.SnapshotProvider, error) {
+		return factory(ctx, spec)
+	}
+	if err := r.snapshotProviders.RegisterFactory(providerType, erased); err != nil {
 		return oops.In("vale").With("type", providerType).Wrapf(err, "register snapshot provider factory")
 	}
 	return nil
@@ -125,9 +145,18 @@ func (r *Registry) SnapshotProviderTypes() *collectionlist.List[string] {
 	return r.snapshotProviders.Names()
 }
 
-func (r *Registry) RegisterMiddleware(middlewareType string, factory MiddlewareFactory) error {
+func (r *Registry) RegisterMiddleware[H http.Handler](
+	middlewareType string,
+	factory func(http.Handler, runtime.MiddlewareRuntime) H,
+) error {
+	if genericx.IsNil(factory) {
+		return oops.In("vale").With("type", middlewareType).New("middleware factory cannot be nil")
+	}
 	r.ensureInit()
-	if err := r.middleware.Register(middlewareType, factory); err != nil {
+	erased := func(next http.Handler, middleware runtime.MiddlewareRuntime) http.Handler {
+		return factory(next, middleware)
+	}
+	if err := r.middleware.RegisterFactory(middlewareType, erased); err != nil {
 		return oops.In("vale").With("type", middlewareType).Wrapf(err, "register middleware factory")
 	}
 	return nil
@@ -140,7 +169,10 @@ func (r *Registry) MiddlewareRegistry() *runtime.MiddlewareRegistry {
 	return r.middleware.Clone()
 }
 
-func (r *Registry) RegisterMetricsFactory(name string, factory MetricsFactory) error {
+func (r *Registry) RegisterMetricsFactory[M runtime.MetricsRecorder](
+	name string,
+	factory func(bool, *slog.Logger) M,
+) error {
 	name = normalizeRegistryName(name)
 	if name == "" {
 		return oops.In("vale").New("metrics factory name cannot be empty")
@@ -149,7 +181,13 @@ func (r *Registry) RegisterMetricsFactory(name string, factory MetricsFactory) e
 		return oops.In("vale").With("name", name).New("metrics factory cannot be nil")
 	}
 	r.ensureInit()
-	r.metrics.Set(name, factory)
+	r.metrics.Set(name, func(enabled bool, logger *slog.Logger) runtime.MetricsRecorder {
+		metrics := factory(enabled, logger)
+		if genericx.IsNil(metrics) {
+			return nil
+		}
+		return metrics
+	})
 	return nil
 }
 

@@ -101,6 +101,47 @@ func TestBuiltinMiddlewareCompressesGzip(t *testing.T) {
 	}
 }
 
+func TestBuiltinMiddlewareDoesNotCompressOrBufferEventStream(t *testing.T) {
+	t.Parallel()
+
+	flushed := false
+	handler := valeruntime.WrapMiddlewares(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("compressed event stream response does not expose http.Flusher")
+		}
+		if _, err := w.Write([]byte("data: first\n\n")); err != nil {
+			t.Fatal(err)
+		}
+		flusher.Flush()
+		flushed = true
+		if _, err := w.Write([]byte("data: [DONE]\n\n")); err != nil {
+			t.Fatal(err)
+		}
+	}), collectionlist.NewList[valeruntime.MiddlewareRuntime](
+		valeruntime.MiddlewareRuntime{
+			Compress:       valeruntime.CompressRuntime{Enabled: true, MinBytes: 1 << 20},
+			CircuitBreaker: valeruntime.CircuitBreakerRuntime{Enabled: true},
+		},
+	))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/events", http.NoBody)
+	req.Header.Set("Accept-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if !flushed || !rec.Flushed {
+		t.Fatal("event stream was not flushed through compression middleware")
+	}
+	if encoding := rec.Header().Get("Content-Encoding"); encoding != "" {
+		t.Fatalf("content encoding = %q, want uncompressed event stream", encoding)
+	}
+	if body := rec.Body.String(); body != "data: first\n\ndata: [DONE]\n\n" {
+		t.Fatalf("body = %q", body)
+	}
+}
+
 func readGzipBody(t *testing.T, rec *httptest.ResponseRecorder) []byte {
 	t.Helper()
 

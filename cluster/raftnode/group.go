@@ -8,9 +8,9 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
-	dragonboat "github.com/lni/dragonboat/v3"
-	dragonconfig "github.com/lni/dragonboat/v3/config"
-	sm "github.com/lni/dragonboat/v3/statemachine"
+	dragonboat "github.com/lni/dragonboat/v4"
+	dragonconfig "github.com/lni/dragonboat/v4/config"
+	sm "github.com/lni/dragonboat/v4/statemachine"
 	"github.com/samber/oops"
 )
 
@@ -45,10 +45,10 @@ func (n *Node) startGroup(config Config, groupConfig GroupConfig) (*raftGroup, e
 		memberNames:    initialMemberNames(config, groupConfig),
 	}
 	raftConfig := configForGroup(groupConfig.ID, n.nodeID)
-	createSM := func(clusterID, _ uint64) sm.IStateMachine {
-		return newFSM(groupConfig.Name, clusterID)
+	createSM := func(shardID, _ uint64) sm.IStateMachine {
+		return newFSM(groupConfig.Name, shardID)
 	}
-	if err := n.nodeHost.StartCluster(group.initialMembers, groupConfig.Join, createSM, raftConfig); err != nil {
+	if err := n.nodeHost.StartReplica(group.initialMembers, groupConfig.Join, createSM, raftConfig); err != nil {
 		return nil, oops.
 			In("raftnode").
 			With("group", groupConfig.Name, "cluster_id", groupConfig.ID, "node_id", config.NodeID).
@@ -82,10 +82,10 @@ func normalizeGroupConfig(config Config, groupConfig GroupConfig) GroupConfig {
 	return groupConfig
 }
 
-func configForGroup(clusterID, nodeID uint64) dragonconfig.Config {
+func configForGroup(shardID, replicaID uint64) dragonconfig.Config {
 	return dragonconfig.Config{
-		NodeID:             nodeID,
-		ClusterID:          clusterID,
+		ReplicaID:          replicaID,
+		ShardID:            shardID,
 		CheckQuorum:        true,
 		ElectionRTT:        10,
 		HeartbeatRTT:       1,
@@ -140,7 +140,7 @@ func membershipPeers(group *raftGroup, membership *dragonboat.Membership) *colle
 	for id, address := range membership.Nodes {
 		peers.Add(newPeer(peerID(group, id), address, "Voter"))
 	}
-	for id, address := range membership.Observers {
+	for id, address := range membership.NonVotings {
 		peers.Add(newPeer(peerID(group, id), address, "Observer"))
 	}
 	for id, address := range membership.Witnesses {

@@ -127,7 +127,7 @@ func TestMiddlewareRegistryUsesCustomFactory(t *testing.T) {
 	t.Parallel()
 
 	registry := valeruntime.NewMiddlewareRegistry()
-	if err := registry.Register("mark", func(next http.Handler, middleware valeruntime.MiddlewareRuntime) http.Handler {
+	if err := registry.Register("mark", func(next http.Handler, middleware valeruntime.MiddlewareRuntime) http.HandlerFunc {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			r.Header.Set("X-Middleware", middleware.Name)
 			next.ServeHTTP(w, r)

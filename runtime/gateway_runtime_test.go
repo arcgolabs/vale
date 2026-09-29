@@ -51,6 +51,39 @@ func TestGatewayLogsFailedRequestWhenAccessLogEnabled(t *testing.T) {
 	}
 }
 
+func TestGatewayHandlerEndpointFastPathIgnoresHTTPHealthAndLogsIdentifier(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	endpoint, err := valeruntime.NewHandlerEndpoint("static", 1, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint.Healthy.Store(false)
+	service := valeruntime.NewService("static", "round_robin", endpoint)
+	snapshot := valeruntime.NewSnapshot().
+		AddEntrypoint("web", ":0", valeruntime.EntrypointRuntime{Name: "web", Address: ":0"}).
+		AddService(service).
+		AddRoute(valeruntime.NewRoute("static", "web", service).WithPathPrefix("/")).
+		BuildMatchers()
+
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/", http.NoBody)
+	response := httptest.NewRecorder()
+	valeruntime.NewGateway(snapshot, logger, true, valeruntime.NewObservabilityMetrics(true, nil, nil)).
+		Handler("web").
+		ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("handler endpoint status = %d, want %d", response.Code, http.StatusNoContent)
+	}
+	if got := logs.String(); !strings.Contains(got, "endpoint=handler:static") {
+		t.Fatalf("access log = %q, want stable handler endpoint identifier", got)
+	}
+}
+
 func TestGatewayPrebuildsRouteEndpointMiddlewareHandler(t *testing.T) {
 	t.Parallel()
 

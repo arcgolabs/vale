@@ -8,10 +8,14 @@ import (
 	"github.com/arcgolabs/observabilityx"
 	"github.com/arcgolabs/vale/certstore"
 	"github.com/arcgolabs/vale/gateway"
+	"github.com/arcgolabs/vale/internal/genericx"
 	"github.com/samber/oops"
 )
 
-func (r *Registry) RegisterCertificateStorage(name string, factory CertificateStorageFactory) error {
+func (r *Registry) RegisterCertificateStorage[S certstore.Storage](
+	name string,
+	factory func(context.Context) (S, error),
+) error {
 	name = normalizeRegistryName(name)
 	if name == "" {
 		return oops.In("vale").New("certificate storage name cannot be empty")
@@ -20,7 +24,13 @@ func (r *Registry) RegisterCertificateStorage(name string, factory CertificateSt
 		return oops.In("vale").With("name", name).New("certificate storage factory cannot be nil")
 	}
 	r.ensureInit()
-	r.certificateStorages.Set(name, factory)
+	r.certificateStorages.Set(name, func(ctx context.Context) (certstore.Storage, error) {
+		storage, err := factory(ctx)
+		if err == nil && genericx.IsNil(storage) {
+			return nil, oops.In("vale").With("name", name).New("certificate storage factory returned nil")
+		}
+		return storage, err
+	})
 	return nil
 }
 
@@ -51,7 +61,10 @@ func (r *Registry) CertificateStorageNames() *collectionlist.List[string] {
 	return sortedRegistryNames(r.certificateStorages)
 }
 
-func (r *Registry) RegisterClusterFactory(name string, factory ClusterFactory) error {
+func (r *Registry) RegisterClusterFactory[C gateway.Cluster](
+	name string,
+	factory func(*slog.Logger) (C, error),
+) error {
 	name = normalizeRegistryName(name)
 	if name == "" {
 		return oops.In("vale").New("cluster factory name cannot be empty")
@@ -60,7 +73,13 @@ func (r *Registry) RegisterClusterFactory(name string, factory ClusterFactory) e
 		return oops.In("vale").With("name", name).New("cluster factory cannot be nil")
 	}
 	r.ensureInit()
-	r.clusters.Set(name, factory)
+	r.clusters.Set(name, func(logger *slog.Logger) (gateway.Cluster, error) {
+		cluster, err := factory(logger)
+		if err == nil && genericx.IsNil(cluster) {
+			return nil, oops.In("vale").With("name", name).New("cluster factory returned nil")
+		}
+		return cluster, err
+	})
 	return nil
 }
 
@@ -78,7 +97,10 @@ func (r *Registry) ClusterFactoryNames() *collectionlist.List[string] {
 	return sortedRegistryNames(r.clusters)
 }
 
-func (r *Registry) RegisterObservabilityFactory(name string, factory ObservabilityFactory) error {
+func (r *Registry) RegisterObservabilityFactory[O observabilityx.Observability](
+	name string,
+	factory func(*slog.Logger) (O, error),
+) error {
 	name = normalizeRegistryName(name)
 	if name == "" {
 		return oops.In("vale").New("observability factory name cannot be empty")
@@ -87,7 +109,13 @@ func (r *Registry) RegisterObservabilityFactory(name string, factory Observabili
 		return oops.In("vale").With("name", name).New("observability factory cannot be nil")
 	}
 	r.ensureInit()
-	r.observability.Set(name, factory)
+	r.observability.Set(name, func(logger *slog.Logger) (observabilityx.Observability, error) {
+		obs, err := factory(logger)
+		if err == nil && genericx.IsNil(obs) {
+			return nil, oops.In("vale").With("name", name).New("observability factory returned nil")
+		}
+		return obs, err
+	})
 	return nil
 }
 

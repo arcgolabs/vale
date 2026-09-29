@@ -6,7 +6,7 @@ import (
 	"time"
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	sm "github.com/lni/dragonboat/v3/statemachine"
+	sm "github.com/lni/dragonboat/v4/statemachine"
 	"github.com/samber/oops"
 )
 
@@ -29,12 +29,12 @@ func newFSM(group string, clusterID uint64) *fsm {
 	}
 }
 
-func (f *fsm) Update(data []byte) (sm.Result, error) {
-	state, result, err := applyCommand(f.state, data)
+func (f *fsm) Update(entry sm.Entry) (sm.Result, error) {
+	state, result, err := applyCommand(f.state, entry.Cmd)
 	if err != nil {
 		return sm.Result{}, oops.
 			In("raftnode").
-			With("group", f.group, "cluster_id", f.clusterID, "bytes", len(data)).
+			With("group", f.group, "cluster_id", f.clusterID, "bytes", len(entry.Cmd)).
 			Wrapf(err, "apply raft fsm command")
 	}
 	f.state = state

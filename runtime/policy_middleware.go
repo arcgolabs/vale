@@ -125,6 +125,19 @@ type circuitStatusRecorder struct {
 	wrote  bool
 }
 
+func (r *circuitStatusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
+
+func (r *circuitStatusRecorder) Flush() {
+	if !r.wrote {
+		r.WriteHeader(http.StatusOK)
+	}
+	if err := http.NewResponseController(r.ResponseWriter).Flush(); err != nil {
+		return
+	}
+}
+
 func (r *circuitStatusRecorder) WriteHeader(statusCode int) {
 	if r.wrote {
 		return

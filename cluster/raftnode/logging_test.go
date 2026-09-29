@@ -2,7 +2,7 @@ package raftnode_test
 
 import (
 	collectionlist "github.com/arcgolabs/collectionx/list"
-	dragonlogger "github.com/lni/dragonboat/v3/logger"
+	dragonlogger "github.com/lni/dragonboat/v4/logger"
 )
 
 func quietDragonboatLogs() {

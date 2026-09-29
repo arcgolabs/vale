@@ -8,7 +8,7 @@ import (
 
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/vale/cluster/raftnode"
-	dragonboat "github.com/lni/dragonboat/v3"
+	dragonboat "github.com/lni/dragonboat/v4"
 )
 
 func TestNodeAppliesSnapshotUpdateCommand(t *testing.T) {
@@ -141,7 +141,7 @@ func TestNodeCanUseExternalDragonboatNodeHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(nodeHost.Stop)
+	t.Cleanup(nodeHost.Close)
 
 	node := newTestNodeWithConfig(t, raftnode.Config{
 		NodeID:    config.NodeID,

@@ -42,18 +42,20 @@ func insertCatalogEndpoints(txn *memdb.Txn, service *ServiceRuntime) error {
 	}
 	var insertErr error
 	service.Endpoints.Range(func(index int, endpoint *EndpointRuntime) bool {
-		if endpoint == nil || endpoint.URL == nil {
+		if endpoint == nil || endpoint.Identifier() == "" {
 			return true
 		}
 		if err := txn.Insert(catalogTableEndpoint, EndpointRecord{
 			ID:      fmt.Sprintf("%s/%06d", service.Name, index),
 			Service: service.Name,
-			URL:     endpoint.URL.String(),
+			Kind:    endpoint.Kind,
+			Name:    endpoint.Name,
+			URL:     endpoint.URLString(),
 			Weight:  endpoint.Weight,
 		}); err != nil {
 			insertErr = oops.
 				In("runtime").
-				With("table", catalogTableEndpoint, "service", service.Name, "endpoint", endpoint.URL.String()).
+				With("table", catalogTableEndpoint, "service", service.Name, "endpoint", endpoint.Identifier()).
 				Wrapf(err, "insert runtime catalog endpoint")
 			return false
 		}
@@ -93,12 +95,13 @@ func insertCatalogRouteGroup(txn *memdb.Txn, middlewares *mapping.Map[string, Mi
 
 func insertCatalogRoute(txn *memdb.Txn, entrypoint string, route *CompiledRoute) error {
 	if err := txn.Insert(catalogTableRoute, RouteRecord{
-		Name:       route.Name,
-		Entrypoint: entrypoint,
-		Host:       route.Host,
-		PathPrefix: route.PathPrefix,
-		Method:     route.Method,
-		Service:    routeServiceName(route),
+		Name:         route.Name,
+		Entrypoint:   entrypoint,
+		WriteTimeout: routeWriteTimeoutString(route.WriteTimeout),
+		Host:         route.Host,
+		PathPrefix:   route.PathPrefix,
+		Method:       route.Method,
+		Service:      routeServiceName(route),
 	}); err != nil {
 		return oops.
 			In("runtime").

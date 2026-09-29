@@ -25,7 +25,7 @@ Vale 暂定定位为：
 Vale 的技术路线建议定为：
 
 ```text
-语言：Go 1.26.x+
+语言：Go 1.27.1+
 核心数据面：net/http + httputil.ReverseProxy + 自研 compiled runtime
 配置：HCL v2 + fsnotify
 Provider：自研接口 + File/Docker/Orch 内置
@@ -48,7 +48,7 @@ arcgolabs：复用 logx/configx/collectionx/observabilityx/httpx，但不污染 
 | 方向 | 选型 | 结论 |
 |---|---|---|
 | 语言 | Go | 定稿 |
-| Go 版本 | Go 1.26.x+ | 定稿 |
+| Go 版本 | Go 1.27.1+ | 定稿 |
 | 构建 | Go Modules + Taskfile | 定稿 |
 | CLI | Cobra | 定稿 |
 | 配置格式 | HCL 优先，YAML/JSON 后置 | 定稿 |
@@ -59,13 +59,13 @@ arcgolabs：复用 logx/configx/collectionx/observabilityx/httpx，但不污染 
 建议 `go.mod`：
 
 ```go
-go 1.26
+go 1.27.1
 ```
 
 开发和 CI 基线建议：
 
 ```text
-Go >= 1.26.2
+Go >= 1.27.1
 ```
 
 ### 3.1 为什么选择 Go
@@ -1344,7 +1344,7 @@ arcgolabs 适度复用
 最终建议：
 
 ```text
-语言：Go 1.26.x+
+语言：Go 1.27.1+
 HTTP Runtime：net/http + httputil.ReverseProxy
 Router：自研 compiled matcher
 配置：HCL v2

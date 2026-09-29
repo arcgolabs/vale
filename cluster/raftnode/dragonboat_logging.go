@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"sync/atomic"
 
-	dragonlogger "github.com/lni/dragonboat/v3/logger"
+	dragonlogger "github.com/lni/dragonboat/v4/logger"
 )
 
 var dragonboatLogger atomic.Pointer[slog.Logger]

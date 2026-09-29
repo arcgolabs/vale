@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arcgolabs/collectionx/bitset"
 	collectionlist "github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/collectionx/mapping"
 	"github.com/arcgolabs/vale/config"
@@ -40,7 +39,10 @@ func CompileWithOptions(cfg *config.Config, options Options) (*runtime.CompiledS
 		return nil, err
 	}
 	entrypointMap, entrypointConfigMap := compileEntrypoints(cfg.Entrypoints)
-	routesByEntrypoint := compileRoutes(cfg.Routes, serviceMap, middlewareMap)
+	routesByEntrypoint, err := compileRoutes(cfg.Routes, serviceMap, middlewareMap)
+	if err != nil {
+		return nil, err
+	}
 	tcpRoutes := compileTCPRoutes(cfg.TCPRoutes, tcpServiceMap)
 	snapshot := &runtime.CompiledSnapshot{
 		Entrypoints:        entrypointMap,
@@ -110,6 +112,7 @@ func compileEndpoint(serviceName string, endpoint config.Endpoint) (*runtime.End
 		weight = 1
 	}
 	rtEndpoint := &runtime.EndpointRuntime{
+		Kind:   runtime.EndpointKindHTTP,
 		URL:    parsedURL,
 		Weight: weight,
 		Proxy:  proxy.Build(parsedURL),
@@ -204,32 +207,60 @@ func compileRoutes(
 	routes []config.Route,
 	serviceMap *mapping.Map[string, *runtime.ServiceRuntime],
 	middlewareMap *mapping.Map[string, runtime.MiddlewareRuntime],
-) *mapping.MultiMap[string, *runtime.CompiledRoute] {
+) (*mapping.MultiMap[string, *runtime.CompiledRoute], error) {
 	routesByEntrypoint := mapping.NewMultiMap[string, *runtime.CompiledRoute]()
 	for index := range routes {
 		route := &routes[index]
 		service, _ := serviceMap.Get(route.Service)
-		routesByEntrypoint.Put(route.Entrypoint, compileRoute(route, service, middlewareMap))
+		compiled, err := compileRoute(route, service, middlewareMap)
+		if err != nil {
+			return nil, err
+		}
+		routesByEntrypoint.Put(route.Entrypoint, compiled)
 	}
-	return routesByEntrypoint
+	return routesByEntrypoint, nil
 }
 
 func compileRoute(
 	route *config.Route,
 	service *runtime.ServiceRuntime,
 	middlewareMap *mapping.Map[string, runtime.MiddlewareRuntime],
-) *runtime.CompiledRoute {
-	return &runtime.CompiledRoute{
-		Name:        route.Name,
-		Entrypoint:  route.Entrypoint,
-		Host:        strings.ToLower(strings.TrimSpace(route.Host)),
-		PathPrefix:  strings.TrimSpace(route.PathPrefix),
-		Method:      strings.ToUpper(strings.TrimSpace(route.Method)),
-		Headers:     normalizeHeaders(route.Headers),
-		Service:     service,
-		Predicates:  compileRoutePredicates(*route),
-		Middlewares: compileRouteMiddlewares(route.Middlewares, middlewareMap),
+) (*runtime.CompiledRoute, error) {
+	writeTimeout, hasWriteTimeout, err := compileRouteWriteTimeout(route.Name, route.WriteTimeout)
+	if err != nil {
+		return nil, err
 	}
+	var compiledWriteTimeout *time.Duration
+	if hasWriteTimeout {
+		compiledWriteTimeout = new(writeTimeout)
+	}
+	return &runtime.CompiledRoute{
+		Name:         route.Name,
+		Entrypoint:   route.Entrypoint,
+		WriteTimeout: compiledWriteTimeout,
+		Host:         strings.ToLower(strings.TrimSpace(route.Host)),
+		PathPrefix:   strings.TrimSpace(route.PathPrefix),
+		Method:       strings.ToUpper(strings.TrimSpace(route.Method)),
+		Headers:      normalizeHeaders(route.Headers),
+		Service:      service,
+		Predicates:   compileRoutePredicates(*route),
+		Middlewares:  compileRouteMiddlewares(route.Middlewares, middlewareMap),
+	}, nil
+}
+
+func compileRouteWriteTimeout(routeName, raw string) (time.Duration, bool, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, false, nil
+	}
+	timeout, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, false, fmt.Errorf("route %q write_timeout %q is invalid: %w", routeName, raw, err)
+	}
+	if timeout < 0 {
+		return 0, false, fmt.Errorf("route %q write_timeout must be non-negative", routeName)
+	}
+	return timeout, true, nil
 }
 
 func compileEntrypointMatchers(
@@ -258,112 +289,4 @@ func compileEntrypoint(entrypoint config.Entrypoint) runtime.EntrypointRuntime {
 		Protocol: config.NormalizeEntrypointProtocol(entrypoint.Protocol),
 		TLS:      compileTLS(entrypoint),
 	}
-}
-
-func compileTLS(entrypoint config.Entrypoint) runtime.TLSRuntime {
-	var tlsRuntime runtime.TLSRuntime
-	if entrypoint.TLS != nil {
-		tlsRuntime.Enabled = entrypoint.TLS.Enabled || entrypoint.TLS.CertFile != "" || entrypoint.TLS.KeyFile != ""
-		tlsRuntime.CertFile = strings.TrimSpace(entrypoint.TLS.CertFile)
-		tlsRuntime.KeyFile = strings.TrimSpace(entrypoint.TLS.KeyFile)
-	}
-	if entrypoint.ACME != nil {
-		tlsRuntime.Enabled = tlsRuntime.Enabled || entrypoint.ACME.Enabled
-		cacheDir := strings.TrimSpace(entrypoint.ACME.CacheDir)
-		if entrypoint.ACME.Enabled && cacheDir == "" {
-			cacheDir = DefaultACMECacheDir
-		}
-		tlsRuntime.ACME = runtime.ACMERuntime{
-			Enabled:  entrypoint.ACME.Enabled,
-			Email:    strings.TrimSpace(entrypoint.ACME.Email),
-			CacheDir: cacheDir,
-			Domains:  collectionlist.NewList(entrypoint.ACME.Domains...),
-		}
-	}
-	return tlsRuntime
-}
-
-func compileRoutePredicates(route config.Route) *bitset.BitSet {
-	predicates := bitset.New()
-	if strings.TrimSpace(route.Host) != "" {
-		predicates.Set(runtime.PredicateHost)
-	}
-	if strings.TrimSpace(route.PathPrefix) != "" {
-		predicates.Set(runtime.PredicatePathPrefix)
-	}
-	if strings.TrimSpace(route.Method) != "" {
-		predicates.Set(runtime.PredicateMethod)
-	}
-	if len(route.Headers) > 0 {
-		predicates.Set(runtime.PredicateHeaders)
-	}
-	return predicates
-}
-
-func pickAdminAddress(cfg *config.Config) string {
-	if cfg.Admin != nil && cfg.Admin.Address != "" {
-		return cfg.Admin.Address
-	}
-	return ":19090"
-}
-
-func pickAccessLogEnabled(cfg *config.Config) bool {
-	if cfg.Observability == nil {
-		return true
-	}
-	return cfg.Observability.AccessLog
-}
-
-func pickMetricsEnabled(cfg *config.Config) bool {
-	if cfg.Observability == nil {
-		return true
-	}
-	return cfg.Observability.Metrics
-}
-
-func pickHealthInterval(cfg *config.Config) string {
-	if cfg.Health == nil || cfg.Health.Interval == "" {
-		return "5s"
-	}
-	return cfg.Health.Interval
-}
-
-func pickHealthTimeout(cfg *config.Config) string {
-	if cfg.Health == nil || cfg.Health.Timeout == "" {
-		return "2s"
-	}
-	return cfg.Health.Timeout
-}
-
-func pickSecurity(cfg *config.Config) runtime.SecurityRuntime {
-	security := runtime.SecurityRuntime{
-		ReadHeaderTimeout: "5s",
-		ReadTimeout:       "30s",
-		WriteTimeout:      "30s",
-		IdleTimeout:       "120s",
-		MaxHeaderBytes:    1 << 20,
-		MaxBodyBytes:      32 << 20,
-	}
-	if cfg.Security == nil {
-		return security
-	}
-	if cfg.Security.ReadHeaderTimeout != "" {
-		security.ReadHeaderTimeout = cfg.Security.ReadHeaderTimeout
-	}
-	if cfg.Security.ReadTimeout != "" {
-		security.ReadTimeout = cfg.Security.ReadTimeout
-	}
-	if cfg.Security.WriteTimeout != "" {
-		security.WriteTimeout = cfg.Security.WriteTimeout
-	}
-	if cfg.Security.IdleTimeout != "" {
-		security.IdleTimeout = cfg.Security.IdleTimeout
-	}
-	if cfg.Security.MaxHeaderBytes > 0 {
-		security.MaxHeaderBytes = cfg.Security.MaxHeaderBytes
-	}
-	if cfg.Security.MaxBodyBytes > 0 {
-		security.MaxBodyBytes = cfg.Security.MaxBodyBytes
-	}
-	return security
 }

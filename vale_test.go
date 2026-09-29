@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/arcgolabs/vale"
 	"github.com/arcgolabs/vale/config"
@@ -56,7 +57,7 @@ func TestRootPackageRuntimeBuilders(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := vale.NewService("api", "round_robin", endpoint)
-	route := vale.NewRoute("api", "web", service).WithPathPrefix("/api")
+	route := vale.NewRoute("api", "web", service).WithPathPrefix("/api").WithWriteTimeout(time.Second)
 	snapshot := vale.NewSnapshot().
 		AddEntrypoint("web", ":8080", vale.RuntimeEntrypoint{}).
 		AddService(service).
@@ -74,11 +75,14 @@ func TestRootPackageConfigBuilder(t *testing.T) {
 	cfg := vale.NewConfigBuilder().
 		Entrypoint("web", ":8080").
 		Service("api", "http://127.0.0.1:8081").
-		RouteTo("api", "web", "api", vale.RoutePathPrefix("/api")).
+		RouteTo("api", "web", "api", vale.RoutePathPrefix("/api"), vale.RouteWriteTimeout("0s")).
 		Admin(":19090").
 		Build()
 
 	if err := config.Validate(cfg); err != nil {
 		t.Fatal(err)
+	}
+	if cfg.Routes[0].WriteTimeout != "0s" {
+		t.Fatalf("route write timeout = %q, want 0s", cfg.Routes[0].WriteTimeout)
 	}
 }

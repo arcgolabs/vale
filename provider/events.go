@@ -7,7 +7,7 @@ import (
 )
 
 type Event = eventx.Event
-type EventBus = eventx.BusRuntime
+type EventBus = *eventx.Bus
 
 const (
 	EventNameConfigSourceLoaded    = "provider.config_source.loaded"

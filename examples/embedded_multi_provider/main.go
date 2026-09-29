@@ -22,7 +22,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	bus := eventx.New()
 
-	_, err := eventx.Subscribe[providerevents.ConfigSourceLoadedEvent](bus, func(_ context.Context, event providerevents.ConfigSourceLoadedEvent) error {
+	_, err := bus.Subscribe(func(_ context.Context, event providerevents.ConfigSourceLoadedEvent) error {
 		logger.Info("config source loaded", "source", event.Source, "duration", event.Duration, "size", event.ConfigSize)
 		return nil
 	})

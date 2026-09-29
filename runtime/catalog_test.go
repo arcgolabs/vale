@@ -2,6 +2,7 @@ package runtime_test
 
 import (
 	"net/http"
+	"slices"
 	"testing"
 
 	valeruntime "github.com/arcgolabs/vale/runtime"
@@ -80,6 +81,63 @@ func TestCatalogQueryRoutesByHostAndPathPrefixAcrossEntrypoints(t *testing.T) {
 	if byHostAndPathPrefix.Len() != 2 {
 		t.Fatalf("routes by host and path_prefix len = %d, want 2", byHostAndPathPrefix.Len())
 	}
+}
+
+func TestCatalogMapRoutesMapsFilteredRecords(t *testing.T) {
+	t.Parallel()
+
+	catalog := newCatalogForMapRoutesTest(t)
+	mapped, err := catalog.MapRoutes(
+		valeruntime.RouteFilter{Service: "api"},
+		func(route valeruntime.RouteRecord) string {
+			return route.Name + "=" + route.PathPrefix
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"api-route=/api"}
+	got := mapped.Values()
+	if len(got) != len(want) {
+		t.Fatalf("mapped routes = %v, want %v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("mapped routes = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestCatalogMapRoutesWithNilMapperReturnsEmptyList(t *testing.T) {
+	t.Parallel()
+
+	catalog := newCatalogForMapRoutesTest(t)
+	mapped, err := catalog.MapRoutes[string](valeruntime.RouteFilter{Service: "api"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mapped == nil || !mapped.IsEmpty() {
+		t.Fatalf("mapped routes = %#v, want non-nil empty list", mapped)
+	}
+}
+
+func newCatalogForMapRoutesTest(t *testing.T) *valeruntime.Catalog {
+	t.Helper()
+
+	endpoint, err := valeruntime.NewEndpoint("http://127.0.0.1:8081", 1, http.DefaultServeMux)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := valeruntime.NewService("api", "round_robin", endpoint)
+	snapshot := valeruntime.NewSnapshot().
+		AddEntrypoint("web", ":8080", valeruntime.EntrypointRuntime{}).
+		AddService(service).
+		AddRoute(valeruntime.NewRoute("api-route", "web", service).WithHost("api.example.com").WithPathPrefix("/api"))
+	catalog, err := valeruntime.BuildCatalog(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return catalog
 }
 
 func TestCatalogFallsBackWhenMissing(t *testing.T) {
@@ -165,5 +223,33 @@ func TestDiffSnapshotsReportsRouteAndServiceChanges(t *testing.T) {
 	}
 	if diff.Services.Added.Values()[0] != "web" || diff.Services.Changed.Values()[0] != "api" {
 		t.Fatalf("service diff = %#v", diff.Services)
+	}
+}
+
+func TestDiffSnapshotsIdentifiesHandlerEndpointsByStableName(t *testing.T) {
+	t.Parallel()
+
+	currentEndpoint, err := valeruntime.NewHandlerEndpoint("static-v1", 1, http.NotFoundHandler())
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextEndpoint, err := valeruntime.NewHandlerEndpoint("static-v2", 1, http.NotFoundHandler())
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentService := valeruntime.NewService("static", "round_robin", currentEndpoint)
+	nextService := valeruntime.NewService("static", "round_robin", nextEndpoint)
+	current := valeruntime.NewSnapshot().AddService(currentService).BuildMatchers()
+	next := valeruntime.NewSnapshot().AddService(nextService).BuildMatchers()
+
+	diff := valeruntime.DiffSnapshots(current, next)
+	if !slices.Contains(diff.Services.Changed.Values(), "static") {
+		t.Fatalf("changed services = %v, want static", diff.Services.Changed.Values())
+	}
+	if !slices.Contains(diff.Endpoints.Removed.Values(), "static/handler:static-v1") {
+		t.Fatalf("removed endpoints = %v, want static/handler:static-v1", diff.Endpoints.Removed.Values())
+	}
+	if !slices.Contains(diff.Endpoints.Added.Values(), "static/handler:static-v2") {
+		t.Fatalf("added endpoints = %v, want static/handler:static-v2", diff.Endpoints.Added.Values())
 	}
 }

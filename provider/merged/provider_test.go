@@ -108,7 +108,7 @@ func newLoadedProviderWithBus(
 	t *testing.T,
 	source *memoryconfig.Provider,
 	debounce time.Duration,
-	bus eventx.BusRuntime,
+	bus *eventx.Bus,
 ) *merged.Provider {
 	t.Helper()
 	provider := merged.New(bus, merged.Source{Name: "memory", Provider: source})
@@ -143,7 +143,7 @@ func closeProvider(t *testing.T, closer io.Closer) {
 func watchProviderWithMetrics(
 	t *testing.T,
 	provider *merged.Provider,
-	bus eventx.BusRuntime,
+	bus *eventx.Bus,
 	buffer int,
 ) (chan *runtime.CompiledSnapshot, chan providerevents.ConfigSourceDebouncedEvent, io.Closer) {
 	t.Helper()
@@ -152,7 +152,7 @@ func watchProviderWithMetrics(
 		t.Fatal("watchProviderWithEvents requires a non-nil bus")
 	}
 	debounceEvents := make(chan providerevents.ConfigSourceDebouncedEvent, buffer)
-	debouncedUnsub, err := eventx.Subscribe[providerevents.ConfigSourceDebouncedEvent](bus, func(_ context.Context, event providerevents.ConfigSourceDebouncedEvent) error {
+	debouncedUnsub, err := bus.Subscribe(func(_ context.Context, event providerevents.ConfigSourceDebouncedEvent) error {
 		select {
 		case debounceEvents <- event:
 		default:

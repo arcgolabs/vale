@@ -18,7 +18,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	bus := eventx.New()
 
-	_, err := eventx.Subscribe[providerevents.SnapshotRecompiledEvent](bus, func(_ context.Context, event providerevents.SnapshotRecompiledEvent) error {
+	_, err := bus.Subscribe(func(_ context.Context, event providerevents.SnapshotRecompiledEvent) error {
 		logger.Info("snapshot recompiled", "sources", event.SourceCount, "routes", event.RouteCount, "services", event.ServiceCount)
 		return nil
 	})
@@ -26,7 +26,7 @@ func main() {
 		logger.Error("subscribe recompiled event failed", "error", err)
 		os.Exit(1)
 	}
-	_, err = eventx.Subscribe[providerevents.ConfigSourceFailedEvent](bus, func(_ context.Context, event providerevents.ConfigSourceFailedEvent) error {
+	_, err = bus.Subscribe(func(_ context.Context, event providerevents.ConfigSourceFailedEvent) error {
 		logger.Error("config source failed", "source", event.Source, "error", event.Error)
 		return nil
 	})
