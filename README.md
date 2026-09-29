@@ -567,8 +567,9 @@ docker buildx build --platform linux/amd64,linux/arm64 --push \
 ```
 
 The source image compiles `valed` with CGO disabled and runs the binary through
-UPX before assembling the minimal runtime image. GitHub Actions publishes the
-release archives, but does not build or push the container image.
+UPX before assembling the minimal runtime image. Releases, archives, and
+container images are published locally; the GitHub release workflow is retained
+only as an explicitly triggered fallback.
 
 For example:
 

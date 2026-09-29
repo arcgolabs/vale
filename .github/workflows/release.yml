@@ -1,14 +1,6 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - "v*"
-      - "*/v*"
-      - "*/*/v*"
-      - "*/*/*/v*"
   workflow_dispatch:
     inputs:
       tag:
